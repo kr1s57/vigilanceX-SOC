@@ -204,3 +204,15 @@ func GetThreatLevel(score uint8) string {
 func IsMaliciousScore(score uint8) bool {
 	return score >= HighThreshold
 }
+
+// ThreatStats contains threat intelligence statistics
+type ThreatStats struct {
+	TotalTracked        int64    `json:"total_tracked"`
+	CriticalCount       int64    `json:"critical_count"`
+	HighCount           int64    `json:"high_count"`
+	MediumCount         int64    `json:"medium_count"`
+	LowCount            int64    `json:"low_count"`
+	TorExitNodes        int64    `json:"tor_exit_nodes"`
+	ChecksLast24h       int64    `json:"checks_last_24h"`
+	ConfiguredProviders []string `json:"configured_providers"`
+}

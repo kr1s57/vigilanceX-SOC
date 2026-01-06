@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"vigilancex/internal/entity"
+	"github.com/kr1s57/vigilancex/internal/entity"
 )
 
 // EventsRepository handles event data operations in ClickHouse

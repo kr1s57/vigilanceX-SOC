@@ -50,6 +50,10 @@ type Event struct {
 	// Metadata
 	SophosID   string    `json:"sophos_id" ch:"sophos_id"`
 	IngestedAt time.Time `json:"ingested_at" ch:"ingested_at"`
+
+	// Threat enrichment (not stored in DB, added at query time)
+	ThreatScore int    `json:"threat_score,omitempty" ch:"-"`
+	ThreatLevel string `json:"threat_level,omitempty" ch:"-"`
 }
 
 // EventFilters for querying events

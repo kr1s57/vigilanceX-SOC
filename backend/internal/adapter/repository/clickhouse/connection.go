@@ -10,7 +10,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
-	"vigilancex/internal/config"
+	"github.com/kr1s57/vigilancex/internal/config"
 )
 
 // Connection wraps the ClickHouse connection
@@ -72,6 +72,11 @@ func NewConnection(cfg *config.ClickHouseConfig, logger *slog.Logger) (*Connecti
 // Conn returns the underlying connection
 func (c *Connection) Conn() driver.Conn {
 	return c.conn
+}
+
+// DB returns the connection for query execution (convenience method)
+func (c *Connection) DB() *Connection {
+	return c
 }
 
 // Close closes the connection

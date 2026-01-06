@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"vigilancex/internal/entity"
+	"github.com/kr1s57/vigilancex/internal/entity"
 )
 
 // Repository defines the interface for event data operations

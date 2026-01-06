@@ -40,11 +40,16 @@ type NewIPDetected struct {
 
 // AnomalyStats represents anomaly detection statistics
 type AnomalyStats struct {
-	TotalSpikes       int64 `json:"total_spikes"`
+	TotalDetected      int64 `json:"total_detected"`
+	TotalSpikes        int64 `json:"total_spikes"`
 	UnacknowledgedSpikes int64 `json:"unacknowledged_spikes"`
-	NewIPsLast24h     int64 `json:"new_ips_last_24h"`
-	RiskyNewIPs       int64 `json:"risky_new_ips"`
-	PatternDetections int64 `json:"pattern_detections"`
+	SpikesLast24h      int64 `json:"spikes_last_24h"`
+	NewIPsLast24h      int64 `json:"new_ips_last_24h"`
+	MultiVectorLast24h int64 `json:"multi_vector_last_24h"`
+	RiskyNewIPs        int64 `json:"risky_new_ips"`
+	CriticalCount      int64 `json:"critical_count"`
+	HighCount          int64 `json:"high_count"`
+	PatternDetections  int64 `json:"pattern_detections"`
 }
 
 // PatternAnomaly represents a detected attack pattern

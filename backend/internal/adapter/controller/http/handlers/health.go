@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"vigilancex/internal/config"
+	"github.com/kr1s57/vigilancex/internal/config"
 )
 
 var startTime = time.Now()

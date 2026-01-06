@@ -109,29 +109,25 @@ func (s *Service) GetThreatsByLevel(ctx context.Context, level string, limit int
 
 // GetThreatStats returns threat intelligence statistics
 func (s *Service) GetThreatStats(ctx context.Context) (*ThreatStats, error) {
-	stats, err := s.repo.GetThreatStats(ctx)
+	entityStats, err := s.repo.GetThreatStats(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Add provider info
+	// Build response with embedded entity stats
+	stats := &ThreatStats{
+		ThreatStats: *entityStats,
+		CacheStats:  s.aggregator.GetCacheStats(),
+	}
 	stats.ConfiguredProviders = s.aggregator.GetConfiguredProviders()
-	stats.CacheStats = s.aggregator.GetCacheStats()
 
 	return stats, nil
 }
 
-// ThreatStats contains threat intelligence statistics
+// ThreatStats extends entity.ThreatStats with cache info
 type ThreatStats struct {
-	TotalTracked        int64                   `json:"total_tracked"`
-	CriticalCount       int64                   `json:"critical_count"`
-	HighCount           int64                   `json:"high_count"`
-	MediumCount         int64                   `json:"medium_count"`
-	LowCount            int64                   `json:"low_count"`
-	TorExitNodes        int64                   `json:"tor_exit_nodes"`
-	ChecksLast24h       int64                   `json:"checks_last_24h"`
-	ConfiguredProviders []string                `json:"configured_providers"`
-	CacheStats          threatintel.CacheStats  `json:"cache_stats"`
+	entity.ThreatStats
+	CacheStats threatintel.CacheStats `json:"cache_stats"`
 }
 
 // EnrichEvent enriches an event with threat intel

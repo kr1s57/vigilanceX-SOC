@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"vigilancex/internal/adapter/controller/http/handlers"
-	"vigilancex/internal/adapter/controller/http/middleware"
-	"vigilancex/internal/config"
+	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/handlers"
+	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/middleware"
+	"github.com/kr1s57/vigilancex/internal/config"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"

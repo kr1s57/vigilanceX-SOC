@@ -1,0 +1,12 @@
+# Compiled binaries
+api
+detect2ban
+
+# Environment files
+.env
+*.env.local
+
+# IDE
+.idea/
+.vscode/
+

@@ -173,18 +173,8 @@ func (s *Service) GetRecentAnomalies(ctx context.Context, limit int) ([]entity.A
 }
 
 // GetAnomalyStats returns anomaly statistics
-func (s *Service) GetAnomalyStats(ctx context.Context) (*AnomalyStats, error) {
+func (s *Service) GetAnomalyStats(ctx context.Context) (*entity.AnomalyStats, error) {
 	return s.repo.GetAnomalyStats(ctx)
-}
-
-// AnomalyStats contains anomaly statistics
-type AnomalyStats struct {
-	TotalDetected     int64 `json:"total_detected"`
-	SpikesLast24h     int64 `json:"spikes_last_24h"`
-	NewIPsLast24h     int64 `json:"new_ips_last_24h"`
-	MultiVectorLast24h int64 `json:"multi_vector_last_24h"`
-	CriticalCount     int64 `json:"critical_count"`
-	HighCount         int64 `json:"high_count"`
 }
 
 // RunDetectionCycle runs all anomaly detection checks

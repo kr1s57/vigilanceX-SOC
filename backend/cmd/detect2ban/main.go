@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"vigilancex/internal/config"
+	"github.com/kr1s57/vigilancex/internal/config"
 )
 
 func main() {

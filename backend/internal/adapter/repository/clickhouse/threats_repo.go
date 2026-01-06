@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/kr1s57/vigilancex/internal/entity"
-	"github.com/kr1s57/vigilancex/internal/usecase/threats"
 )
 
 // ThreatsRepository handles threat data persistence in ClickHouse
@@ -257,8 +256,8 @@ func (r *ThreatsRepository) GetThreatsByLevel(ctx context.Context, level string,
 }
 
 // GetThreatStats returns aggregated threat statistics
-func (r *ThreatsRepository) GetThreatStats(ctx context.Context) (*threats.ThreatStats, error) {
-	stats := &threats.ThreatStats{}
+func (r *ThreatsRepository) GetThreatStats(ctx context.Context) (*entity.ThreatStats, error) {
+	stats := &entity.ThreatStats{}
 
 	// Total tracked IPs
 	query := `SELECT count(DISTINCT ip) FROM ip_threat_scores FINAL`

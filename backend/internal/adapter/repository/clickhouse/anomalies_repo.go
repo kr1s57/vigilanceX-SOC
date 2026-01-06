@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kr1s57/vigilancex/internal/entity"
-	"github.com/kr1s57/vigilancex/internal/usecase/anomalies"
 )
 
 // AnomaliesRepository handles anomaly data persistence in ClickHouse
@@ -371,8 +370,8 @@ func (r *AnomaliesRepository) GetRecentAnomalies(ctx context.Context, limit int)
 }
 
 // GetAnomalyStats returns anomaly statistics
-func (r *AnomaliesRepository) GetAnomalyStats(ctx context.Context) (*anomalies.AnomalyStats, error) {
-	stats := &anomalies.AnomalyStats{}
+func (r *AnomaliesRepository) GetAnomalyStats(ctx context.Context) (*entity.AnomalyStats, error) {
+	stats := &entity.AnomalyStats{}
 
 	// Total spikes
 	query := `SELECT count() FROM anomaly_spikes`

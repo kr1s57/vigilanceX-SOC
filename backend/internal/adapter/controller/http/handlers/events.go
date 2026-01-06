@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"vigilancex/internal/usecase/events"
+	"github.com/kr1s57/vigilancex/internal/usecase/events"
 )
 
 // EventsHandler handles HTTP requests for events
