@@ -30,6 +30,7 @@ export interface Event {
   sophos_id: string
   ingested_at: string
   modsec_rule_ids?: string[]
+  modsec_messages?: string[]
 }
 
 // Stats types
@@ -106,19 +107,59 @@ export interface BanStats {
 // Threat types
 export interface ThreatScore {
   ip: string
+  aggregated_score: number
   total_score: number
   reputation_score: number
   activity_score: number
   severity_score: number
+  confidence: number
   is_malicious: boolean
-  threat_level: 'critical' | 'high' | 'medium' | 'low' | 'minimal'
-  categories: string[]
-  sources: string[]
+  threat_level: 'critical' | 'high' | 'medium' | 'low' | 'minimal' | 'none'
+  categories: string[] | null
+  sources: string[] | null
+  tags: string[] | null
+  country: string
+  asn: string
+  isp: string
+  is_tor: boolean
   abuseipdb_score: number
   abuseipdb_reports: number
+  abuseipdb_is_tor: boolean
+  virustotal_score: number
   virustotal_positives: number
+  virustotal_total: number
+  otx_score: number
   alienvault_pulses: number
+  malware_families?: string[]
+  adversaries?: string[]
+  first_seen: string
+  last_seen: string
   last_checked: string
+  total_attacks: number
+}
+
+export interface ThreatStats {
+  total_tracked: number
+  critical_count: number
+  high_count: number
+  medium_count: number
+  low_count: number
+  tor_exit_nodes: number
+  checks_last_24h: number
+  configured_providers: string[]
+  cache_stats: {
+    size: number
+    hits: number
+    misses: number
+    hit_rate: number
+    ttl: string
+  }
+}
+
+export interface ThreatProvider {
+  name: string
+  configured: boolean
+  available: boolean
 }
 
 export interface IPGeolocation {
@@ -194,6 +235,68 @@ export interface EventFilters {
   hostname?: string
   rule_id?: string
   action?: string
+  start_time?: string
+  end_time?: string
+  search?: string
+  limit?: number
+  offset?: number
+}
+
+// ModSec types
+export interface ModSecLog {
+  id: string
+  timestamp: string
+  unique_id: string
+  src_ip: string
+  src_port: number
+  hostname: string
+  uri: string
+  rule_id: string
+  rule_file: string
+  rule_msg: string
+  rule_severity: string
+  rule_data: string
+  crs_version: string
+  paranoia_level: number
+  attack_type: string
+  total_score: number
+  is_blocking: boolean
+  tags: string[]
+  raw_log?: string
+  ingested_at: string
+}
+
+export interface ModSecRule {
+  rule_id: string
+  rule_msg: string
+  rule_severity: string
+  rule_file: string
+  rule_data: string
+  attack_type: string
+  paranoia_level: number
+  tags: string[]
+}
+
+export interface ModSecRequestGroup {
+  unique_id: string
+  timestamp: string
+  src_ip: string
+  hostname: string
+  uri: string
+  total_score: number
+  is_blocked: boolean
+  rule_count: number
+  rules: ModSecRule[]
+  geo_country?: string
+  geo_city?: string
+}
+
+export interface ModSecLogFilters {
+  src_ip?: string
+  hostname?: string
+  rule_id?: string
+  attack_type?: string
+  unique_id?: string
   start_time?: string
   end_time?: string
   search?: string

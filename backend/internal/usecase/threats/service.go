@@ -48,7 +48,7 @@ func (s *Service) saveThreatScore(ip string, result *threatintel.AggregatedResul
 
 	score := &entity.ThreatScore{
 		IP:              ip,
-		AggregatedScore: result.AggregatedScore,
+		AggregatedScore: int32(result.AggregatedScore),
 		ThreatLevel:     result.ThreatLevel,
 		Confidence:      result.Confidence,
 		Country:         result.Country,
@@ -62,11 +62,11 @@ func (s *Service) saveThreatScore(ip string, result *threatintel.AggregatedResul
 	for _, source := range result.Sources {
 		switch source.Provider {
 		case "AbuseIPDB":
-			score.AbuseIPDBScore = source.Score
+			score.AbuseIPDBScore = int32(source.Score)
 		case "VirusTotal":
-			score.VirusTotalScore = source.Score
+			score.VirusTotalScore = int32(source.Score)
 		case "AlienVault OTX":
-			score.OTXScore = source.Score
+			score.OTXScore = int32(source.Score)
 		}
 	}
 
@@ -140,7 +140,7 @@ func (s *Service) EnrichEvent(ctx context.Context, event *entity.Event) (*entity
 	score, err := s.repo.GetThreatScore(ctx, event.SrcIP)
 	if err == nil && score != nil {
 		// Use stored score
-		event.ThreatScore = score.AggregatedScore
+		event.ThreatScore = int(score.AggregatedScore)
 		event.ThreatLevel = score.ThreatLevel
 		return event, nil
 	}

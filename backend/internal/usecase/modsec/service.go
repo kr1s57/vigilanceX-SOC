@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	modsecclient "github.com/kr1s57/vigilancex/internal/adapter/external/modsec"
 	"github.com/kr1s57/vigilancex/internal/config"
 )
@@ -15,6 +16,7 @@ import (
 type Service struct {
 	client       *modsecclient.Client
 	correlator   *modsecclient.Correlator
+	geoService   *geolocation.Service
 	syncInterval time.Duration
 	logger       *slog.Logger
 	mu           sync.Mutex
@@ -34,7 +36,7 @@ type SyncStats struct {
 }
 
 // NewService creates a new ModSec synchronization service
-func NewService(cfg config.SophosSSHConfig, db driver.Conn, logger *slog.Logger) *Service {
+func NewService(cfg config.SophosSSHConfig, db driver.Conn, geoSvc *geolocation.Service, logger *slog.Logger) *Service {
 	client := modsecclient.NewClient(modsecclient.Config{
 		Host:    cfg.Host,
 		Port:    cfg.Port,
@@ -48,6 +50,7 @@ func NewService(cfg config.SophosSSHConfig, db driver.Conn, logger *slog.Logger)
 	return &Service{
 		client:       client,
 		correlator:   correlator,
+		geoService:   geoSvc,
 		syncInterval: cfg.SyncInterval,
 		logger:       logger,
 		stopCh:       make(chan struct{}),
@@ -132,7 +135,34 @@ func (s *Service) sync(ctx context.Context) {
 		return
 	}
 
-	// Correlate and update events
+	// Store ModSec logs directly in modsec_logs table
+	stored, err := s.correlator.StoreModSecLogs(ctx, entries)
+	if err != nil {
+		s.logger.Error("Failed to store ModSec logs", "error", err)
+		s.stats.LastError = err.Error()
+		s.stats.IsRunning = false
+		return
+	}
+	s.logger.Info("Stored ModSec logs", "count", stored)
+
+	// Enrich IPs with geolocation
+	if s.geoService != nil {
+		uniqueIPs := make(map[string]bool)
+		for _, entry := range entries {
+			if entry.SrcIP != "" {
+				uniqueIPs[entry.SrcIP] = true
+			}
+		}
+		ips := make([]string, 0, len(uniqueIPs))
+		for ip := range uniqueIPs {
+			ips = append(ips, ip)
+		}
+		if err := s.geoService.EnrichNewIPs(ctx, ips); err != nil {
+			s.logger.Warn("Failed to enrich IPs with geolocation", "error", err)
+		}
+	}
+
+	// Correlate and update existing WAF events
 	updated, err := s.correlator.CorrelateAndUpdate(ctx, entries)
 	if err != nil {
 		s.logger.Error("Failed to correlate events", "error", err)
@@ -147,7 +177,7 @@ func (s *Service) sync(ctx context.Context) {
 	s.stats.IsRunning = false
 	s.lastSync = time.Now()
 
-	s.logger.Info("ModSec sync completed", "entries_fetched", len(entries), "events_updated", updated)
+	s.logger.Info("ModSec sync completed", "entries_fetched", len(entries), "stored", stored, "events_updated", updated)
 }
 
 // SyncNow triggers an immediate synchronization
@@ -174,4 +204,17 @@ func (s *Service) IsConfigured() bool {
 // TestConnection tests the SSH connection
 func (s *Service) TestConnection(ctx context.Context) error {
 	return s.client.TestConnection(ctx)
+}
+
+// RefreshGeolocation refreshes geolocation data older than 30 days
+func (s *Service) RefreshGeolocation(ctx context.Context) (int, error) {
+	if s.geoService == nil {
+		return 0, nil
+	}
+	return s.geoService.RefreshOldEntries(ctx, 30*24*time.Hour)
+}
+
+// GetGeoService returns the geolocation service
+func (s *Service) GetGeoService() *geolocation.Service {
+	return s.geoService
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/handlers"
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/middleware"
+	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
@@ -54,6 +55,7 @@ func main() {
 	eventsRepo := clickhouse.NewEventsRepository(chConn, logger)
 	threatsRepo := clickhouse.NewThreatsRepository(chConn)
 	bansRepo := clickhouse.NewBansRepository(chConn)
+	modsecRepo := clickhouse.NewModSecRepository(chConn, logger)
 
 	// Initialize threat intelligence aggregator
 	threatAggregator := threatintel.NewAggregator(threatintel.AggregatorConfig{
@@ -84,13 +86,35 @@ func main() {
 		logger.Warn("Sophos XGS client not configured - XGS sync disabled")
 	}
 
+	// Initialize geolocation service
+	geoService := geolocation.NewService(chConn.Conn(), logger)
+	logger.Info("Geolocation service initialized")
+
 	// Initialize ModSec sync service (SSH-based log correlation)
 	var modsecService *modsec.Service
 	if cfg.SophosSSH.Host != "" {
-		modsecService = modsec.NewService(cfg.SophosSSH, chConn.Conn(), logger)
+		modsecService = modsec.NewService(cfg.SophosSSH, chConn.Conn(), geoService, logger)
 		// Start background sync
 		go modsecService.Start(context.Background())
 		logger.Info("ModSec sync service started", "host", cfg.SophosSSH.Host, "interval", cfg.SophosSSH.SyncInterval)
+
+		// Start monthly geolocation refresh (runs on 1st of each month)
+		go func() {
+			for {
+				now := time.Now()
+				// Calculate next 1st of month at 3am
+				nextMonth := time.Date(now.Year(), now.Month()+1, 1, 3, 0, 0, 0, now.Location())
+				time.Sleep(time.Until(nextMonth))
+
+				logger.Info("Starting monthly geolocation refresh")
+				refreshed, err := modsecService.RefreshGeolocation(context.Background())
+				if err != nil {
+					logger.Error("Monthly geolocation refresh failed", "error", err)
+				} else {
+					logger.Info("Monthly geolocation refresh completed", "refreshed", refreshed)
+				}
+			}
+		}()
 	} else {
 		logger.Warn("ModSec sync service not configured - SSH host not set")
 	}
@@ -104,7 +128,7 @@ func main() {
 	eventsHandler := handlers.NewEventsHandler(eventsService)
 	threatsHandler := handlers.NewThreatsHandler(threatsService)
 	bansHandler := handlers.NewBansHandler(bansService)
-	modsecHandler := handlers.NewModSecHandler(modsecService)
+	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
 
 	// Create router
 	r := chi.NewRouter()
@@ -246,6 +270,11 @@ func main() {
 				r.Get("/stats", modsecHandler.GetStats)
 				r.Post("/sync", modsecHandler.SyncNow)
 				r.Get("/test", modsecHandler.TestConnection)
+				r.Get("/logs", modsecHandler.GetLogs)
+				r.Get("/logs/grouped", modsecHandler.GetGroupedLogs)
+				r.Get("/hostnames", modsecHandler.GetHostnames)
+				r.Get("/rules/stats", modsecHandler.GetRuleStats)
+				r.Get("/attacks/stats", modsecHandler.GetAttackTypeStats)
 			})
 
 			// IPS

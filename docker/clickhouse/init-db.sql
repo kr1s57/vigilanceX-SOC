@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS events (
 
     -- ModSec enrichment
     modsec_rule_ids Array(String) DEFAULT [],
+    modsec_messages Array(String) DEFAULT [],
 
     -- Metadata
     sophos_id String,
@@ -70,6 +71,59 @@ ALTER TABLE events ADD INDEX IF NOT EXISTS idx_src_ip src_ip TYPE bloom_filter G
 ALTER TABLE events ADD INDEX IF NOT EXISTS idx_rule_id rule_id TYPE bloom_filter GRANULARITY 4;
 ALTER TABLE events ADD INDEX IF NOT EXISTS idx_category category TYPE set(100) GRANULARITY 4;
 ALTER TABLE events ADD INDEX IF NOT EXISTS idx_hostname hostname TYPE bloom_filter GRANULARITY 4;
+
+-- ============================================
+-- TABLE: modsec_logs (raw ModSec logs from XGS)
+-- Stores all ModSecurity detections for debugging/tuning
+-- ============================================
+CREATE TABLE IF NOT EXISTS modsec_logs (
+    id UUID DEFAULT generateUUIDv4(),
+    timestamp DateTime64(6) CODEC(Delta, ZSTD(1)),
+
+    -- Request identification
+    unique_id String,                             -- Links all rules triggered by same request
+    src_ip IPv4,
+    src_port UInt16,
+    hostname String,
+    uri String,
+
+    -- Rule details
+    rule_id String,                               -- e.g., "920320", "930130", "949110"
+    rule_file String,                             -- e.g., "REQUEST-920-PROTOCOL-ENFORCEMENT.conf"
+    rule_msg String,                              -- e.g., "Missing User Agent Header"
+    rule_severity LowCardinality(String),         -- NOTICE, WARNING, CRITICAL
+    rule_data String,                             -- Matched data details
+
+    -- CRS metadata
+    crs_version String,                           -- e.g., "OWASP_CRS/3.3.3"
+    paranoia_level UInt8,                         -- 1-4
+    attack_type LowCardinality(String),           -- sql, xss, lfi, rfi, rce, protocol
+
+    -- Anomaly scoring
+    anomaly_score UInt16 DEFAULT 0,               -- Score for this rule
+    total_score UInt16 DEFAULT 0,                 -- Total accumulated score
+    is_blocking UInt8 DEFAULT 0,                  -- 1 if this rule caused the block (949110)
+
+    -- Tags
+    tags Array(String),                           -- All tags from the rule
+
+    -- Raw log
+    raw_log String CODEC(ZSTD(3)),
+
+    -- Ingestion
+    ingested_at DateTime DEFAULT now()
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (timestamp, unique_id, rule_id)
+TTL toDateTime(timestamp) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192;
+
+-- Index for fast lookups
+ALTER TABLE modsec_logs ADD INDEX IF NOT EXISTS idx_unique_id unique_id TYPE bloom_filter GRANULARITY 4;
+ALTER TABLE modsec_logs ADD INDEX IF NOT EXISTS idx_src_ip src_ip TYPE bloom_filter GRANULARITY 4;
+ALTER TABLE modsec_logs ADD INDEX IF NOT EXISTS idx_rule_id rule_id TYPE set(1000) GRANULARITY 4;
+ALTER TABLE modsec_logs ADD INDEX IF NOT EXISTS idx_hostname hostname TYPE bloom_filter GRANULARITY 4;
 
 -- ============================================
 -- TABLE: ip_geolocation (cache geo)

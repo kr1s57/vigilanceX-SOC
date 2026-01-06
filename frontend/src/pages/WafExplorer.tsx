@@ -1,63 +1,351 @@
-import { useState, useEffect } from 'react'
-import { Shield, Search, Download, ShieldCheck } from 'lucide-react'
-import { eventsApi, whitelistApi } from '@/lib/api'
-import { formatDateTime, getSeverityColor, getSeverityBgColor, getCountryFlag, getCountryName } from '@/lib/utils'
-import type { Event } from '@/types'
+import { useState, useEffect, useMemo } from 'react'
+import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar } from 'lucide-react'
+import { modsecApi } from '@/lib/api'
+import { formatDateTime, getCountryFlag, getCountryName } from '@/lib/utils'
+import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
+
+// Attack type colors
+const attackTypeColors: Record<string, string> = {
+  sqli: 'bg-red-500/20 text-red-400',
+  xss: 'bg-orange-500/20 text-orange-400',
+  lfi: 'bg-yellow-500/20 text-yellow-400',
+  rfi: 'bg-yellow-500/20 text-yellow-400',
+  rce: 'bg-red-600/20 text-red-500',
+  protocol: 'bg-blue-500/20 text-blue-400',
+  generic: 'bg-purple-500/20 text-purple-400',
+}
+
+// Severity badge colors
+const severityColors: Record<string, string> = {
+  CRITICAL: 'bg-red-500/20 text-red-400',
+  HIGH: 'bg-orange-500/20 text-orange-400',
+  MEDIUM: 'bg-yellow-500/20 text-yellow-400',
+  LOW: 'bg-blue-500/20 text-blue-400',
+  WARNING: 'bg-yellow-500/20 text-yellow-400',
+  NOTICE: 'bg-gray-500/20 text-gray-400',
+}
+
+// Helper to format date for display
+function formatDateDisplay(dateStr: string): string {
+  const date = new Date(dateStr)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  if (date.toDateString() === today.toDateString()) {
+    return 'Today'
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday'
+  } else {
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }
+}
+
+// Helper to get date key from timestamp
+function getDateKey(timestamp: string): string {
+  return new Date(timestamp).toISOString().split('T')[0]
+}
+
+// Group requests by day
+interface DayGroup {
+  date: string
+  dateDisplay: string
+  requests: ModSecRequestGroup[]
+  totalBlocked: number
+  totalDetected: number
+}
 
 export function WafExplorer() {
-  const [events, setEvents] = useState<Event[]>([])
-  const [pagination, setPagination] = useState({ total: 0, limit: 50, offset: 0, has_more: false })
+  const [requests, setRequests] = useState<ModSecRequestGroup[]>([])
+  const [pagination, setPagination] = useState({ total: 0, limit: 100, offset: 0, has_more: false })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [severity, setSeverity] = useState('')
-  const [action, setAction] = useState('')
   const [hostname, setHostname] = useState('')
+  const [attackType, setAttackType] = useState('')
   const [hostnames, setHostnames] = useState<string[]>([])
-  const [whitelistedIPs, setWhitelistedIPs] = useState<Set<string>>(new Set())
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [syncStatus, setSyncStatus] = useState<{ last_sync: string; is_configured: boolean } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped')
 
-  // Fetch whitelist
+  // Fetch sync status
   useEffect(() => {
-    whitelistApi.list().then(data => {
-      setWhitelistedIPs(new Set((data || []).map(w => w.ip)))
-    }).catch(() => {})
+    modsecApi.getStats().then(setSyncStatus).catch(() => {})
   }, [])
 
   // Fetch unique hostnames for filter
   useEffect(() => {
-    eventsApi.hostnames('WAF').then(data => {
-      // Filter out empty, Unknown, and invalid hostnames
-      const validHostnames = (data || []).filter(h =>
-        h && h !== '' && h !== 'Unknown' && h !== 'Unknown (Direct IP)' && !h.match(/^[\d.]+$/)
-      )
-      setHostnames(validHostnames)
+    modsecApi.getHostnames().then(data => {
+      setHostnames(data || [])
     }).catch(() => {})
   }, [])
 
+  // Fetch grouped ModSec logs
   useEffect(() => {
-    async function fetchEvents() {
+    async function fetchRequests() {
       setLoading(true)
       try {
-        const response = await eventsApi.list({
-          log_type: 'WAF',
-          severity: severity || undefined,
-          action: action || undefined,
+        const filters: ModSecLogFilters = {
           hostname: hostname || undefined,
+          attack_type: attackType || undefined,
           search: search || undefined,
           limit: pagination.limit,
           offset: pagination.offset,
-        })
-        setEvents(response.data || [])
-        setPagination(response.pagination || { total: 0, limit: 50, offset: 0, has_more: false })
+        }
+        const response = await modsecApi.getGroupedLogs(filters)
+        setRequests(response.data || [])
+        setPagination(response.pagination || { total: 0, limit: 100, offset: 0, has_more: false })
       } catch (err) {
-        console.error('Failed to fetch WAF events:', err)
-        setEvents([])
+        console.error('Failed to fetch ModSec logs:', err)
+        setRequests([])
       } finally {
         setLoading(false)
       }
     }
 
-    fetchEvents()
-  }, [search, severity, action, hostname, pagination.offset])
+    fetchRequests()
+  }, [search, hostname, attackType, pagination.offset])
+
+  // Group requests by day
+  const dayGroups = useMemo((): DayGroup[] => {
+    const groups: Record<string, ModSecRequestGroup[]> = {}
+
+    for (const request of requests) {
+      const dateKey = getDateKey(request.timestamp)
+      if (!groups[dateKey]) {
+        groups[dateKey] = []
+      }
+      groups[dateKey].push(request)
+    }
+
+    // Sort days descending (most recent first)
+    const sortedDays = Object.keys(groups).sort((a, b) => b.localeCompare(a))
+
+    return sortedDays.map(date => ({
+      date,
+      dateDisplay: formatDateDisplay(date),
+      requests: groups[date],
+      totalBlocked: groups[date].filter(r => r.is_blocked).length,
+      totalDetected: groups[date].filter(r => !r.is_blocked).length,
+    }))
+  }, [requests])
+
+  // Auto-expand first day on load
+  useEffect(() => {
+    if (dayGroups.length > 0 && expandedDays.size === 0) {
+      setExpandedDays(new Set([dayGroups[0].date]))
+    }
+  }, [dayGroups])
+
+  const toggleDay = (date: string) => {
+    const newExpanded = new Set(expandedDays)
+    if (newExpanded.has(date)) {
+      newExpanded.delete(date)
+    } else {
+      newExpanded.add(date)
+    }
+    setExpandedDays(newExpanded)
+  }
+
+  const toggleRow = (uniqueId: string) => {
+    const newExpanded = new Set(expandedRows)
+    if (newExpanded.has(uniqueId)) {
+      newExpanded.delete(uniqueId)
+    } else {
+      newExpanded.add(uniqueId)
+    }
+    setExpandedRows(newExpanded)
+  }
+
+  const handleSync = async () => {
+    setSyncing(true)
+    try {
+      await modsecApi.syncNow()
+      const filters: ModSecLogFilters = {
+        hostname: hostname || undefined,
+        attack_type: attackType || undefined,
+        search: search || undefined,
+        limit: pagination.limit,
+        offset: 0,
+      }
+      const response = await modsecApi.getGroupedLogs(filters)
+      setRequests(response.data || [])
+      setPagination(response.pagination || { total: 0, limit: 100, offset: 0, has_more: false })
+      const status = await modsecApi.getStats()
+      setSyncStatus(status)
+    } catch (err) {
+      console.error('Sync failed:', err)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const renderRequestRow = (request: ModSecRequestGroup) => (
+    <>
+      <tr
+        key={request.unique_id}
+        className="cursor-pointer hover:bg-muted/50"
+        onClick={() => toggleRow(request.unique_id)}
+      >
+        <td className="w-8">
+          {expandedRows.has(request.unique_id) ? (
+            <ChevronDown className="w-4 h-4" />
+          ) : (
+            <ChevronRight className="w-4 h-4" />
+          )}
+        </td>
+        <td className="whitespace-nowrap">
+          <span className="text-sm">{formatDateTime(request.timestamp)}</span>
+        </td>
+        <td>
+          <div className="flex flex-col">
+            <span className="font-mono text-sm">{request.src_ip}</span>
+            {request.geo_country && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                <span>{getCountryFlag(request.geo_country)}</span>
+                <span>{getCountryName(request.geo_country)}</span>
+                {request.geo_city && <span>- {request.geo_city}</span>}
+              </div>
+            )}
+          </div>
+        </td>
+        <td>
+          <div className="max-w-[200px]">
+            <span className="text-sm font-medium">{request.hostname || 'Unknown'}</span>
+            {request.uri && (
+              <p className="text-xs text-muted-foreground truncate" title={request.uri}>
+                {request.uri}
+              </p>
+            )}
+          </div>
+        </td>
+        <td>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-purple-500/20 text-purple-400">
+              {request.rule_count} rule{request.rule_count > 1 ? 's' : ''}
+            </span>
+            {request.rules.slice(0, 3).map((rule, idx) => (
+              <span
+                key={idx}
+                className="inline-flex px-1.5 py-0.5 rounded text-xs font-mono bg-gray-500/20 text-gray-300"
+                title={rule.rule_msg}
+              >
+                {rule.rule_id}
+              </span>
+            ))}
+            {request.rule_count > 3 && (
+              <span className="text-xs text-muted-foreground">+{request.rule_count - 3}</span>
+            )}
+          </div>
+        </td>
+        <td>
+          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${
+            request.total_score >= 25 ? 'bg-red-500/20 text-red-400' :
+            request.total_score >= 10 ? 'bg-orange-500/20 text-orange-400' :
+            request.total_score >= 5 ? 'bg-yellow-500/20 text-yellow-400' :
+            'bg-gray-500/20 text-gray-400'
+          }`}>
+            {request.total_score}
+          </span>
+        </td>
+        <td>
+          {request.is_blocked ? (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-500/10 text-red-400">
+              <AlertTriangle className="w-3 h-3" />
+              Blocked
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-orange-500/10 text-orange-400">
+              <CheckCircle className="w-3 h-3" />
+              Detected
+            </span>
+          )}
+        </td>
+      </tr>
+      {/* Expanded row showing all rules */}
+      {expandedRows.has(request.unique_id) && (
+        <tr className="bg-muted/30">
+          <td colSpan={7} className="p-4">
+            <div className="space-y-3">
+              <div className="text-sm font-medium text-muted-foreground mb-2">
+                Detection Chain (unique_id: <code className="text-xs bg-muted px-1 rounded">{request.unique_id}</code>)
+              </div>
+              <div className="space-y-2">
+                {request.rules.map((rule, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-start gap-4 p-3 bg-background rounded-lg border"
+                  >
+                    <div className="flex-shrink-0">
+                      <span className="inline-flex px-2 py-1 rounded text-sm font-bold font-mono bg-purple-500/20 text-purple-400">
+                        Rule {rule.rule_id}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {rule.rule_severity && (
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                            severityColors[rule.rule_severity.toUpperCase()] || 'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {rule.rule_severity}
+                          </span>
+                        )}
+                        {rule.attack_type && (
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                            attackTypeColors[rule.attack_type] || 'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {rule.attack_type.toUpperCase()}
+                          </span>
+                        )}
+                        {rule.paranoia_level > 0 && (
+                          <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-500/20 text-indigo-400">
+                            PL{rule.paranoia_level}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-orange-400 mb-1">{rule.rule_msg}</p>
+                      {rule.rule_data && (
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium">Matched:</span>{' '}
+                          <code className="bg-muted px-1 rounded">{rule.rule_data}</code>
+                        </p>
+                      )}
+                      {rule.rule_file && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <span className="font-medium">File:</span> {rule.rule_file}
+                        </p>
+                      )}
+                      {rule.tags && rule.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {rule.tags.slice(0, 5).map((tag, tagIdx) => (
+                            <span
+                              key={tagIdx}
+                              className="inline-flex px-1 py-0.5 rounded text-xs bg-muted text-muted-foreground"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {rule.tags.length > 5 && (
+                            <span className="text-xs text-muted-foreground">+{rule.tags.length - 5} more</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
 
   return (
     <div className="space-y-6">
@@ -68,14 +356,54 @@ export function WafExplorer() {
             <Shield className="w-6 h-6 text-blue-500" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">WAF Explorer</h1>
-            <p className="text-muted-foreground">Web Application Firewall events analysis</p>
+            <h1 className="text-2xl font-bold">WAF Explorer - ModSec Rules</h1>
+            <p className="text-muted-foreground">
+              ModSecurity detection rules from Sophos XGS
+              {syncStatus && (
+                <span className="ml-2 text-xs">
+                  (Last sync: {syncStatus.last_sync ? formatDateTime(syncStatus.last_sync) : 'Never'})
+                </span>
+              )}
+            </p>
           </div>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-          <Download className="w-4 h-4" />
-          Export
-        </button>
+        <div className="flex gap-2">
+          <div className="flex bg-muted rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('grouped')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                viewMode === 'grouped'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Calendar className="w-4 h-4 inline mr-1" />
+              By Day
+            </button>
+            <button
+              onClick={() => setViewMode('flat')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                viewMode === 'flat'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              List
+            </button>
+          </div>
+          <button
+            onClick={handleSync}
+            disabled={syncing || !syncStatus?.is_configured}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync Now'}
+          </button>
+          <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -85,31 +413,13 @@ export function WafExplorer() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search events..."
+              placeholder="Search rules, URIs, IPs, countries..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
         </div>
-        <select
-          value={severity}
-          onChange={(e) => setSeverity(e.target.value)}
-          className="px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          <option value="">All Severities</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="info">Info</option>
-        </select>
-        <select
-          value={action}
-          onChange={(e) => setAction(e.target.value)}
-          className="px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          <option value="">All Actions</option>
-          <option value="drop">Blocked</option>
-        </select>
         <select
           value={hostname}
           onChange={(e) => setHostname(e.target.value)}
@@ -120,132 +430,123 @@ export function WafExplorer() {
             <option key={h} value={h}>{h}</option>
           ))}
         </select>
+        <select
+          value={attackType}
+          onChange={(e) => setAttackType(e.target.value)}
+          className="px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          <option value="">All Attack Types</option>
+          <option value="sqli">SQL Injection</option>
+          <option value="xss">Cross-Site Scripting</option>
+          <option value="lfi">Local File Inclusion</option>
+          <option value="rfi">Remote File Inclusion</option>
+          <option value="rce">Remote Code Execution</option>
+          <option value="protocol">Protocol Attack</option>
+        </select>
       </div>
 
-      {/* Events Table */}
+      {/* Results */}
       <div className="bg-card rounded-xl border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Severity</th>
-                <th>Source IP</th>
-                <th>Target</th>
-                <th>ModSec IDs</th>
-                <th>Block Reason</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-8">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
-                  </td>
-                </tr>
-              ) : events.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No events found
-                  </td>
-                </tr>
-              ) : (
-                events.map((event) => (
-                  <tr key={event.event_id} className="cursor-pointer hover:bg-muted/50">
-                    <td className="whitespace-nowrap">
-                      <span className="text-sm">{formatDateTime(event.timestamp)}</span>
-                    </td>
-                    <td>
-                      <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${getSeverityBgColor(event.severity)} ${getSeverityColor(event.severity)}`}>
-                        {event.severity}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : requests.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            No ModSec logs found. {!syncStatus?.is_configured && 'ModSec sync is not configured.'}
+          </div>
+        ) : viewMode === 'grouped' ? (
+          /* Grouped by Day View */
+          <div className="divide-y">
+            {dayGroups.map((group) => (
+              <div key={group.date}>
+                {/* Day Header */}
+                <div
+                  onClick={() => toggleDay(group.date)}
+                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    {expandedDays.has(group.date) ? (
+                      <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    )}
+                    <Calendar className="w-5 h-5 text-blue-500" />
+                    <span className="font-semibold">{group.dateDisplay}</span>
+                    <span className="text-sm text-muted-foreground">({group.date})</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm">
+                      <span className="font-medium">{group.requests.length}</span>
+                      <span className="text-muted-foreground"> detections</span>
+                    </span>
+                    {group.totalBlocked > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-red-500/10 text-red-400">
+                        <AlertTriangle className="w-3 h-3" />
+                        {group.totalBlocked} blocked
                       </span>
-                    </td>
-                    <td>
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm">{event.src_ip}</span>
-                          {whitelistedIPs.has(event.src_ip) && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-500">
-                              <ShieldCheck className="w-3 h-3" />
-                              WL
-                            </span>
-                          )}
-                        </div>
-                        {event.geo_country && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                            <span>{getCountryFlag(event.geo_country)}</span>
-                            <span>{getCountryName(event.geo_country)}</span>
-                            {event.geo_city && <span>- {event.geo_city}</span>}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="max-w-[250px]">
-                        <span className="text-sm">{event.hostname || event.dst_ip}</span>
-                        {event.url && event.url !== '-' && (
-                          <p className="text-xs text-muted-foreground truncate">{event.url}</p>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="flex flex-wrap gap-1 max-w-[180px]">
-                        {event.modsec_rule_ids && event.modsec_rule_ids.length > 0 ? (
-                          event.modsec_rule_ids.map((ruleId, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-flex px-1.5 py-0.5 rounded text-xs font-mono bg-purple-500/10 text-purple-400"
-                              title={`ModSec CRS Rule ${ruleId}`}
-                            >
-                              {ruleId}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="max-w-[300px]">
-                        {(() => {
-                          // Sophos uses "-" as null/empty value
-                          const reason = event.reason && event.reason !== '-' ? event.reason : '';
-                          const message = event.message && event.message !== '-' ? event.message : '';
-                          const displayReason = reason || message || event.sub_category || event.category;
-                          const showMessage = reason && message && reason !== message;
-                          return (
-                            <>
-                              <span className={`text-sm font-medium ${reason || message ? 'text-orange-400' : 'text-muted-foreground'}`}>
-                                {displayReason}
-                              </span>
-                              {showMessage && (
-                                <p className="text-xs text-muted-foreground truncate mt-0.5">{message}</p>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
-                        event.action === 'drop' ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
-                      }`}>
-                        {event.action === 'drop' ? 'Blocked' : 'Allowed'}
+                    )}
+                    {group.totalDetected > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-orange-500/10 text-orange-400">
+                        {group.totalDetected} detected
                       </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Day Content */}
+                {expandedDays.has(group.date) && (
+                  <div className="border-t">
+                    <div className="overflow-x-auto">
+                      <table className="data-table w-full">
+                        <thead>
+                          <tr>
+                            <th className="w-8"></th>
+                            <th>Time</th>
+                            <th>Source IP</th>
+                            <th>Target</th>
+                            <th>Rules Triggered</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.requests.map((request) => renderRequestRow(request))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Flat List View */
+          <div className="overflow-x-auto">
+            <table className="data-table w-full">
+              <thead>
+                <tr>
+                  <th className="w-8"></th>
+                  <th>Time</th>
+                  <th>Source IP</th>
+                  <th>Target</th>
+                  <th>Rules Triggered</th>
+                  <th>Score</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map((request) => renderRequestRow(request))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
         {pagination.total > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t">
             <span className="text-sm text-muted-foreground">
-              Showing {pagination.offset + 1} - {Math.min(pagination.offset + events.length, pagination.total)} of {pagination.total}
+              Showing {pagination.offset + 1} - {Math.min(pagination.offset + requests.length, pagination.total)} of {pagination.total} requests
             </span>
             <div className="flex gap-2">
               <button

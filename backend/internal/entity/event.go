@@ -53,7 +53,8 @@ type Event struct {
 	IngestedAt time.Time `json:"ingested_at" ch:"ingested_at"`
 
 	// ModSec enrichment
-	ModSecRuleIDs []string `json:"modsec_rule_ids,omitempty" ch:"modsec_rule_ids"`
+	ModSecRuleIDs  []string `json:"modsec_rule_ids,omitempty" ch:"modsec_rule_ids"`
+	ModSecMessages []string `json:"modsec_messages,omitempty" ch:"modsec_messages"`
 
 	// Threat enrichment (not stored in DB, added at query time)
 	ThreatScore int    `json:"threat_score,omitempty" ch:"-"`
@@ -141,3 +142,67 @@ const (
 	ActionReject     = "reject"
 	ActionQuarantine = "quarantine"
 )
+
+// ModSecLog represents a ModSecurity log entry from Sophos XGS
+type ModSecLog struct {
+	ID            string    `json:"id" ch:"id"`
+	Timestamp     time.Time `json:"timestamp" ch:"timestamp"`
+	UniqueID      string    `json:"unique_id" ch:"unique_id"` // Links all rules from same request
+	SrcIP         string    `json:"src_ip" ch:"src_ip"`
+	SrcPort       uint16    `json:"src_port" ch:"src_port"`
+	Hostname      string    `json:"hostname" ch:"hostname"`
+	URI           string    `json:"uri" ch:"uri"`
+	RuleID        string    `json:"rule_id" ch:"rule_id"`
+	RuleFile      string    `json:"rule_file" ch:"rule_file"`
+	RuleMsg       string    `json:"rule_msg" ch:"rule_msg"`
+	RuleSeverity  string    `json:"rule_severity" ch:"rule_severity"`
+	RuleData      string    `json:"rule_data" ch:"rule_data"`
+	CRSVersion    string    `json:"crs_version" ch:"crs_version"`
+	ParanoiaLevel uint8     `json:"paranoia_level" ch:"paranoia_level"`
+	AttackType    string    `json:"attack_type" ch:"attack_type"`
+	TotalScore    uint16    `json:"total_score" ch:"total_score"`
+	IsBlocking    bool      `json:"is_blocking" ch:"is_blocking"`
+	Tags          []string  `json:"tags" ch:"tags"`
+	RawLog        string    `json:"raw_log,omitempty" ch:"raw_log"`
+	IngestedAt    time.Time `json:"ingested_at" ch:"ingested_at"`
+}
+
+// ModSecLogFilters for querying ModSec logs
+type ModSecLogFilters struct {
+	SrcIP      string    `json:"src_ip"`
+	Hostname   string    `json:"hostname"`
+	RuleID     string    `json:"rule_id"`
+	AttackType string    `json:"attack_type"`
+	UniqueID   string    `json:"unique_id"`
+	Country    string    `json:"country"`
+	StartTime  time.Time `json:"start_time"`
+	EndTime    time.Time `json:"end_time"`
+	SearchTerm string    `json:"search_term"`
+}
+
+// ModSecRequestGroup groups all ModSec logs from same request by unique_id
+type ModSecRequestGroup struct {
+	UniqueID   string       `json:"unique_id"`
+	Timestamp  time.Time    `json:"timestamp"`
+	SrcIP      string       `json:"src_ip"`
+	Hostname   string       `json:"hostname"`
+	URI        string       `json:"uri"`
+	TotalScore uint16       `json:"total_score"`
+	IsBlocked  bool         `json:"is_blocked"`
+	RuleCount  uint64       `json:"rule_count"`
+	Rules      []ModSecRule `json:"rules"`
+	GeoCountry string       `json:"geo_country,omitempty"`
+	GeoCity    string       `json:"geo_city,omitempty"`
+}
+
+// ModSecRule represents a single rule within a request group
+type ModSecRule struct {
+	RuleID        string   `json:"rule_id"`
+	RuleMsg       string   `json:"rule_msg"`
+	RuleSeverity  string   `json:"rule_severity"`
+	RuleFile      string   `json:"rule_file"`
+	RuleData      string   `json:"rule_data"`
+	AttackType    string   `json:"attack_type"`
+	ParanoiaLevel uint8    `json:"paranoia_level"`
+	Tags          []string `json:"tags"`
+}

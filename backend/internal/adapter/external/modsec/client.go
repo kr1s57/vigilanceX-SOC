@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,17 +17,25 @@ import (
 
 // LogEntry represents a parsed ModSec log entry
 type LogEntry struct {
-	Timestamp  time.Time
-	SrcIP      string
-	SrcPort    string
-	RuleID     string
-	Message    string
-	Severity   string
-	Hostname   string
-	URI        string
-	UniqueID   string
-	RuleFile   string
-	FullLog    string
+	Timestamp     time.Time
+	SrcIP         string
+	SrcPort       string
+	RuleID        string
+	Message       string
+	Severity      string
+	Hostname      string
+	URI           string
+	UniqueID      string
+	RuleFile      string
+	FullLog       string
+	// New fields for detailed parsing
+	RuleData      string   // Matched data
+	CRSVersion    string   // e.g., "OWASP_CRS/3.3.3"
+	ParanoiaLevel int      // 1-4
+	AttackType    string   // sql, xss, lfi, rfi, rce, protocol
+	Tags          []string // All tags
+	IsBlocking    bool     // True if rule 949110 (blocking rule)
+	TotalScore    int      // Anomaly score from blocking rule
 }
 
 // Client handles SSH connection to Sophos XGS for ModSec log retrieval
@@ -195,8 +204,8 @@ func (c *Client) parseModSecLogs(output string, since time.Time) ([]LogEntry, er
 	c.logger.Debug("Raw output received", "total_length", len(output))
 
 	// Regex patterns for ModSec log parsing
-	// Example: [Mon Jan 05 20:04:43.867209 2026] [security2:error] [pid 23655:tid 140699596924672] [client 5.48.159.190:57294] ModSecurity: Warning...
-	timestampRe := regexp.MustCompile(`\[(\w{3} \w{3} \d{2} \d{2}:\d{2}:\d{2}\.\d+ \d{4})\]`)
+	// Example: [Tue Jan 06 15:31:05.952669 2026] [security2:error] [pid 14532:tid 140699437463296] [client 195.250.31.127:22167] ModSecurity: Warning...
+	timestampRe := regexp.MustCompile(`\[(\w{3} \w{3} \s?\d{1,2} \d{2}:\d{2}:\d{2}\.\d+ \d{4})\]`)
 	clientRe := regexp.MustCompile(`\[client (\d+\.\d+\.\d+\.\d+):(\d+)\]`)
 	idRe := regexp.MustCompile(`\[id "(\d+)"\]`)
 	msgRe := regexp.MustCompile(`\[msg "([^"]+)"\]`)
@@ -205,6 +214,13 @@ func (c *Client) parseModSecLogs(output string, since time.Time) ([]LogEntry, er
 	uriRe := regexp.MustCompile(`\[uri "([^"]+)"\]`)
 	uniqueIDRe := regexp.MustCompile(`\[unique_id "([^"]+)"\]`)
 	fileRe := regexp.MustCompile(`\[file "([^"]+)"\]`)
+	// New regex patterns for detailed parsing
+	dataRe := regexp.MustCompile(`\[data "([^"]+)"\]`)
+	verRe := regexp.MustCompile(`\[ver "([^"]+)"\]`)
+	tagRe := regexp.MustCompile(`\[tag "([^"]+)"\]`)
+	paranoiaRe := regexp.MustCompile(`paranoia-level/(\d+)`)
+	attackTypeRe := regexp.MustCompile(`attack-(\w+)`)
+	totalScoreRe := regexp.MustCompile(`Total (?:Inbound )?Score: (\d+)`)
 
 	lines := strings.Split(output, "\n")
 	securityErrorCount := 0
@@ -216,21 +232,27 @@ func (c *Client) parseModSecLogs(output string, since time.Time) ([]LogEntry, er
 
 		entry := LogEntry{FullLog: line}
 
-		// Parse timestamp
+		// Parse timestamp - handle both "Jan 06" and "Jan  6" formats
 		if matches := timestampRe.FindStringSubmatch(line); len(matches) > 1 {
-			// Parse format: "Mon Jan 05 20:04:43.867209 2026"
-			// XGS logs are in local time (CET for Luxembourg), load timezone
+			// Normalize spaces in date string
+			dateStr := strings.ReplaceAll(matches[1], "  ", " ")
+			// XGS logs are in local time (CET for Luxembourg)
 			loc, _ := time.LoadLocation("Europe/Luxembourg")
 			if loc == nil {
 				loc = time.UTC
 			}
-			t, err := time.ParseInLocation("Mon Jan 02 15:04:05.000000 2006", matches[1], loc)
+			// Try parsing with two-digit day first, then single digit
+			var t time.Time
+			var err error
+			t, err = time.ParseInLocation("Mon Jan 2 15:04:05.000000 2006", dateStr, loc)
+			if err != nil {
+				t, err = time.ParseInLocation("Mon Jan 02 15:04:05.000000 2006", dateStr, loc)
+			}
 			if err == nil {
 				entry.Timestamp = t
-				// Skip entries before the 'since' time
-				if !since.IsZero() && entry.Timestamp.Before(since) {
-					continue
-				}
+				// Note: We no longer filter by 'since' time here.
+				// ReplacingMergeTree in ClickHouse handles deduplication,
+				// so we can safely process all entries from SSH output.
 			}
 		}
 
@@ -243,16 +265,26 @@ func (c *Client) parseModSecLogs(output string, since time.Time) ([]LogEntry, er
 		// Parse rule ID
 		if matches := idRe.FindStringSubmatch(line); len(matches) > 1 {
 			entry.RuleID = matches[1]
+			// Check if this is a blocking rule (949110, 949111, 959100)
+			if entry.RuleID == "949110" || entry.RuleID == "949111" || entry.RuleID == "959100" {
+				entry.IsBlocking = true
+			}
 		}
 
 		// Parse message
 		if matches := msgRe.FindStringSubmatch(line); len(matches) > 1 {
 			entry.Message = matches[1]
+			// Extract total score from blocking messages
+			if scoreMatches := totalScoreRe.FindStringSubmatch(entry.Message); len(scoreMatches) > 1 {
+				if score, err := strconv.Atoi(scoreMatches[1]); err == nil {
+					entry.TotalScore = score
+				}
+			}
 		}
 
 		// Parse severity
 		if matches := severityRe.FindStringSubmatch(line); len(matches) > 1 {
-			entry.Severity = strings.ToLower(matches[1])
+			entry.Severity = strings.ToUpper(matches[1])
 		}
 
 		// Parse hostname
@@ -275,13 +307,41 @@ func (c *Client) parseModSecLogs(output string, since time.Time) ([]LogEntry, er
 			entry.RuleFile = matches[1]
 		}
 
+		// Parse matched data
+		if matches := dataRe.FindStringSubmatch(line); len(matches) > 1 {
+			entry.RuleData = matches[1]
+		}
+
+		// Parse CRS version
+		if matches := verRe.FindStringSubmatch(line); len(matches) > 1 {
+			entry.CRSVersion = matches[1]
+		}
+
+		// Parse all tags
+		tagMatches := tagRe.FindAllStringSubmatch(line, -1)
+		for _, match := range tagMatches {
+			if len(match) > 1 {
+				entry.Tags = append(entry.Tags, match[1])
+				// Extract paranoia level from tags
+				if plMatch := paranoiaRe.FindStringSubmatch(match[1]); len(plMatch) > 1 {
+					if pl, err := strconv.Atoi(plMatch[1]); err == nil {
+						entry.ParanoiaLevel = pl
+					}
+				}
+				// Extract attack type from tags
+				if atMatch := attackTypeRe.FindStringSubmatch(match[1]); len(atMatch) > 1 {
+					entry.AttackType = atMatch[1]
+				}
+			}
+		}
+
 		// Only add entries with valid rule ID
 		if entry.RuleID != "" && entry.SrcIP != "" {
 			entries = append(entries, entry)
 		}
 	}
 
-	c.logger.Debug("Parse complete", "security2_lines", securityErrorCount, "valid_entries", len(entries))
+	c.logger.Info("Parse complete", "security2_lines", securityErrorCount, "valid_entries", len(entries))
 	return entries, nil
 }
 

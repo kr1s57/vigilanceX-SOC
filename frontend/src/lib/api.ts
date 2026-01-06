@@ -11,8 +11,13 @@ import type {
   BanStats,
   BanHistory,
   ThreatScore,
+  ThreatStats,
+  ThreatProvider,
   AnomalySpike,
-  NewIPDetected
+  NewIPDetected,
+  ModSecLog,
+  ModSecRequestGroup,
+  ModSecLogFilters
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -178,14 +183,43 @@ export const whitelistApi = {
 
 // Threats API
 export const threatsApi = {
-  score: async (ip: string) => {
-    const response = await api.get<{ data: ThreatScore }>(`/threats/score/${ip}`)
-    return response.data.data
+  list: async (limit: number = 20) => {
+    const response = await api.get<ThreatScore[]>('/threats/', { params: { limit } })
+    return response.data
   },
 
-  refresh: async (ip: string) => {
-    const response = await api.post<{ data: ThreatScore }>(`/threats/refresh/${ip}`)
-    return response.data.data
+  stats: async () => {
+    const response = await api.get<ThreatStats>('/threats/stats')
+    return response.data
+  },
+
+  providers: async () => {
+    const response = await api.get<ThreatProvider[]>('/threats/providers')
+    return response.data
+  },
+
+  byLevel: async (level: string, limit: number = 50) => {
+    const response = await api.get<ThreatScore[]>(`/threats/level/${level}`, { params: { limit } })
+    return response.data
+  },
+
+  check: async (ip: string) => {
+    const response = await api.get<ThreatScore>(`/threats/check/${ip}`)
+    return response.data
+  },
+
+  score: async (ip: string) => {
+    const response = await api.get<ThreatScore>(`/threats/score/${ip}`)
+    return response.data
+  },
+
+  shouldBan: async (ip: string) => {
+    const response = await api.get<{ should_ban: boolean; reason: string }>(`/threats/should-ban/${ip}`)
+    return response.data
+  },
+
+  clearCache: async () => {
+    await api.post('/threats/cache/clear')
   },
 }
 
@@ -210,6 +244,78 @@ export const anomaliesApi = {
 export const healthApi = {
   check: async () => {
     const response = await api.get('/health')
+    return response.data
+  },
+}
+
+// ModSec API
+export const modsecApi = {
+  getLogs: async (filters: ModSecLogFilters = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        params.append(key, String(value))
+      }
+    })
+    const response = await api.get<PaginatedResponse<ModSecLog>>(`/modsec/logs?${params}`)
+    return response.data
+  },
+
+  getGroupedLogs: async (filters: ModSecLogFilters = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        params.append(key, String(value))
+      }
+    })
+    const response = await api.get<PaginatedResponse<ModSecRequestGroup>>(`/modsec/logs/grouped?${params}`)
+    return response.data
+  },
+
+  getHostnames: async () => {
+    const response = await api.get<string[]>('/modsec/hostnames')
+    return response.data
+  },
+
+  getRuleStats: async (period: string = '24h') => {
+    const response = await api.get<Array<{
+      rule_id: string
+      rule_msg: string
+      trigger_count: number
+      unique_ips: number
+      unique_targets: number
+    }>>('/modsec/rules/stats', { params: { period } })
+    return response.data
+  },
+
+  getAttackTypeStats: async (period: string = '24h') => {
+    const response = await api.get<Array<{
+      attack_type: string
+      count: number
+      unique_ips: number
+    }>>('/modsec/attacks/stats', { params: { period } })
+    return response.data
+  },
+
+  getStats: async () => {
+    const response = await api.get<{
+      last_sync: string
+      entries_fetched: number
+      events_updated: number
+      last_error: string
+      is_running: boolean
+      is_configured: boolean
+    }>('/modsec/stats')
+    return response.data
+  },
+
+  syncNow: async () => {
+    const response = await api.post('/modsec/sync')
+    return response.data
+  },
+
+  testConnection: async () => {
+    const response = await api.get<{ status: string; message: string }>('/modsec/test')
     return response.data
   },
 }

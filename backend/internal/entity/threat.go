@@ -7,7 +7,7 @@ import (
 // ThreatScore represents the threat intelligence score for an IP
 type ThreatScore struct {
 	IP              string    `json:"ip" ch:"ip"`
-	AggregatedScore int       `json:"aggregated_score" ch:"aggregated_score"`
+	AggregatedScore int32     `json:"aggregated_score" ch:"aggregated_score"`
 	TotalScore      uint8     `json:"total_score" ch:"total_score"`
 	ReputationScore uint8     `json:"reputation_score" ch:"reputation_score"`
 	ActivityScore   uint8     `json:"activity_score" ch:"activity_score"`
@@ -27,9 +27,9 @@ type ThreatScore struct {
 	IsTor   bool   `json:"is_tor" ch:"is_tor"`
 
 	// Per-source scores (normalized 0-100)
-	AbuseIPDBScore    int    `json:"abuseipdb_score" ch:"abuseipdb_score"`
-	VirusTotalScore   int    `json:"virustotal_score" ch:"virustotal_score"`
-	OTXScore          int    `json:"otx_score" ch:"otx_score"`
+	AbuseIPDBScore    int32  `json:"abuseipdb_score" ch:"abuseipdb_score"`
+	VirusTotalScore   int32  `json:"virustotal_score" ch:"virustotal_score"`
+	OTXScore          int32  `json:"otx_score" ch:"otx_score"`
 
 	// Legacy per-source details
 	AbuseIPDBReports    uint32   `json:"abuseipdb_reports" ch:"abuseipdb_reports"`
@@ -207,12 +207,12 @@ func IsMaliciousScore(score uint8) bool {
 
 // ThreatStats contains threat intelligence statistics
 type ThreatStats struct {
-	TotalTracked        int64    `json:"total_tracked"`
-	CriticalCount       int64    `json:"critical_count"`
-	HighCount           int64    `json:"high_count"`
-	MediumCount         int64    `json:"medium_count"`
-	LowCount            int64    `json:"low_count"`
-	TorExitNodes        int64    `json:"tor_exit_nodes"`
-	ChecksLast24h       int64    `json:"checks_last_24h"`
+	TotalTracked        uint64   `json:"total_tracked"`
+	CriticalCount       uint64   `json:"critical_count"`
+	HighCount           uint64   `json:"high_count"`
+	MediumCount         uint64   `json:"medium_count"`
+	LowCount            uint64   `json:"low_count"`
+	TorExitNodes        uint64   `json:"tor_exit_nodes"`
+	ChecksLast24h       uint64   `json:"checks_last_24h"`
 	ConfiguredProviders []string `json:"configured_providers"`
 }

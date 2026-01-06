@@ -95,7 +95,7 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 			src_port, dst_port, protocol, action, rule_id, rule_name,
 			hostname, user_name, url, http_method, http_status, user_agent,
 			geo_country, geo_city, geo_asn, geo_org, message, reason, sophos_id, ingested_at,
-			modsec_rule_ids
+			modsec_rule_ids, modsec_messages
 		FROM events
 		WHERE %s
 		ORDER BY timestamp DESC
@@ -119,7 +119,7 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 			&e.RuleID, &e.RuleName, &e.Hostname, &e.UserName, &e.URL, &e.HTTPMethod,
 			&e.HTTPStatus, &e.UserAgent, &e.GeoCountry, &e.GeoCity, &e.GeoASN,
 			&e.GeoOrg, &e.Message, &e.Reason, &e.SophosID, &e.IngestedAt,
-			&e.ModSecRuleIDs,
+			&e.ModSecRuleIDs, &e.ModSecMessages,
 		); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan event: %w", err)
 		}
@@ -138,7 +138,7 @@ func (r *EventsRepository) GetEventByID(ctx context.Context, eventID uuid.UUID) 
 			src_port, dst_port, protocol, action, rule_id, rule_name,
 			hostname, user_name, url, http_method, http_status, user_agent,
 			geo_country, geo_city, geo_asn, geo_org, message, reason, raw_log, sophos_id, ingested_at,
-			modsec_rule_ids
+			modsec_rule_ids, modsec_messages
 		FROM events
 		WHERE event_id = ?
 		LIMIT 1
@@ -151,7 +151,7 @@ func (r *EventsRepository) GetEventByID(ctx context.Context, eventID uuid.UUID) 
 		&e.RuleID, &e.RuleName, &e.Hostname, &e.UserName, &e.URL, &e.HTTPMethod,
 		&e.HTTPStatus, &e.UserAgent, &e.GeoCountry, &e.GeoCity, &e.GeoASN,
 		&e.GeoOrg, &e.Message, &e.Reason, &e.RawLog, &e.SophosID, &e.IngestedAt,
-		&e.ModSecRuleIDs,
+		&e.ModSecRuleIDs, &e.ModSecMessages,
 	); err != nil {
 		return nil, fmt.Errorf("failed to get event: %w", err)
 	}

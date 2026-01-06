@@ -260,7 +260,7 @@ func (r *ThreatsRepository) GetThreatStats(ctx context.Context) (*entity.ThreatS
 	stats := &entity.ThreatStats{}
 
 	// Total tracked IPs
-	query := `SELECT count(DISTINCT ip) FROM ip_threat_scores FINAL`
+	query := `SELECT count() FROM ip_threat_scores FINAL`
 	if err := r.conn.DB().QueryRow(ctx, query).Scan(&stats.TotalTracked); err != nil {
 		return nil, fmt.Errorf("count total: %w", err)
 	}
@@ -279,7 +279,7 @@ func (r *ThreatsRepository) GetThreatStats(ctx context.Context) (*entity.ThreatS
 	r.conn.DB().QueryRow(ctx, query).Scan(&stats.LowCount)
 
 	// Tor exit nodes
-	query = `SELECT count() FROM ip_threat_scores FINAL WHERE is_tor = true`
+	query = `SELECT count() FROM ip_threat_scores FINAL WHERE is_tor = 1`
 	r.conn.DB().QueryRow(ctx, query).Scan(&stats.TorExitNodes)
 
 	// Checks in last 24h
@@ -299,7 +299,7 @@ func (r *ThreatsRepository) GetTorExitNodes(ctx context.Context, limit int) ([]e
 			country,
 			last_checked
 		FROM ip_threat_scores FINAL
-		WHERE is_tor = true
+		WHERE is_tor = 1
 		ORDER BY aggregated_score DESC
 		LIMIT ?
 	`
