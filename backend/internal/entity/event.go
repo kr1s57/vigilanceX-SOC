@@ -45,11 +45,15 @@ type Event struct {
 
 	// Message
 	Message string `json:"message" ch:"message"`
+	Reason  string `json:"reason" ch:"reason"`
 	RawLog  string `json:"raw_log,omitempty" ch:"raw_log"`
 
 	// Metadata
 	SophosID   string    `json:"sophos_id" ch:"sophos_id"`
 	IngestedAt time.Time `json:"ingested_at" ch:"ingested_at"`
+
+	// ModSec enrichment
+	ModSecRuleIDs []string `json:"modsec_rule_ids,omitempty" ch:"modsec_rule_ids"`
 
 	// Threat enrichment (not stored in DB, added at query time)
 	ThreatScore int    `json:"threat_score,omitempty" ch:"-"`
@@ -73,30 +77,30 @@ type EventFilters struct {
 
 // EventStats represents aggregated event statistics
 type EventStats struct {
-	TotalEvents      int64   `json:"total_events"`
-	BlockedEvents    int64   `json:"blocked_events"`
+	TotalEvents      uint64  `json:"total_events"`
+	BlockedEvents    uint64  `json:"blocked_events"`
 	BlockRate        float64 `json:"block_rate"`
-	UniqueIPs        int64   `json:"unique_ips"`
-	CriticalEvents   int64   `json:"critical_events"`
-	HighEvents       int64   `json:"high_events"`
-	MediumEvents     int64   `json:"medium_events"`
-	LowEvents        int64   `json:"low_events"`
+	UniqueIPs        uint64  `json:"unique_ips"`
+	CriticalEvents   uint64  `json:"critical_events"`
+	HighEvents       uint64  `json:"high_events"`
+	MediumEvents     uint64  `json:"medium_events"`
+	LowEvents        uint64  `json:"low_events"`
 }
 
 // TimelinePoint represents a point in the event timeline
 type TimelinePoint struct {
 	Time          time.Time `json:"time"`
-	TotalEvents   int64     `json:"total_events"`
-	BlockedEvents int64     `json:"blocked_events"`
-	UniqueIPs     int64     `json:"unique_ips"`
+	TotalEvents   uint64    `json:"total_events"`
+	BlockedEvents uint64    `json:"blocked_events"`
+	UniqueIPs     uint64    `json:"unique_ips"`
 }
 
 // TopAttacker represents a top attacking IP
 type TopAttacker struct {
 	IP           string   `json:"ip"`
-	AttackCount  int64    `json:"attack_count"`
-	BlockedCount int64    `json:"blocked_count"`
-	UniqueRules  int64    `json:"unique_rules"`
+	AttackCount  uint64   `json:"attack_count"`
+	BlockedCount uint64   `json:"blocked_count"`
+	UniqueRules  uint64   `json:"unique_rules"`
 	Categories   []string `json:"categories"`
 	Country      string   `json:"country"`
 	ThreatScore  int      `json:"threat_score,omitempty"`
@@ -106,8 +110,8 @@ type TopAttacker struct {
 type TopTarget struct {
 	Hostname    string `json:"hostname"`
 	URL         string `json:"url,omitempty"`
-	AttackCount int64  `json:"attack_count"`
-	UniqueIPs   int64  `json:"unique_ips"`
+	AttackCount uint64 `json:"attack_count"`
+	UniqueIPs   uint64 `json:"unique_ips"`
 }
 
 // Severity levels

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Shield, Search, Download } from 'lucide-react'
-import { eventsApi } from '@/lib/api'
-import { formatDateTime, getSeverityColor, getSeverityBgColor, getCountryFlag } from '@/lib/utils'
+import { Shield, Search, Download, ShieldCheck } from 'lucide-react'
+import { eventsApi, whitelistApi } from '@/lib/api'
+import { formatDateTime, getSeverityColor, getSeverityBgColor, getCountryFlag, getCountryName } from '@/lib/utils'
 import type { Event } from '@/types'
 
 export function WafExplorer() {
@@ -11,6 +11,27 @@ export function WafExplorer() {
   const [search, setSearch] = useState('')
   const [severity, setSeverity] = useState('')
   const [action, setAction] = useState('')
+  const [hostname, setHostname] = useState('')
+  const [hostnames, setHostnames] = useState<string[]>([])
+  const [whitelistedIPs, setWhitelistedIPs] = useState<Set<string>>(new Set())
+
+  // Fetch whitelist
+  useEffect(() => {
+    whitelistApi.list().then(data => {
+      setWhitelistedIPs(new Set((data || []).map(w => w.ip)))
+    }).catch(() => {})
+  }, [])
+
+  // Fetch unique hostnames for filter
+  useEffect(() => {
+    eventsApi.hostnames('WAF').then(data => {
+      // Filter out empty, Unknown, and invalid hostnames
+      const validHostnames = (data || []).filter(h =>
+        h && h !== '' && h !== 'Unknown' && h !== 'Unknown (Direct IP)' && !h.match(/^[\d.]+$/)
+      )
+      setHostnames(validHostnames)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     async function fetchEvents() {
@@ -20,21 +41,23 @@ export function WafExplorer() {
           log_type: 'WAF',
           severity: severity || undefined,
           action: action || undefined,
+          hostname: hostname || undefined,
           search: search || undefined,
           limit: pagination.limit,
           offset: pagination.offset,
         })
-        setEvents(response.data)
-        setPagination(response.pagination)
+        setEvents(response.data || [])
+        setPagination(response.pagination || { total: 0, limit: 50, offset: 0, has_more: false })
       } catch (err) {
         console.error('Failed to fetch WAF events:', err)
+        setEvents([])
       } finally {
         setLoading(false)
       }
     }
 
     fetchEvents()
-  }, [search, severity, action, pagination.offset])
+  }, [search, severity, action, hostname, pagination.offset])
 
   return (
     <div className="space-y-6">
@@ -77,8 +100,7 @@ export function WafExplorer() {
           <option value="">All Severities</option>
           <option value="critical">Critical</option>
           <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
+          <option value="info">Info</option>
         </select>
         <select
           value={action}
@@ -87,7 +109,16 @@ export function WafExplorer() {
         >
           <option value="">All Actions</option>
           <option value="drop">Blocked</option>
-          <option value="allow">Allowed</option>
+        </select>
+        <select
+          value={hostname}
+          onChange={(e) => setHostname(e.target.value)}
+          className="px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          <option value="">All Webservers</option>
+          {hostnames.map(h => (
+            <option key={h} value={h}>{h}</option>
+          ))}
         </select>
       </div>
 
@@ -101,8 +132,8 @@ export function WafExplorer() {
                 <th>Severity</th>
                 <th>Source IP</th>
                 <th>Target</th>
-                <th>Category</th>
-                <th>Rule</th>
+                <th>ModSec IDs</th>
+                <th>Block Reason</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -131,27 +162,69 @@ export function WafExplorer() {
                       </span>
                     </td>
                     <td>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm">{event.src_ip}</span>
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm">{event.src_ip}</span>
+                          {whitelistedIPs.has(event.src_ip) && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-500">
+                              <ShieldCheck className="w-3 h-3" />
+                              WL
+                            </span>
+                          )}
+                        </div>
                         {event.geo_country && (
-                          <span>{getCountryFlag(event.geo_country)}</span>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                            <span>{getCountryFlag(event.geo_country)}</span>
+                            <span>{getCountryName(event.geo_country)}</span>
+                            {event.geo_city && <span>- {event.geo_city}</span>}
+                          </div>
                         )}
                       </div>
                     </td>
                     <td>
-                      <div className="max-w-[200px] truncate">
+                      <div className="max-w-[250px]">
                         <span className="text-sm">{event.hostname || event.dst_ip}</span>
-                        {event.url && (
+                        {event.url && event.url !== '-' && (
                           <p className="text-xs text-muted-foreground truncate">{event.url}</p>
                         )}
                       </div>
                     </td>
                     <td>
-                      <span className="text-sm">{event.sub_category || event.category}</span>
+                      <div className="flex flex-wrap gap-1 max-w-[180px]">
+                        {event.modsec_rule_ids && event.modsec_rule_ids.length > 0 ? (
+                          event.modsec_rule_ids.map((ruleId, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex px-1.5 py-0.5 rounded text-xs font-mono bg-purple-500/10 text-purple-400"
+                              title={`ModSec CRS Rule ${ruleId}`}
+                            >
+                              {ruleId}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </div>
                     </td>
                     <td>
-                      <div className="max-w-[150px] truncate">
-                        <span className="text-sm">{event.rule_name || event.rule_id}</span>
+                      <div className="max-w-[300px]">
+                        {(() => {
+                          // Sophos uses "-" as null/empty value
+                          const reason = event.reason && event.reason !== '-' ? event.reason : '';
+                          const message = event.message && event.message !== '-' ? event.message : '';
+                          const displayReason = reason || message || event.sub_category || event.category;
+                          const showMessage = reason && message && reason !== message;
+                          return (
+                            <>
+                              <span className={`text-sm font-medium ${reason || message ? 'text-orange-400' : 'text-muted-foreground'}`}>
+                                {displayReason}
+                              </span>
+                              {showMessage && (
+                                <p className="text-xs text-muted-foreground truncate mt-0.5">{message}</p>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td>

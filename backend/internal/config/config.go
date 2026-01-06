@@ -13,8 +13,18 @@ type Config struct {
 	ClickHouse ClickHouseConfig
 	Redis      RedisConfig
 	Sophos     SophosConfig
+	SophosSSH  SophosSSHConfig
 	ThreatIntel ThreatIntelConfig
 	JWT        JWTConfig
+}
+
+type SophosSSHConfig struct {
+	Host       string
+	Port       int
+	User       string
+	KeyPath    string
+	LogPath    string
+	SyncInterval time.Duration
 }
 
 type AppConfig struct {
@@ -125,6 +135,14 @@ func Load() (*Config, error) {
 			Secret: viper.GetString("JWT_SECRET"),
 			Expiry: viper.GetDuration("JWT_EXPIRY"),
 		},
+		SophosSSH: SophosSSHConfig{
+			Host:         viper.GetString("SOPHOS_SSH_HOST"),
+			Port:         viper.GetInt("SOPHOS_SSH_PORT"),
+			User:         viper.GetString("SOPHOS_SSH_USER"),
+			KeyPath:      viper.GetString("SOPHOS_SSH_KEY_PATH"),
+			LogPath:      viper.GetString("SOPHOS_SSH_LOG_PATH"),
+			SyncInterval: viper.GetDuration("SOPHOS_SSH_SYNC_INTERVAL"),
+		},
 	}
 
 	return config, nil
@@ -169,6 +187,14 @@ func bindEnvVars() {
 	// JWT
 	viper.BindEnv("JWT_SECRET")
 	viper.BindEnv("JWT_EXPIRY")
+
+	// Sophos SSH
+	viper.BindEnv("SOPHOS_SSH_HOST")
+	viper.BindEnv("SOPHOS_SSH_PORT")
+	viper.BindEnv("SOPHOS_SSH_USER")
+	viper.BindEnv("SOPHOS_SSH_KEY_PATH")
+	viper.BindEnv("SOPHOS_SSH_LOG_PATH")
+	viper.BindEnv("SOPHOS_SSH_SYNC_INTERVAL")
 }
 
 func setDefaults() {
@@ -201,6 +227,13 @@ func setDefaults() {
 
 	// JWT defaults
 	viper.SetDefault("JWT_EXPIRY", 24*time.Hour)
+
+	// Sophos SSH defaults
+	viper.SetDefault("SOPHOS_SSH_PORT", 22)
+	viper.SetDefault("SOPHOS_SSH_USER", "admin")
+	viper.SetDefault("SOPHOS_SSH_KEY_PATH", "/root/.ssh/id_rsa_xgs")
+	viper.SetDefault("SOPHOS_SSH_LOG_PATH", "/log/reverseproxy.log")
+	viper.SetDefault("SOPHOS_SSH_SYNC_INTERVAL", 5*time.Minute)
 }
 
 func (c *Config) IsDevelopment() bool {

@@ -82,13 +82,13 @@ type ExtendBanRequest struct {
 
 // BanStats represents ban statistics
 type BanStats struct {
-	TotalActiveBans    int64 `json:"total_active_bans"`
-	TotalPermanentBans int64 `json:"total_permanent_bans"`
-	TotalExpiredBans   int64 `json:"total_expired_bans"`
-	BansLast24h        int64 `json:"bans_last_24h"`
-	UnbansLast24h      int64 `json:"unbans_last_24h"`
-	RecidivistIPs      int64 `json:"recidivist_ips"` // IPs banned more than once
-	PendingSync        int64 `json:"pending_sync"`   // Bans not yet synced to XGS
+	TotalActiveBans    uint64 `json:"total_active_bans"`
+	TotalPermanentBans uint64 `json:"total_permanent_bans"`
+	TotalExpiredBans   uint64 `json:"total_expired_bans"`
+	BansLast24h        uint64 `json:"bans_last_24h"`
+	UnbansLast24h      uint64 `json:"unbans_last_24h"`
+	RecidivistIPs      uint64 `json:"recidivist_ips"` // IPs banned more than once
+	PendingSync        uint64 `json:"pending_sync"`   // Bans not yet synced to XGS
 }
 
 // BanFilters for querying bans

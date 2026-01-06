@@ -114,13 +114,64 @@ export function truncateIP(ip: string, maxLength: number = 15): string {
   return ip.substring(0, maxLength - 3) + '...'
 }
 
-export function getCountryFlag(countryCode: string): string {
-  if (!countryCode || countryCode.length !== 2) return ''
+// ISO 3166-1 alpha-3 to alpha-2 mapping for common countries
+const iso3to2: Record<string, string> = {
+  'FRA': 'FR', 'LUX': 'LU', 'USA': 'US', 'NLD': 'NL', 'DEU': 'DE', 'GBR': 'GB',
+  'BEL': 'BE', 'CHE': 'CH', 'ITA': 'IT', 'ESP': 'ES', 'PRT': 'PT', 'POL': 'PL',
+  'AUT': 'AT', 'CZE': 'CZ', 'HUN': 'HU', 'ROU': 'RO', 'BGR': 'BG', 'GRC': 'GR',
+  'SWE': 'SE', 'NOR': 'NO', 'DNK': 'DK', 'FIN': 'FI', 'IRL': 'IE', 'CAN': 'CA',
+  'AUS': 'AU', 'NZL': 'NZ', 'JPN': 'JP', 'CHN': 'CN', 'KOR': 'KR', 'IND': 'IN',
+  'BRA': 'BR', 'ARG': 'AR', 'MEX': 'MX', 'RUS': 'RU', 'UKR': 'UA', 'TUR': 'TR',
+  'ISR': 'IL', 'ARE': 'AE', 'SAU': 'SA', 'SGP': 'SG', 'HKG': 'HK', 'TWN': 'TW',
+  'THA': 'TH', 'VNM': 'VN', 'IDN': 'ID', 'MYS': 'MY', 'PHL': 'PH', 'ZAF': 'ZA',
+}
 
-  const codePoints = countryCode
-    .toUpperCase()
+export function getCountryFlag(countryCode: string): string {
+  if (!countryCode) return ''
+
+  // Convert 3-letter to 2-letter code if needed
+  let code = countryCode.toUpperCase()
+  if (code.length === 3) {
+    code = iso3to2[code] || ''
+  }
+
+  if (code.length !== 2) return ''
+
+  const codePoints = code
     .split('')
     .map((char) => 127397 + char.charCodeAt(0))
 
   return String.fromCodePoint(...codePoints)
+}
+
+export function getCountryName(countryCode: string): string {
+  const names: Record<string, string> = {
+    'FRA': 'France', 'FR': 'France',
+    'LUX': 'Luxembourg', 'LU': 'Luxembourg',
+    'USA': 'United States', 'US': 'United States',
+    'NLD': 'Netherlands', 'NL': 'Netherlands',
+    'DEU': 'Germany', 'DE': 'Germany',
+    'GBR': 'United Kingdom', 'GB': 'United Kingdom',
+    'BEL': 'Belgium', 'BE': 'Belgium',
+    'CHE': 'Switzerland', 'CH': 'Switzerland',
+    'ITA': 'Italy', 'IT': 'Italy',
+    'ESP': 'Spain', 'ES': 'Spain',
+    'NOR': 'Norway', 'NO': 'Norway',
+    'SWE': 'Sweden', 'SE': 'Sweden',
+    'DNK': 'Denmark', 'DK': 'Denmark',
+    'FIN': 'Finland', 'FI': 'Finland',
+    'POL': 'Poland', 'PL': 'Poland',
+    'CZE': 'Czech Republic', 'CZ': 'Czech Republic',
+    'AUT': 'Austria', 'AT': 'Austria',
+    'RUS': 'Russia', 'RU': 'Russia',
+    'UKR': 'Ukraine', 'UA': 'Ukraine',
+    'CHN': 'China', 'CN': 'China',
+    'JPN': 'Japan', 'JP': 'Japan',
+    'KOR': 'South Korea', 'KR': 'South Korea',
+    'IND': 'India', 'IN': 'India',
+    'BRA': 'Brazil', 'BR': 'Brazil',
+    'CAN': 'Canada', 'CA': 'Canada',
+    'AUS': 'Australia', 'AU': 'Australia',
+  }
+  return names[countryCode?.toUpperCase()] || countryCode || ''
 }

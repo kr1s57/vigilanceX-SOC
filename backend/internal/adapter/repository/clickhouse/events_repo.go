@@ -27,7 +27,7 @@ func NewEventsRepository(conn *Connection, logger *slog.Logger) *EventsRepositor
 }
 
 // GetEvents retrieves events with filters and pagination
-func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFilters, limit, offset int) ([]entity.Event, int64, error) {
+func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFilters, limit, offset int) ([]entity.Event, uint64, error) {
 	// Build WHERE clause
 	conditions := []string{"1=1"}
 	args := []interface{}{}
@@ -82,7 +82,7 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 
 	// Get total count
 	countQuery := fmt.Sprintf(`SELECT count() FROM events WHERE %s`, whereClause)
-	var total int64
+	var total uint64
 	if err := r.conn.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count events: %w", err)
 	}
@@ -94,7 +94,8 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 			IPv4NumToString(src_ip) as src_ip, IPv4NumToString(dst_ip) as dst_ip,
 			src_port, dst_port, protocol, action, rule_id, rule_name,
 			hostname, user_name, url, http_method, http_status, user_agent,
-			geo_country, geo_city, geo_asn, geo_org, message, sophos_id, ingested_at
+			geo_country, geo_city, geo_asn, geo_org, message, reason, sophos_id, ingested_at,
+			modsec_rule_ids
 		FROM events
 		WHERE %s
 		ORDER BY timestamp DESC
@@ -117,7 +118,8 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 			&e.SrcIP, &e.DstIP, &e.SrcPort, &e.DstPort, &e.Protocol, &e.Action,
 			&e.RuleID, &e.RuleName, &e.Hostname, &e.UserName, &e.URL, &e.HTTPMethod,
 			&e.HTTPStatus, &e.UserAgent, &e.GeoCountry, &e.GeoCity, &e.GeoASN,
-			&e.GeoOrg, &e.Message, &e.SophosID, &e.IngestedAt,
+			&e.GeoOrg, &e.Message, &e.Reason, &e.SophosID, &e.IngestedAt,
+			&e.ModSecRuleIDs,
 		); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan event: %w", err)
 		}
@@ -135,7 +137,8 @@ func (r *EventsRepository) GetEventByID(ctx context.Context, eventID uuid.UUID) 
 			IPv4NumToString(src_ip) as src_ip, IPv4NumToString(dst_ip) as dst_ip,
 			src_port, dst_port, protocol, action, rule_id, rule_name,
 			hostname, user_name, url, http_method, http_status, user_agent,
-			geo_country, geo_city, geo_asn, geo_org, message, raw_log, sophos_id, ingested_at
+			geo_country, geo_city, geo_asn, geo_org, message, reason, raw_log, sophos_id, ingested_at,
+			modsec_rule_ids
 		FROM events
 		WHERE event_id = ?
 		LIMIT 1
@@ -147,7 +150,8 @@ func (r *EventsRepository) GetEventByID(ctx context.Context, eventID uuid.UUID) 
 		&e.SrcIP, &e.DstIP, &e.SrcPort, &e.DstPort, &e.Protocol, &e.Action,
 		&e.RuleID, &e.RuleName, &e.Hostname, &e.UserName, &e.URL, &e.HTTPMethod,
 		&e.HTTPStatus, &e.UserAgent, &e.GeoCountry, &e.GeoCity, &e.GeoASN,
-		&e.GeoOrg, &e.Message, &e.RawLog, &e.SophosID, &e.IngestedAt,
+		&e.GeoOrg, &e.Message, &e.Reason, &e.RawLog, &e.SophosID, &e.IngestedAt,
+		&e.ModSecRuleIDs,
 	); err != nil {
 		return nil, fmt.Errorf("failed to get event: %w", err)
 	}
@@ -358,7 +362,7 @@ func (r *EventsRepository) GetTopTargets(ctx context.Context, period string, lim
 }
 
 // GetStatsByLogType retrieves stats grouped by log type
-func (r *EventsRepository) GetStatsByLogType(ctx context.Context, period string) (map[string]int64, error) {
+func (r *EventsRepository) GetStatsByLogType(ctx context.Context, period string) (map[string]uint64, error) {
 	var startTime time.Time
 	now := time.Now()
 
@@ -386,10 +390,10 @@ func (r *EventsRepository) GetStatsByLogType(ctx context.Context, period string)
 	}
 	defer rows.Close()
 
-	result := make(map[string]int64)
+	result := make(map[string]uint64)
 	for rows.Next() {
 		var logType string
-		var count int64
+		var count uint64
 		if err := rows.Scan(&logType, &count); err != nil {
 			return nil, fmt.Errorf("failed to scan stat: %w", err)
 		}
@@ -435,7 +439,7 @@ func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]
 	var result []map[string]interface{}
 	for rows.Next() {
 		var country string
-		var count, uniqueIPs int64
+		var count, uniqueIPs uint64
 		if err := rows.Scan(&country, &count, &uniqueIPs); err != nil {
 			return nil, fmt.Errorf("failed to scan geo data: %w", err)
 		}
@@ -447,6 +451,33 @@ func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]
 	}
 
 	return result, nil
+}
+
+// GetUniqueHostnames returns unique hostnames for a given log type
+func (r *EventsRepository) GetUniqueHostnames(ctx context.Context, logType string) ([]string, error) {
+	query := `
+		SELECT DISTINCT hostname
+		FROM events
+		WHERE log_type = ? AND hostname != '' AND hostname != 'Unknown' AND hostname != 'Unknown (Direct IP)'
+		ORDER BY hostname
+	`
+
+	rows, err := r.conn.Query(ctx, query, logType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unique hostnames: %w", err)
+	}
+	defer rows.Close()
+
+	var hostnames []string
+	for rows.Next() {
+		var hostname string
+		if err := rows.Scan(&hostname); err != nil {
+			return nil, fmt.Errorf("failed to scan hostname: %w", err)
+		}
+		hostnames = append(hostnames, hostname)
+	}
+
+	return hostnames, nil
 }
 
 // RawQuery executes a raw SQL query and returns rows

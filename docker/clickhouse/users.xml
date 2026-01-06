@@ -15,7 +15,7 @@
 
     <users>
         <vigilance>
-            <password_sha256_hex replace="true"></password_sha256_hex>
+            <password_sha256_hex replace="true">72c97dbafeee07ff15ebc8f9b37a8a118914af2b7c26873fe911a63b2c2c71de</password_sha256_hex>
             <networks>
                 <ip>::/0</ip>
             </networks>

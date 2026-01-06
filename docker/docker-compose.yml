@@ -59,6 +59,7 @@ services:
   vector:
     image: timberio/vector:0.34.1-debian
     container_name: vigilance_vector
+    command: ["--config", "/etc/vector/vector.toml"]
     ports:
       - "514:514/udp"    # Syslog UDP
       - "1514:1514/tcp"  # Syslog TCP
@@ -88,6 +89,7 @@ services:
       - "8080:8080"
     volumes:
       - ../backend/scenarios:/app/scenarios:ro
+      - ./ssh/id_rsa_xgs:/app/.ssh/id_rsa_xgs:ro
     environment:
       APP_ENV: ${APP_ENV:-production}
       APP_PORT: 8080
@@ -105,13 +107,20 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
 
-      # Sophos XGS
+      # Sophos XGS API
       SOPHOS_HOST: ${SOPHOS_HOST}
       SOPHOS_PORT: ${SOPHOS_PORT:-4444}
       SOPHOS_USER: ${SOPHOS_USER}
       SOPHOS_PASSWORD: ${SOPHOS_PASSWORD}
-      SOPHOS_BAN_GROUP: VIGILANCE_X_BLOCKLIST
-      SOPHOS_PERMANENT_GROUP: VIGILANCE_X_PERMANENT
+      SOPHOS_BAN_GROUP: ${SOPHOS_BAN_GROUP:-grp_SOC-BannedIP}
+
+      # Sophos XGS SSH (ModSec log sync)
+      SOPHOS_SSH_HOST: ${SOPHOS_SSH_HOST:-${SOPHOS_HOST}}
+      SOPHOS_SSH_PORT: ${SOPHOS_SSH_PORT:-22}
+      SOPHOS_SSH_USER: ${SOPHOS_SSH_USER:-admin}
+      SOPHOS_SSH_KEY_PATH: /app/.ssh/id_rsa_xgs
+      SOPHOS_SSH_LOG_PATH: /log/reverseproxy.log
+      SOPHOS_SSH_SYNC_INTERVAL: ${SOPHOS_SSH_SYNC_INTERVAL:-5m}
 
       # Threat Intel APIs
       ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY}
@@ -127,7 +136,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3

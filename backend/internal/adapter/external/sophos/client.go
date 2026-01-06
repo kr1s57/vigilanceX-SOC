@@ -1,12 +1,12 @@
 package sophos
 
 import (
-	"bytes"
 	"crypto/tls"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -171,7 +171,7 @@ type LoginResponse struct {
 	Status string `xml:"status,attr"`
 }
 
-// sendRequest sends an XML request to Sophos API
+// sendRequest sends an XML request to Sophos API using URL query parameter
 func (c *Client) sendRequest(req *APIRequest) (*APIResponse, error) {
 	// Set login credentials
 	req.Login = Login{
@@ -180,22 +180,20 @@ func (c *Client) sendRequest(req *APIRequest) (*APIResponse, error) {
 	}
 
 	// Marshal request to XML
-	xmlData, err := xml.MarshalIndent(req, "", "  ")
+	xmlData, err := xml.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Add XML header
-	xmlPayload := []byte(xml.Header + string(xmlData))
+	// Build URL with reqxml parameter (Sophos expects this format)
+	xmlPayload := xml.Header + string(xmlData)
+	reqURL := fmt.Sprintf("%s?reqxml=%s", c.baseURL, url.QueryEscape(xmlPayload))
 
 	// Create HTTP request
-	httpReq, err := http.NewRequest("POST", c.baseURL, bytes.NewBuffer(xmlPayload))
+	httpReq, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-
-	httpReq.Header.Set("Content-Type", "application/xml")
-	httpReq.Header.Set("Accept", "application/xml")
 
 	// Send request
 	resp, err := c.httpClient.Do(httpReq)
@@ -210,6 +208,11 @@ func (c *Client) sendRequest(req *APIRequest) (*APIResponse, error) {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
+	// Check for empty response
+	if len(body) == 0 {
+		return nil, fmt.Errorf("empty response from API")
+	}
+
 	// Parse response
 	var apiResp APIResponse
 	if err := xml.Unmarshal(body, &apiResp); err != nil {
@@ -221,8 +224,8 @@ func (c *Client) sendRequest(req *APIRequest) (*APIResponse, error) {
 
 // AddIPToBlocklist adds an IP address to the blocklist group
 func (c *Client) AddIPToBlocklist(ip, reason string) error {
-	// Create host name from IP (replace dots with underscores)
-	hostName := fmt.Sprintf("VIGILANCE_%s", strings.ReplaceAll(ip, ".", "_"))
+	// Create host name from IP (format: bannedIP_x.x.x.x to match existing convention)
+	hostName := fmt.Sprintf("bannedIP_%s", ip)
 
 	// First, create the IP host object
 	createReq := &APIRequest{
@@ -255,7 +258,7 @@ func (c *Client) AddIPToBlocklist(ip, reason string) error {
 
 // RemoveIPFromBlocklist removes an IP address from the blocklist
 func (c *Client) RemoveIPFromBlocklist(ip string) error {
-	hostName := fmt.Sprintf("VIGILANCE_%s", strings.ReplaceAll(ip, ".", "_"))
+	hostName := fmt.Sprintf("bannedIP_%s", ip)
 
 	// Remove the IP host object
 	removeReq := &APIRequest{
@@ -295,40 +298,42 @@ func (c *Client) GetBlocklistIPs() ([]string, error) {
 		return nil, fmt.Errorf("failed to get blocklist group: %w", err)
 	}
 
-	// Extract host names from group
-	var hostNames []string
-	for _, group := range resp.IPHostGroup {
-		hostNames = append(hostNames, group.HostList.Host...)
-	}
-
-	// Get IP addresses for each host
+	// Extract IPs from host names (format: bannedIP_x.x.x.x)
 	var ips []string
-	for _, hostName := range hostNames {
-		if !strings.HasPrefix(hostName, "VIGILANCE_") {
-			continue
-		}
-
-		getHostReq := &APIRequest{
-			Get: &Get{
-				IPHost: &IPHostFilter{
-					Name: hostName,
-				},
-			},
-		}
-
-		hostResp, err := c.sendRequest(getHostReq)
-		if err != nil {
-			continue
-		}
-
-		for _, host := range hostResp.IPHost {
-			if host.IPAddress != "" {
-				ips = append(ips, host.IPAddress)
+	for _, group := range resp.IPHostGroup {
+		for _, hostName := range group.HostList.Host {
+			if strings.HasPrefix(hostName, "bannedIP_") {
+				// Extract IP from host name
+				ip := strings.TrimPrefix(hostName, "bannedIP_")
+				ips = append(ips, ip)
 			}
 		}
 	}
 
 	return ips, nil
+}
+
+// GetBlocklistCount returns the count of IPs in the blocklist group (fast)
+func (c *Client) GetBlocklistCount() (int, error) {
+	getReq := &APIRequest{
+		Get: &Get{
+			IPHostGroup: &IPHostGroupFilter{
+				Name: c.groupName,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(getReq)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get blocklist group: %w", err)
+	}
+
+	count := 0
+	for _, group := range resp.IPHostGroup {
+		count += len(group.HostList.Host)
+	}
+
+	return count, nil
 }
 
 // EnsureBlocklistGroupExists creates the blocklist group if it doesn't exist
@@ -387,21 +392,16 @@ type SyncStatus struct {
 func (c *Client) GetSyncStatus() (*SyncStatus, error) {
 	status := &SyncStatus{}
 
-	// Test connection
-	if err := c.TestConnection(); err != nil {
-		status.LastSyncError = err.Error()
-		return status, nil
-	}
-	status.Connected = true
-
-	// Get blocklist IPs
-	ips, err := c.GetBlocklistIPs()
+	// Get blocklist count (also serves as connection test)
+	count, err := c.GetBlocklistCount()
 	if err != nil {
 		status.LastSyncError = err.Error()
 		return status, nil
 	}
+
+	status.Connected = true
 	status.GroupExists = true
-	status.TotalInGroup = len(ips)
+	status.TotalInGroup = count
 
 	return status, nil
 }

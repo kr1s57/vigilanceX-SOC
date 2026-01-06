@@ -30,7 +30,8 @@ func (h *BansHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSONResponse(w, http.StatusOK, activeBans)
+	// Wrap in data object for frontend compatibility
+	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": activeBans})
 }
 
 // Get returns a specific ban by IP
@@ -45,7 +46,7 @@ func (h *BansHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSONResponse(w, http.StatusOK, ban)
+	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": ban})
 }
 
 // Stats returns ban statistics
@@ -74,7 +75,7 @@ func (h *BansHandler) History(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSONResponse(w, http.StatusOK, history)
+	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": history})
 }
 
 // Create bans an IP address
@@ -104,7 +105,7 @@ func (h *BansHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSONResponse(w, http.StatusCreated, ban)
+	JSONResponse(w, http.StatusCreated, map[string]interface{}{"data": ban})
 }
 
 // Delete unbans an IP address
@@ -154,7 +155,7 @@ func (h *BansHandler) Extend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSONResponse(w, http.StatusOK, ban)
+	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": ban})
 }
 
 // MakePermanent makes a ban permanent
@@ -171,7 +172,7 @@ func (h *BansHandler) MakePermanent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSONResponse(w, http.StatusOK, ban)
+	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": ban})
 }
 
 // Sync syncs all pending bans to Sophos XGS
@@ -215,7 +216,7 @@ func (h *BansHandler) ListWhitelist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSONResponse(w, http.StatusOK, whitelist)
+	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": whitelist})
 }
 
 // AddWhitelist adds an IP to the whitelist

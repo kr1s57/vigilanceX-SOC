@@ -69,6 +69,13 @@ export const eventsApi = {
     })
     return response.data.data
   },
+
+  hostnames: async (logType: string = 'WAF') => {
+    const response = await api.get<{ data: string[] }>('/events/hostnames', {
+      params: { log_type: logType }
+    })
+    return response.data.data
+  },
 }
 
 // Stats API
@@ -155,12 +162,12 @@ export const bansApi = {
 // Whitelist API
 export const whitelistApi = {
   list: async () => {
-    const response = await api.get<{ data: Array<{ ip: string; description: string; created_at: string }> }>('/whitelist')
+    const response = await api.get<{ data: Array<{ ip: string; reason?: string; added_by?: string; created_at: string }> }>('/whitelist')
     return response.data.data
   },
 
-  add: async (ip: string, description: string) => {
-    const response = await api.post('/whitelist', { ip, description })
+  add: async (ip: string, reason: string) => {
+    const response = await api.post('/whitelist', { ip, reason, added_by: 'web_ui' })
     return response.data
   },
 

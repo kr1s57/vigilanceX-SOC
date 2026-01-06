@@ -12,7 +12,14 @@ import (
 
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/handlers"
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/middleware"
+	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
+	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
+	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
+	"github.com/kr1s57/vigilancex/internal/usecase/bans"
+	"github.com/kr1s57/vigilancex/internal/usecase/events"
+	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
+	"github.com/kr1s57/vigilancex/internal/usecase/threats"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -34,6 +41,70 @@ func main() {
 		"env", cfg.App.Env,
 		"port", cfg.App.Port,
 	)
+
+	// Initialize ClickHouse connection
+	chConn, err := clickhouse.NewConnection(&cfg.ClickHouse, logger)
+	if err != nil {
+		logger.Error("Failed to connect to ClickHouse", "error", err)
+		os.Exit(1)
+	}
+	defer chConn.Close()
+
+	// Initialize repositories
+	eventsRepo := clickhouse.NewEventsRepository(chConn, logger)
+	threatsRepo := clickhouse.NewThreatsRepository(chConn)
+	bansRepo := clickhouse.NewBansRepository(chConn)
+
+	// Initialize threat intelligence aggregator
+	threatAggregator := threatintel.NewAggregator(threatintel.AggregatorConfig{
+		AbuseIPDBKey:  cfg.ThreatIntel.AbuseIPDBKey,
+		VirusTotalKey: cfg.ThreatIntel.VirusTotalKey,
+		OTXKey:        cfg.ThreatIntel.AlienVaultKey,
+		CacheTTL:      cfg.ThreatIntel.CacheTTL,
+	})
+
+	// Log configured providers
+	providers := threatAggregator.GetConfiguredProviders()
+	logger.Info("Threat Intelligence providers configured", "providers", providers)
+
+	// Initialize Sophos XGS client
+	var sophosClient *sophos.Client
+	if cfg.Sophos.Host != "" && cfg.Sophos.Password != "" {
+		sophosClient = sophos.NewClient(sophos.Config{
+			Host:       cfg.Sophos.Host,
+			Port:       cfg.Sophos.Port,
+			Username:   cfg.Sophos.User,
+			Password:   cfg.Sophos.Password,
+			GroupName:  cfg.Sophos.BanGroup,
+			SkipVerify: true,
+			Timeout:    cfg.Sophos.Timeout,
+		})
+		logger.Info("Sophos XGS client configured", "host", cfg.Sophos.Host, "port", cfg.Sophos.Port)
+	} else {
+		logger.Warn("Sophos XGS client not configured - XGS sync disabled")
+	}
+
+	// Initialize ModSec sync service (SSH-based log correlation)
+	var modsecService *modsec.Service
+	if cfg.SophosSSH.Host != "" {
+		modsecService = modsec.NewService(cfg.SophosSSH, chConn.Conn(), logger)
+		// Start background sync
+		go modsecService.Start(context.Background())
+		logger.Info("ModSec sync service started", "host", cfg.SophosSSH.Host, "interval", cfg.SophosSSH.SyncInterval)
+	} else {
+		logger.Warn("ModSec sync service not configured - SSH host not set")
+	}
+
+	// Initialize services
+	eventsService := events.NewService(eventsRepo, logger)
+	threatsService := threats.NewService(threatsRepo, threatAggregator)
+	bansService := bans.NewService(bansRepo, sophosClient)
+
+	// Initialize handlers
+	eventsHandler := handlers.NewEventsHandler(eventsService)
+	threatsHandler := handlers.NewThreatsHandler(threatsService)
+	bansHandler := handlers.NewBansHandler(bansService)
+	modsecHandler := handlers.NewModSecHandler(modsecService)
 
 	// Create router
 	r := chi.NewRouter()
@@ -74,16 +145,17 @@ func main() {
 		r.Group(func(r chi.Router) {
 			// Events
 			r.Route("/events", func(r chi.Router) {
-				r.Get("/", handlers.NotImplemented)
-				r.Get("/{id}", handlers.NotImplemented)
-				r.Get("/timeline", handlers.NotImplemented)
-				r.Get("/search", handlers.NotImplemented)
+				r.Get("/", eventsHandler.ListEvents)
+				r.Get("/hostnames", eventsHandler.GetHostnames)
+				r.Get("/{id}", eventsHandler.GetEvent)
+				r.Get("/timeline", eventsHandler.GetTimeline)
+				r.Get("/search", eventsHandler.ListEvents)
 				r.Get("/export", handlers.NotImplemented)
 			})
 
 			// Stats
 			r.Route("/stats", func(r chi.Router) {
-				r.Get("/overview", handlers.NotImplemented)
+				r.Get("/overview", eventsHandler.GetOverview)
 				r.Get("/hourly", handlers.NotImplemented)
 				r.Get("/daily", handlers.NotImplemented)
 				r.Get("/by-ip", handlers.NotImplemented)
@@ -91,55 +163,58 @@ func main() {
 				r.Get("/by-category", handlers.NotImplemented)
 				r.Get("/by-country", handlers.NotImplemented)
 				r.Get("/trends", handlers.NotImplemented)
-				r.Get("/top-attackers", handlers.NotImplemented)
-				r.Get("/top-targets", handlers.NotImplemented)
+				r.Get("/top-attackers", eventsHandler.GetTopAttackers)
+				r.Get("/top-targets", eventsHandler.GetTopTargets)
 			})
 
 			// Geo
 			r.Route("/geo", func(r chi.Router) {
-				r.Get("/heatmap", handlers.NotImplemented)
+				r.Get("/heatmap", eventsHandler.GetGeoHeatmap)
 				r.Get("/by-country", handlers.NotImplemented)
 				r.Get("/lookup/{ip}", handlers.NotImplemented)
 			})
 
 			// Threats
 			r.Route("/threats", func(r chi.Router) {
-				r.Get("/", handlers.NotImplemented)
-				r.Get("/score/{ip}", handlers.NotImplemented)
-				r.Post("/refresh/{ip}", handlers.NotImplemented)
-				r.Get("/categories", handlers.NotImplemented)
-				r.Get("/campaigns", handlers.NotImplemented)
-				r.Get("/apt", handlers.NotImplemented)
+				r.Get("/", threatsHandler.GetTopThreats)
+				r.Get("/stats", threatsHandler.GetStats)
+				r.Get("/providers", threatsHandler.GetProviders)
+				r.Get("/check/{ip}", threatsHandler.CheckIP)
+				r.Get("/score/{ip}", threatsHandler.GetStoredScore)
+				r.Get("/should-ban/{ip}", threatsHandler.ShouldBan)
+				r.Get("/level/{level}", threatsHandler.GetThreatsByLevel)
+				r.Post("/batch", threatsHandler.BatchCheck)
+				r.Post("/cache/clear", threatsHandler.ClearCache)
 			})
 
 			// Bans
 			r.Route("/bans", func(r chi.Router) {
-				r.Get("/", handlers.NotImplemented)
-				r.Get("/{ip}", handlers.NotImplemented)
-				r.Post("/", handlers.NotImplemented)
-				r.Delete("/{ip}", handlers.NotImplemented)
-				r.Put("/{ip}/extend", handlers.NotImplemented)
-				r.Put("/{ip}/permanent", handlers.NotImplemented)
-				r.Get("/history", handlers.NotImplemented)
-				r.Get("/history/{ip}", handlers.NotImplemented)
-				r.Get("/stats", handlers.NotImplemented)
-				r.Post("/sync", handlers.NotImplemented)
+				r.Get("/", bansHandler.List)
+				r.Get("/stats", bansHandler.Stats)
+				r.Get("/xgs-status", bansHandler.XGSStatus)
+				r.Post("/", bansHandler.Create)
+				r.Post("/sync", bansHandler.Sync)
+				r.Get("/{ip}", bansHandler.Get)
+				r.Delete("/{ip}", bansHandler.Delete)
+				r.Post("/{ip}/extend", bansHandler.Extend)
+				r.Post("/{ip}/permanent", bansHandler.MakePermanent)
+				r.Get("/{ip}/history", bansHandler.History)
 			})
 
 			// Whitelist
 			r.Route("/whitelist", func(r chi.Router) {
-				r.Get("/", handlers.NotImplemented)
-				r.Post("/", handlers.NotImplemented)
-				r.Delete("/{ip}", handlers.NotImplemented)
+				r.Get("/", bansHandler.ListWhitelist)
+				r.Post("/", bansHandler.AddWhitelist)
+				r.Delete("/{ip}", bansHandler.RemoveWhitelist)
 				r.Get("/check/{ip}", handlers.NotImplemented)
 			})
 
 			// Anomalies
 			r.Route("/anomalies", func(r chi.Router) {
-				r.Get("/", handlers.NotImplemented)
-				r.Get("/spikes", handlers.NotImplemented)
-				r.Get("/new-ips", handlers.NotImplemented)
-				r.Get("/patterns", handlers.NotImplemented)
+				r.Get("/", handlers.StubAnomaliesList)
+				r.Get("/spikes", handlers.StubAnomaliesList)
+				r.Get("/new-ips", handlers.StubAnomaliesList)
+				r.Get("/patterns", handlers.StubAnomaliesList)
 				r.Put("/{id}/acknowledge", handlers.NotImplemented)
 			})
 
@@ -166,6 +241,13 @@ func main() {
 				r.Get("/payloads", handlers.NotImplemented)
 			})
 
+			// ModSec
+			r.Route("/modsec", func(r chi.Router) {
+				r.Get("/stats", modsecHandler.GetStats)
+				r.Post("/sync", modsecHandler.SyncNow)
+				r.Get("/test", modsecHandler.TestConnection)
+			})
+
 			// IPS
 			r.Route("/ips", func(r chi.Router) {
 				r.Get("/alerts", handlers.NotImplemented)
@@ -179,11 +261,14 @@ func main() {
 				r.Get("/sophos/status", handlers.NotImplemented)
 				r.Post("/sophos/test", handlers.NotImplemented)
 			})
+
+			// WebSocket endpoint
+			r.Get("/ws", handlers.StubWebSocket)
 		})
 	})
 
 	// WebSocket endpoint
-	r.Get("/ws", handlers.NotImplemented)
+	r.Get("/ws", handlers.StubWebSocket)
 
 	// Create server
 	addr := fmt.Sprintf("%s:%d", cfg.App.Host, cfg.App.Port)

@@ -49,7 +49,11 @@ CREATE TABLE IF NOT EXISTS events (
 
     -- Message et raw
     message String,
+    reason String DEFAULT '',
     raw_log String CODEC(ZSTD(3)),
+
+    -- ModSec enrichment
+    modsec_rule_ids Array(String) DEFAULT [],
 
     -- Metadata
     sophos_id String,
@@ -342,7 +346,7 @@ CREATE TABLE IF NOT EXISTS vpn_events (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (vpn_type, user_name, timestamp)
-TTL timestamp + INTERVAL 90 DAY;
+TTL toDateTime(timestamp) + INTERVAL 90 DAY;
 
 -- ============================================
 -- TABLE: firewall_events (Network Detection)
@@ -372,7 +376,7 @@ CREATE TABLE IF NOT EXISTS firewall_events (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (action, protocol, dst_port, timestamp)
-TTL timestamp + INTERVAL 30 DAY;
+TTL toDateTime(timestamp) + INTERVAL 30 DAY;
 
 -- ============================================
 -- TABLE: atp_events (Advanced Threat Protection)
@@ -396,7 +400,7 @@ CREATE TABLE IF NOT EXISTS atp_events (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (threat_type, severity, timestamp)
-TTL timestamp + INTERVAL 180 DAY;
+TTL toDateTime(timestamp) + INTERVAL 180 DAY;
 
 -- ============================================
 -- TABLE: antivirus_events
@@ -419,7 +423,7 @@ CREATE TABLE IF NOT EXISTS antivirus_events (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (malware_type, timestamp)
-TTL timestamp + INTERVAL 180 DAY;
+TTL toDateTime(timestamp) + INTERVAL 180 DAY;
 
 -- ============================================
 -- TABLE: heartbeat_events (Endpoint Health)
@@ -440,7 +444,7 @@ CREATE TABLE IF NOT EXISTS heartbeat_events (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (endpoint_id, timestamp)
-TTL timestamp + INTERVAL 30 DAY;
+TTL toDateTime(timestamp) + INTERVAL 30 DAY;
 
 -- ============================================
 -- TABLE: detect2ban_scenarios (config)

@@ -279,7 +279,9 @@ func (s *Service) MakePermanent(ctx context.Context, ip, performedBy string) (*e
 	return existing, nil
 }
 
-// SyncToXGS syncs all pending bans to Sophos XGS
+// SyncToXGS performs bidirectional sync with Sophos XGS:
+// 1. Push unsynced bans from VIGILANCE X to Sophos
+// 2. Import IPs from Sophos that aren't in our database
 func (s *Service) SyncToXGS(ctx context.Context) (*SyncResult, error) {
 	if s.sophos == nil {
 		return nil, fmt.Errorf("Sophos client not configured")
@@ -290,15 +292,15 @@ func (s *Service) SyncToXGS(ctx context.Context) (*SyncResult, error) {
 		log.Printf("[WARN] Failed to ensure blocklist group: %v", err)
 	}
 
-	// Get unsynced bans
+	result := &SyncResult{}
+
+	// PHASE 1: Push unsynced bans to Sophos XGS
 	unsynced, err := s.repo.GetUnsyncedBans(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get unsynced bans: %w", err)
 	}
 
-	result := &SyncResult{
-		Total: len(unsynced),
-	}
+	result.Total = len(unsynced)
 
 	for _, ban := range unsynced {
 		if err := s.sophos.AddIPToBlocklist(ban.IP, ban.Reason); err != nil {
@@ -316,15 +318,76 @@ func (s *Service) SyncToXGS(ctx context.Context) (*SyncResult, error) {
 		result.Synced++
 	}
 
+	// PHASE 2: Import IPs from Sophos XGS that aren't in our database
+	xgsIPs, err := s.sophos.GetBlocklistIPs()
+	if err != nil {
+		log.Printf("[WARN] Failed to get IPs from XGS: %v", err)
+		result.Errors = append(result.Errors, fmt.Sprintf("XGS import: %v", err))
+	} else {
+		for _, ip := range xgsIPs {
+			// Check if this IP is already in our database
+			_, err := s.repo.GetBanByIP(ctx, ip)
+			if err == nil {
+				// Already exists, ensure it's marked as synced
+				if err := s.repo.UpdateSyncStatus(ctx, ip, true); err != nil {
+					log.Printf("[WARN] Failed to update sync status for existing %s: %v", ip, err)
+				}
+				continue
+			}
+
+			// Check if IP is whitelisted
+			whitelisted, _ := s.repo.IsWhitelisted(ctx, ip)
+			if whitelisted {
+				log.Printf("[SYNC] Skipping whitelisted IP from XGS: %s", ip)
+				continue
+			}
+
+			// Import this IP as a new ban (it exists in Sophos but not in our DB)
+			now := time.Now()
+			ban := &entity.BanStatus{
+				IP:        ip,
+				Status:    entity.BanStatusPermanent, // Assume permanent since we don't know expiry
+				BanCount:  1,
+				FirstBan:  now,
+				LastBan:   now,
+				Reason:    "Imported from Sophos XGS",
+				Source:    "xgs_import",
+				SyncedXGS: true,
+				UpdatedAt: now,
+			}
+
+			if err := s.repo.UpsertBan(ctx, ban); err != nil {
+				log.Printf("[ERROR] Failed to import ban %s from XGS: %v", ip, err)
+				result.Errors = append(result.Errors, fmt.Sprintf("import %s: %v", ip, err))
+				continue
+			}
+
+			// Record history
+			history := &entity.BanHistory{
+				IP:        ip,
+				Action:    entity.BanActionBan,
+				Reason:    "Imported from Sophos XGS",
+				Source:    "xgs_import",
+				SyncedXGS: true,
+				CreatedAt: now,
+			}
+			s.repo.RecordBanHistory(ctx, history)
+
+			result.Imported++
+			log.Printf("[SYNC] Imported ban from XGS: %s", ip)
+		}
+	}
+
 	return result, nil
 }
 
 // SyncResult represents the result of a sync operation
 type SyncResult struct {
-	Total  int      `json:"total"`
-	Synced int      `json:"synced"`
-	Failed int      `json:"failed"`
-	Errors []string `json:"errors,omitempty"`
+	Total    int      `json:"total"`
+	Synced   int      `json:"synced"`
+	Failed   int      `json:"failed"`
+	Imported int      `json:"imported"`
+	Errors   []string `json:"errors,omitempty"`
 }
 
 // GetXGSStatus returns the current Sophos XGS sync status

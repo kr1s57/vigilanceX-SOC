@@ -197,6 +197,26 @@ func (h *EventsHandler) GetGeoHeatmap(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetHostnames handles GET /api/v1/events/hostnames
+func (h *EventsHandler) GetHostnames(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	logType := r.URL.Query().Get("log_type")
+	if logType == "" {
+		logType = "WAF"
+	}
+
+	hostnames, err := h.service.GetUniqueHostnames(ctx, logType)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to retrieve hostnames", err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"data": hostnames,
+	})
+}
+
 // Helper functions
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {

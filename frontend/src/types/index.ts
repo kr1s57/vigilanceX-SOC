@@ -25,9 +25,11 @@ export interface Event {
   geo_asn: number
   geo_org: string
   message: string
+  reason: string
   raw_log?: string
   sophos_id: string
   ingested_at: string
+  modsec_rule_ids?: string[]
 }
 
 // Stats types

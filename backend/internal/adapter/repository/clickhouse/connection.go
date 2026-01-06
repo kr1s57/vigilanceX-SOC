@@ -2,7 +2,6 @@ package clickhouse
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"time"
@@ -39,9 +38,8 @@ func NewConnection(cfg *config.ClickHouseConfig, logger *slog.Logger) (*Connecti
 		Compression: &clickhouse.Compression{
 			Method: clickhouse.CompressionLZ4,
 		},
-		TLS: &tls.Config{
-			InsecureSkipVerify: true, // For development; use proper certs in production
-		},
+		// TLS disabled - ClickHouse native port 9000 is not configured for TLS
+		// TLS: &tls.Config{InsecureSkipVerify: true},
 	})
 
 	if err != nil {

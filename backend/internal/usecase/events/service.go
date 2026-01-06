@@ -12,14 +12,15 @@ import (
 
 // Repository defines the interface for event data operations
 type Repository interface {
-	GetEvents(ctx context.Context, filters entity.EventFilters, limit, offset int) ([]entity.Event, int64, error)
+	GetEvents(ctx context.Context, filters entity.EventFilters, limit, offset int) ([]entity.Event, uint64, error)
 	GetEventByID(ctx context.Context, eventID uuid.UUID) (*entity.Event, error)
 	GetTimeline(ctx context.Context, period string, interval string) ([]entity.TimelinePoint, error)
 	GetStats(ctx context.Context, period string) (*entity.EventStats, error)
 	GetTopAttackers(ctx context.Context, period string, limit int) ([]entity.TopAttacker, error)
 	GetTopTargets(ctx context.Context, period string, limit int) ([]entity.TopTarget, error)
-	GetStatsByLogType(ctx context.Context, period string) (map[string]int64, error)
+	GetStatsByLogType(ctx context.Context, period string) (map[string]uint64, error)
 	GetGeoHeatmap(ctx context.Context, period string) ([]map[string]interface{}, error)
+	GetUniqueHostnames(ctx context.Context, logType string) ([]string, error)
 }
 
 // Service handles event business logic
@@ -61,10 +62,10 @@ type ListEventsResponse struct {
 
 // Pagination represents pagination information
 type Pagination struct {
-	Total   int64 `json:"total"`
-	Limit   int   `json:"limit"`
-	Offset  int   `json:"offset"`
-	HasMore bool  `json:"has_more"`
+	Total   uint64 `json:"total"`
+	Limit   int    `json:"limit"`
+	Offset  int    `json:"offset"`
+	HasMore bool   `json:"has_more"`
 }
 
 // ListEvents retrieves events with filters
@@ -103,7 +104,7 @@ func (s *Service) ListEvents(ctx context.Context, req ListEventsRequest) (*ListE
 			Total:   total,
 			Limit:   req.Limit,
 			Offset:  req.Offset,
-			HasMore: int64(req.Offset+len(events)) < total,
+			HasMore: uint64(req.Offset+len(events)) < total,
 		},
 	}, nil
 }
@@ -145,10 +146,10 @@ func (s *Service) GetTimeline(ctx context.Context, req TimelineRequest) ([]entit
 
 // OverviewResponse represents the dashboard overview data
 type OverviewResponse struct {
-	Stats       *entity.EventStats  `json:"stats"`
-	ByLogType   map[string]int64    `json:"by_log_type"`
+	Stats        *entity.EventStats   `json:"stats"`
+	ByLogType    map[string]uint64    `json:"by_log_type"`
 	TopAttackers []entity.TopAttacker `json:"top_attackers"`
-	TopTargets  []entity.TopTarget  `json:"top_targets"`
+	TopTargets   []entity.TopTarget   `json:"top_targets"`
 }
 
 // GetOverview retrieves dashboard overview data
@@ -224,4 +225,9 @@ func (s *Service) GetGeoHeatmap(ctx context.Context, period string) ([]map[strin
 	}
 
 	return s.repo.GetGeoHeatmap(ctx, period)
+}
+
+// GetUniqueHostnames retrieves unique hostnames for a log type
+func (s *Service) GetUniqueHostnames(ctx context.Context, logType string) ([]string, error) {
+	return s.repo.GetUniqueHostnames(ctx, logType)
 }
