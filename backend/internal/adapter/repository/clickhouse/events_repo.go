@@ -448,3 +448,15 @@ func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]
 
 	return result, nil
 }
+
+// RawQuery executes a raw SQL query and returns rows
+func (r *EventsRepository) RawQuery(ctx context.Context, query string, args ...interface{}) (Rows, error) {
+	return r.conn.Query(ctx, query, args...)
+}
+
+// Rows interface for query results
+type Rows interface {
+	Next() bool
+	Scan(dest ...interface{}) error
+	Close() error
+}

@@ -57,6 +57,70 @@ type PatternAnomaly struct {
 	Severity       string    `json:"severity"`
 }
 
+// Spike represents a statistical spike anomaly
+type Spike struct {
+	ID          uuid.UUID `json:"id" ch:"id"`
+	Timestamp   time.Time `json:"timestamp" ch:"timestamp"`
+	EventCount  int64     `json:"event_count" ch:"event_count"`
+	Baseline    int64     `json:"baseline" ch:"baseline"`
+	Threshold   int64     `json:"threshold" ch:"threshold"`
+	Deviation   float64   `json:"deviation" ch:"deviation"`
+	Severity    string    `json:"severity" ch:"severity"`
+	LogType     string    `json:"log_type,omitempty" ch:"log_type"`
+	DetectedAt  time.Time `json:"detected_at" ch:"detected_at"`
+}
+
+// NewIPAnomaly represents a new IP detection
+type NewIPAnomaly struct {
+	IP          string    `json:"ip"`
+	FirstSeen   time.Time `json:"first_seen"`
+	EventCount  int64     `json:"event_count"`
+	LogTypes    []string  `json:"log_types"`
+	Country     string    `json:"country"`
+	ThreatScore int       `json:"threat_score"`
+}
+
+// MultiVectorAttack represents an IP attacking via multiple vectors
+type MultiVectorAttack struct {
+	IP          string    `json:"ip"`
+	Vectors     []string  `json:"vectors"` // WAF, IPS, VPN, etc.
+	EventCount  int64     `json:"event_count"`
+	FirstSeen   time.Time `json:"first_seen"`
+	LastSeen    time.Time `json:"last_seen"`
+	Country     string    `json:"country"`
+}
+
+// TargetedCampaign represents multiple IPs targeting the same resource
+type TargetedCampaign struct {
+	Target      string    `json:"target"` // hostname or URL
+	SourceIPs   []string  `json:"source_ips"`
+	EventCount  int64     `json:"event_count"`
+	StartTime   time.Time `json:"start_time"`
+	EndTime     time.Time `json:"end_time"`
+}
+
+// BruteForcePattern represents a brute force attack pattern
+type BruteForcePattern struct {
+	IP            string    `json:"ip"`
+	Target        string    `json:"target"`
+	FailedAttempts int64    `json:"failed_attempts"`
+	Window        string    `json:"window"`
+	FirstAttempt  time.Time `json:"first_attempt"`
+	LastAttempt   time.Time `json:"last_attempt"`
+}
+
+// Anomaly is a generic anomaly record
+type Anomaly struct {
+	ID          uuid.UUID `json:"id"`
+	Type        string    `json:"type"`
+	Severity    string    `json:"severity"`
+	IP          string    `json:"ip,omitempty"`
+	Description string    `json:"description"`
+	Details     string    `json:"details,omitempty"`
+	DetectedAt  time.Time `json:"detected_at"`
+	Acknowledged bool     `json:"acknowledged"`
+}
+
 // Anomaly type constants
 const (
 	AnomalyTypeSpike       = "spike"
