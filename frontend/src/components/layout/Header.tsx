@@ -83,14 +83,8 @@ export function Header() {
     // Close dropdown
     setShowNotifications(false)
 
-    // Navigate to the appropriate page based on log type
-    if (alert.log_type === 'WAF') {
-      navigate(`/waf?src_ip=${encodeURIComponent(alert.src_ip)}`)
-    } else if (alert.log_type === 'IPS') {
-      navigate(`/attacks?src_ip=${encodeURIComponent(alert.src_ip)}`)
-    } else {
-      navigate(`/attacks?src_ip=${encodeURIComponent(alert.src_ip)}`)
-    }
+    // Navigate to Attacks Analyzer with IP threat modal
+    navigate(`/attacks?src_ip=${encodeURIComponent(alert.src_ip)}`)
   }
 
   // Count unread alerts
