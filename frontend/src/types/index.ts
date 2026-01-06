@@ -195,6 +195,8 @@ export interface EventFilters {
   start_time?: string
   end_time?: string
   search?: string
+  limit?: number
+  offset?: number
 }
 
 // WebSocket types

@@ -11,6 +11,7 @@ export function Header() {
   // Update timestamp when new events arrive
   useRealtimeEvents(() => {
     setLastUpdate(new Date())
+    setNotifications(prev => prev + 1)
   })
 
   // Periodic fallback update

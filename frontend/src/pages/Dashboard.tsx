@@ -10,7 +10,7 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
 import { SeverityChart } from '@/components/charts/SeverityChart'
 import { statsApi, eventsApi } from '@/lib/api'
-import { formatNumber, formatPercent, getCountryFlag, getSeverityColor } from '@/lib/utils'
+import { formatNumber, formatPercent, getCountryFlag } from '@/lib/utils'
 import type { OverviewResponse, TimelinePoint, TopAttacker } from '@/types'
 
 export function Dashboard() {

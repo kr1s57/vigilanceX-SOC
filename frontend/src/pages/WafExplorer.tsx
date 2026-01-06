@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Shield, Search, Filter, Download } from 'lucide-react'
+import { Shield, Search, Download } from 'lucide-react'
 import { eventsApi } from '@/lib/api'
-import { formatDateTime, getSeverityColor, getSeverityBgColor, getActionColor, getCountryFlag } from '@/lib/utils'
-import type { Event, PaginatedResponse } from '@/types'
+import { formatDateTime, getSeverityColor, getSeverityBgColor, getCountryFlag } from '@/lib/utils'
+import type { Event } from '@/types'
 
 export function WafExplorer() {
   const [events, setEvents] = useState<Event[]>([])

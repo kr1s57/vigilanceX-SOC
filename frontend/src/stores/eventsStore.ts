@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { eventsApi, statsApi } from '@/lib/api'
-import type { Event, EventStats, EventFilters, PaginatedResponse } from '@/types'
+import type { Event, EventStats, EventFilters } from '@/types'
 
 interface EventsState {
   events: Event[]
@@ -65,8 +65,8 @@ export const useEventsStore = create<EventsState>((set, get) => ({
 
   fetchStats: async () => {
     try {
-      const stats = await statsApi.overview()
-      set({ stats })
+      const response = await statsApi.overview()
+      set({ stats: response.stats })
     } catch (err) {
       console.error('Failed to fetch stats:', err)
     }

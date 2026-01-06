@@ -52,7 +52,7 @@ export const useBansStore = create<BansState>((set, get) => ({
   banIP: async (ip: string, reason: string, duration?: number) => {
     set({ loading: true, error: null })
     try {
-      await bansApi.create({ ip, reason, duration })
+      await bansApi.create({ ip, reason, duration_days: duration })
       await get().fetchBans()
       await get().fetchStats()
     } catch (err) {

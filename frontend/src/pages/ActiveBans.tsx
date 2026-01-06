@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Ban, Plus, RefreshCw, Clock, AlertCircle } from 'lucide-react'
 import { bansApi } from '@/lib/api'
-import { formatDateTime, getCountryFlag } from '@/lib/utils'
+import { formatDateTime } from '@/lib/utils'
 import type { BanStatus, BanStats } from '@/types'
 
 export function ActiveBans() {

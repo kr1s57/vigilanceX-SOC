@@ -13,7 +13,7 @@ USE vigilance_x;
 -- ============================================
 CREATE TABLE IF NOT EXISTS events (
     event_id UUID DEFAULT generateUUIDv4(),
-    timestamp DateTime64(3) CODEC(Delta, ZSTD(1)),
+    timestamp DateTime CODEC(Delta, ZSTD(1)),
 
     -- Classification
     log_type LowCardinality(String),          -- WAF, IPS, ATP, Anti-Virus, Firewall
@@ -93,33 +93,49 @@ ORDER BY ip;
 -- ============================================
 CREATE TABLE IF NOT EXISTS ip_threat_scores (
     ip IPv4,
-    total_score UInt8,                        -- 0-100
-    reputation_score UInt8,                   -- 0-40
-    activity_score UInt8,                     -- 0-40
-    severity_score UInt8,                     -- 0-20
+    aggregated_score Int32 DEFAULT 0,         -- Score agrege 0-100
+    total_score UInt8 DEFAULT 0,              -- 0-100
+    reputation_score UInt8 DEFAULT 0,         -- 0-40
+    activity_score UInt8 DEFAULT 0,           -- 0-40
+    severity_score UInt8 DEFAULT 0,           -- 0-20
+    confidence Float64 DEFAULT 0,             -- Niveau de confiance
 
-    is_malicious UInt8,                       -- 0 ou 1
+    is_malicious UInt8 DEFAULT 0,             -- 0 ou 1
     threat_level LowCardinality(String),      -- critical, high, medium, low
     categories Array(LowCardinality(String)),
     sources Array(LowCardinality(String)),    -- abuseipdb, virustotal, etc.
+    tags Array(String),                       -- Tags enrichissement
 
-    -- Details par source
-    abuseipdb_score UInt8,
-    abuseipdb_reports UInt32,
-    abuseipdb_is_tor UInt8,
-    virustotal_positives UInt8,
-    virustotal_total UInt8,
-    alienvault_pulses UInt16,
+    -- Geo/Network info
+    country LowCardinality(String) DEFAULT '',
+    asn String DEFAULT '',
+    isp String DEFAULT '',
+    is_tor UInt8 DEFAULT 0,
 
-    first_seen DateTime,
-    last_seen DateTime,
-    last_checked DateTime,
-    total_attacks UInt32,
-    version UInt64                            -- Pour ReplacingMergeTree
+    -- Details par source (scores normalises 0-100)
+    abuseipdb_score Int32 DEFAULT 0,
+    abuseipdb_reports UInt32 DEFAULT 0,
+    abuseipdb_is_tor UInt8 DEFAULT 0,
+    virustotal_score Int32 DEFAULT 0,
+    virustotal_positives UInt8 DEFAULT 0,
+    virustotal_total UInt8 DEFAULT 0,
+    otx_score Int32 DEFAULT 0,
+    alienvault_pulses UInt16 DEFAULT 0,
+
+    -- Enrichissement threat intel
+    malware_families Array(String),
+    adversaries Array(String),
+
+    first_seen DateTime DEFAULT now(),
+    last_seen DateTime DEFAULT now(),
+    last_checked DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now(),
+    total_attacks UInt32 DEFAULT 0,
+    version UInt64 DEFAULT 1                  -- Pour ReplacingMergeTree
 )
 ENGINE = ReplacingMergeTree(version)
 ORDER BY ip
-TTL last_checked + INTERVAL 24 HOUR;
+TTL last_checked + INTERVAL 7 DAY;
 
 -- ============================================
 -- TABLE: ip_ban_status
@@ -268,22 +284,21 @@ GROUP BY day, hostname, log_type;
 -- ============================================
 CREATE TABLE IF NOT EXISTS anomaly_spikes (
     id UUID DEFAULT generateUUIDv4(),
+    timestamp DateTime,                       -- Heure du spike
+    event_count Int64,                        -- Nombre d'evenements
+    baseline Int64,                           -- Baseline attendu
+    threshold Int64,                          -- Seuil calcule
+    deviation Float64,                        -- Ecart en sigma
+    severity LowCardinality(String),          -- critical, high, medium, low
+    log_type LowCardinality(String),          -- WAF, IPS, etc.
     detected_at DateTime DEFAULT now(),
-    anomaly_type LowCardinality(String),      -- spike, new_ip, pattern, multi_vector
-    metric_name String,
-    current_value Float64,
-    baseline_value Float64,
-    deviation_sigma Float64,                  -- Ecart en sigma
-    affected_ips Array(IPv4),
-    affected_rules Array(String),
-    description String,
     is_acknowledged UInt8 DEFAULT 0,
-    acknowledged_by String,
+    acknowledged_by String DEFAULT '',
     acknowledged_at Nullable(DateTime)
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(detected_at)
-ORDER BY (detected_at, anomaly_type);
+ORDER BY (detected_at, severity);
 
 -- ============================================
 -- TABLE: new_ips_detected
