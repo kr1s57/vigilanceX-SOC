@@ -217,6 +217,42 @@ func (h *EventsHandler) GetHostnames(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetSyslogStatus handles GET /api/v1/status/syslog
+func (h *EventsHandler) GetSyslogStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	status, err := h.service.GetSyslogStatus(ctx)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get syslog status", err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, status)
+}
+
+// GetCriticalAlerts handles GET /api/v1/alerts/critical
+func (h *EventsHandler) GetCriticalAlerts(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	limit := 20
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			limit = l
+		}
+	}
+
+	alerts, err := h.service.GetCriticalAlerts(ctx, limit)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get critical alerts", err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"data":  alerts,
+		"count": len(alerts),
+	})
+}
+
 // Helper functions
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {

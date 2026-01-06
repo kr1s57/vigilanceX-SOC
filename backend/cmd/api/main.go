@@ -302,6 +302,16 @@ func main() {
 				r.Get("/preview", reportsHandler.PreviewReport)
 			})
 
+			// Status endpoints
+			r.Route("/status", func(r chi.Router) {
+				r.Get("/syslog", eventsHandler.GetSyslogStatus)
+			})
+
+			// Alerts endpoints
+			r.Route("/alerts", func(r chi.Router) {
+				r.Get("/critical", eventsHandler.GetCriticalAlerts)
+			})
+
 			// System
 			r.Route("/system", func(r chi.Router) {
 				r.Get("/config", handlers.NotImplemented)

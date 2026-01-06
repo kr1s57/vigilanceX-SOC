@@ -21,6 +21,8 @@ type Repository interface {
 	GetStatsByLogType(ctx context.Context, period string) (map[string]uint64, error)
 	GetGeoHeatmap(ctx context.Context, period string) ([]map[string]interface{}, error)
 	GetUniqueHostnames(ctx context.Context, logType string) ([]string, error)
+	GetSyslogStatus(ctx context.Context) (*entity.SyslogStatus, error)
+	GetCriticalAlerts(ctx context.Context, limit int) ([]entity.CriticalAlert, error)
 }
 
 // Service handles event business logic
@@ -230,4 +232,17 @@ func (s *Service) GetGeoHeatmap(ctx context.Context, period string) ([]map[strin
 // GetUniqueHostnames retrieves unique hostnames for a log type
 func (s *Service) GetUniqueHostnames(ctx context.Context, logType string) ([]string, error) {
 	return s.repo.GetUniqueHostnames(ctx, logType)
+}
+
+// GetSyslogStatus retrieves the current syslog ingestion status
+func (s *Service) GetSyslogStatus(ctx context.Context) (*entity.SyslogStatus, error) {
+	return s.repo.GetSyslogStatus(ctx)
+}
+
+// GetCriticalAlerts retrieves recent critical and high severity alerts
+func (s *Service) GetCriticalAlerts(ctx context.Context, limit int) ([]entity.CriticalAlert, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	return s.repo.GetCriticalAlerts(ctx, limit)
 }

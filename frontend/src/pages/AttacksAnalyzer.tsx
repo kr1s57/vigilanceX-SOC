@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Swords,
   AlertTriangle,
@@ -358,6 +359,7 @@ function AttackersModal({
 }
 
 export function AttacksAnalyzer() {
+  const [searchParams] = useSearchParams()
   const [period, setPeriod] = useState('24h')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -366,8 +368,8 @@ export function AttacksAnalyzer() {
   const [topAttackers, setTopAttackers] = useState<TopAttacker[]>([])
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set())
   const [showAttackersModal, setShowAttackersModal] = useState(false)
-  const [selectedIP, setSelectedIP] = useState<string | null>(null)
-  const [showThreatModal, setShowThreatModal] = useState(false)
+  const [selectedIP, setSelectedIP] = useState<string | null>(searchParams.get('src_ip'))
+  const [showThreatModal, setShowThreatModal] = useState(!!searchParams.get('src_ip'))
 
   const handleIPLookup = (ip: string) => {
     setSelectedIP(ip)

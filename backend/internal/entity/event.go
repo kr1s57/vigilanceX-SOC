@@ -206,3 +206,28 @@ type ModSecRule struct {
 	ParanoiaLevel uint8    `json:"paranoia_level"`
 	Tags          []string `json:"tags"`
 }
+
+// SyslogStatus represents the status of syslog data ingestion
+type SyslogStatus struct {
+	LastEventTime    time.Time `json:"last_event_time"`
+	EventsLastHour   uint64    `json:"events_last_hour"`
+	IsReceiving      bool      `json:"is_receiving"`
+	SecondsSinceLast int64     `json:"seconds_since_last"`
+}
+
+// CriticalAlert represents a critical security alert
+type CriticalAlert struct {
+	EventID   string    `json:"event_id"`
+	Timestamp time.Time `json:"timestamp"`
+	LogType   string    `json:"log_type"`
+	Category  string    `json:"category"`
+	Severity  string    `json:"severity"`
+	SrcIP     string    `json:"src_ip"`
+	DstIP     string    `json:"dst_ip"`
+	Hostname  string    `json:"hostname"`
+	RuleID    string    `json:"rule_id"`
+	RuleName  string    `json:"rule_name"`
+	Message   string    `json:"message"`
+	Action    string    `json:"action"`
+	Country   string    `json:"country"`
+}

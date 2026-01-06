@@ -5,32 +5,37 @@ import {
   Users,
   AlertTriangle,
   Activity,
+  X,
 } from 'lucide-react'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
 import { SeverityChart } from '@/components/charts/SeverityChart'
-import { statsApi, eventsApi } from '@/lib/api'
-import { formatNumber, formatPercent, getCountryFlag } from '@/lib/utils'
-import type { OverviewResponse, TimelinePoint, TopAttacker } from '@/types'
+import { statsApi, eventsApi, alertsApi } from '@/lib/api'
+import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
+import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
 
 export function Dashboard() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
+  const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlert[]>([])
   const [period, setPeriod] = useState('24h')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showAlertsModal, setShowAlertsModal] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
       setError(null)
       try {
-        const [overviewData, timelineData] = await Promise.all([
+        const [overviewData, timelineData, alertsData] = await Promise.all([
           statsApi.overview(period),
           eventsApi.timeline(period, period === '24h' ? 'hour' : 'day'),
+          alertsApi.critical(20),
         ])
         setOverview(overviewData)
         setTimeline(timelineData)
+        setCriticalAlerts(alertsData.data || [])
       } catch (err) {
         setError('Failed to load dashboard data')
         console.error(err)
@@ -111,13 +116,18 @@ export function Dashboard() {
           icon={<Shield className="w-5 h-5 text-green-500" />}
           variant="success"
         />
-        <StatCard
-          title="Critical Alerts"
-          value={formatNumber(stats?.critical_events || 0)}
-          subtitle={`+ ${formatNumber(stats?.high_events || 0)} high`}
-          icon={<ShieldAlert className="w-5 h-5 text-red-500" />}
-          variant={stats?.critical_events && stats.critical_events > 0 ? 'critical' : 'default'}
-        />
+        <div
+          onClick={() => setShowAlertsModal(true)}
+          className="cursor-pointer transition-transform hover:scale-[1.02]"
+        >
+          <StatCard
+            title="Critical Alerts"
+            value={formatNumber(stats?.critical_events || 0)}
+            subtitle={`+ ${formatNumber(stats?.high_events || 0)} high - Click to view`}
+            icon={<ShieldAlert className="w-5 h-5 text-red-500" />}
+            variant={stats?.critical_events && stats.critical_events > 0 ? 'critical' : 'default'}
+          />
+        </div>
         <StatCard
           title="Unique Attackers"
           value={formatNumber(stats?.unique_ips || 0)}
@@ -169,6 +179,140 @@ export function Dashboard() {
               <p className="text-muted-foreground text-center py-4">No data available</p>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Critical Alerts Modal */}
+      {showAlertsModal && (
+        <CriticalAlertsModal
+          alerts={criticalAlerts}
+          onClose={() => setShowAlertsModal(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function CriticalAlertsModal({
+  alerts,
+  onClose
+}: {
+  alerts: CriticalAlert[]
+  onClose: () => void
+}) {
+  const criticalCount = alerts.filter(a => a.severity === 'critical').length
+  const highCount = alerts.filter(a => a.severity === 'high').length
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card rounded-xl border shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div>
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-red-500" />
+              Critical Security Alerts
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {criticalCount} critical, {highCount} high severity alerts
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-muted rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-6">
+          {alerts.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>No critical or high severity alerts found</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {alerts.map((alert) => (
+                <AlertRow key={alert.event_id} alert={alert} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AlertRow({ alert }: { alert: CriticalAlert }) {
+  const severityColors = {
+    critical: 'border-l-red-500 bg-red-500/5',
+    high: 'border-l-orange-500 bg-orange-500/5',
+    medium: 'border-l-yellow-500 bg-yellow-500/5',
+    low: 'border-l-blue-500 bg-blue-500/5',
+  }
+
+  return (
+    <div className={cn(
+      "p-4 rounded-lg border-l-4 hover:bg-muted/30 transition-colors",
+      severityColors[alert.severity as keyof typeof severityColors] || 'border-l-gray-500'
+    )}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <span className={cn(
+              "text-xs font-bold px-2 py-0.5 rounded uppercase",
+              alert.severity === 'critical' ? 'bg-red-500/20 text-red-500' :
+              alert.severity === 'high' ? 'bg-orange-500/20 text-orange-500' :
+              'bg-yellow-500/20 text-yellow-500'
+            )}>
+              {alert.severity}
+            </span>
+            <span className="text-xs bg-muted px-2 py-0.5 rounded">{alert.log_type}</span>
+            <span className="text-xs text-muted-foreground">{alert.category}</span>
+          </div>
+          <p className="font-medium mb-1">
+            {alert.rule_name || alert.message || `Rule ${alert.rule_id}`}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span className="font-mono">{alert.src_ip}</span>
+            {alert.dst_ip && (
+              <>
+                <span>→</span>
+                <span className="font-mono">{alert.dst_ip}</span>
+              </>
+            )}
+            {alert.hostname && (
+              <span className="truncate">Target: {alert.hostname}</span>
+            )}
+            {alert.country && (
+              <span>{getCountryFlag(alert.country)} {alert.country}</span>
+            )}
+          </div>
+          {alert.message && alert.message !== alert.rule_name && (
+            <p className="text-sm text-muted-foreground mt-2 truncate">
+              {alert.message}
+            </p>
+          )}
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-sm font-medium">
+            {new Date(alert.timestamp).toLocaleTimeString()}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {new Date(alert.timestamp).toLocaleDateString()}
+          </p>
+          {alert.action && (
+            <span className={cn(
+              "text-xs px-2 py-0.5 rounded mt-1 inline-block",
+              alert.action === 'drop' || alert.action === 'reject' || alert.action === 'blocked'
+                ? 'bg-green-500/20 text-green-500'
+                : 'bg-yellow-500/20 text-yellow-500'
+            )}>
+              {alert.action}
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -20,7 +20,9 @@ import type {
   ModSecLogFilters,
   DBStats,
   ReportConfig,
-  ReportPreview
+  ReportPreview,
+  SyslogStatus,
+  CriticalAlert
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -381,5 +383,23 @@ export const reportsApi = {
     window.URL.revokeObjectURL(url)
 
     return { success: true, filename }
+  },
+}
+
+// Status API
+export const statusApi = {
+  syslog: async () => {
+    const response = await api.get<SyslogStatus>('/status/syslog')
+    return response.data
+  },
+}
+
+// Alerts API
+export const alertsApi = {
+  critical: async (limit: number = 20) => {
+    const response = await api.get<{ data: CriticalAlert[]; count: number }>('/alerts/critical', {
+      params: { limit }
+    })
+    return response.data
   },
 }

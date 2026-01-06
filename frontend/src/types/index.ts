@@ -442,3 +442,28 @@ export interface ReportVPNStats {
   total_bytes_in: number
   total_bytes_out: number
 }
+
+// Status types
+export interface SyslogStatus {
+  last_event_time: string
+  events_last_hour: number
+  is_receiving: boolean
+  seconds_since_last: number
+}
+
+// Critical Alert types
+export interface CriticalAlert {
+  event_id: string
+  timestamp: string
+  log_type: string
+  category: string
+  severity: string
+  src_ip: string
+  dst_ip: string
+  hostname: string
+  rule_id: string
+  rule_name: string
+  message: string
+  action: string
+  country: string
+}

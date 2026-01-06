@@ -491,3 +491,82 @@ type Rows interface {
 	Scan(dest ...interface{}) error
 	Close() error
 }
+
+// GetSyslogStatus returns the current syslog ingestion status
+func (r *EventsRepository) GetSyslogStatus(ctx context.Context) (*entity.SyslogStatus, error) {
+	query := `
+		SELECT
+			max(timestamp) as last_event,
+			countIf(timestamp >= now() - INTERVAL 1 HOUR) as events_last_hour
+		FROM events
+	`
+
+	var lastEvent time.Time
+	var eventsLastHour uint64
+
+	if err := r.conn.QueryRow(ctx, query).Scan(&lastEvent, &eventsLastHour); err != nil {
+		return nil, fmt.Errorf("failed to get syslog status: %w", err)
+	}
+
+	now := time.Now()
+	secondsSinceLast := int64(now.Sub(lastEvent).Seconds())
+
+	// Consider "receiving" if we got an event in the last 5 minutes
+	isReceiving := secondsSinceLast < 300
+
+	return &entity.SyslogStatus{
+		LastEventTime:    lastEvent,
+		EventsLastHour:   eventsLastHour,
+		IsReceiving:      isReceiving,
+		SecondsSinceLast: secondsSinceLast,
+	}, nil
+}
+
+// GetCriticalAlerts returns recent critical and high severity alerts
+func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int) ([]entity.CriticalAlert, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	query := `
+		SELECT
+			toString(event_id) as event_id,
+			timestamp,
+			log_type,
+			category,
+			severity,
+			IPv4NumToString(src_ip) as src_ip,
+			IPv4NumToString(dst_ip) as dst_ip,
+			hostname,
+			rule_id,
+			rule_name,
+			message,
+			action,
+			geo_country
+		FROM events
+		WHERE severity IN ('critical', 'high')
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`
+
+	rows, err := r.conn.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query critical alerts: %w", err)
+	}
+	defer rows.Close()
+
+	var alerts []entity.CriticalAlert
+	for rows.Next() {
+		var a entity.CriticalAlert
+		if err := rows.Scan(
+			&a.EventID, &a.Timestamp, &a.LogType, &a.Category, &a.Severity,
+			&a.SrcIP, &a.DstIP, &a.Hostname, &a.RuleID, &a.RuleName,
+			&a.Message, &a.Action, &a.Country,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan alert: %w", err)
+		}
+		alerts = append(alerts, a)
+	}
+
+	return alerts, nil
+}

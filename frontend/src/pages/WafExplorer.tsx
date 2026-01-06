@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar } from 'lucide-react'
 import { modsecApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, getCountryName } from '@/lib/utils'
@@ -61,10 +62,11 @@ interface DayGroup {
 }
 
 export function WafExplorer() {
+  const [searchParams] = useSearchParams()
   const [requests, setRequests] = useState<ModSecRequestGroup[]>([])
   const [pagination, setPagination] = useState({ total: 0, limit: 100, offset: 0, has_more: false })
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(searchParams.get('src_ip') || '')
   const [hostname, setHostname] = useState('')
   const [attackType, setAttackType] = useState('')
   const [hostnames, setHostnames] = useState<string[]>([])
