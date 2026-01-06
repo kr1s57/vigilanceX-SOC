@@ -1,0 +1,80 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Go
+*.test
+*.out
+coverage.out
+coverage.html
+vendor/
+
+# Node
+node_modules/
+.npm
+.pnpm-store/
+
+# Build outputs
+frontend/dist/
+frontend/build/
+backend/bin/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Docker volumes (local dev)
+docker/clickhouse/data/
+docker/redis/data/
+docker/vector/data/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# SSL certificates (keep example)
+docker/nginx/ssl/*.crt
+docker/nginx/ssl/*.key
+docker/nginx/ssl/*.pem
+!docker/nginx/ssl/.gitkeep
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Debug
+debug/
+*.debug
+
+# Secrets
+*.pem
+*.p12
+credentials.json
+secrets.yaml
+
+# Claude Code
+.claude/

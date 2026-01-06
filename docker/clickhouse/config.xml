@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- Logging -->
+    <logger>
+        <level>information</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>100M</size>
+        <count>3</count>
+    </logger>
+
+    <!-- Performance -->
+    <max_connections>100</max_connections>
+    <keep_alive_timeout>3</keep_alive_timeout>
+    <max_concurrent_queries>100</max_concurrent_queries>
+    <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+
+    <!-- Storage -->
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+
+    <!-- Network -->
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+    <interserver_http_port>9009</interserver_http_port>
+
+    <!-- MergeTree settings -->
+    <merge_tree>
+        <max_suspicious_broken_parts>5</max_suspicious_broken_parts>
+    </merge_tree>
+
+    <!-- Query settings -->
+    <default_profile>default</default_profile>
+    <default_database>vigilance_x</default_database>
+
+    <!-- Timezone -->
+    <timezone>UTC</timezone>
+
+    <!-- Compression -->
+    <compression>
+        <case>
+            <min_part_size>10000000000</min_part_size>
+            <min_part_size_ratio>0.01</min_part_size_ratio>
+            <method>zstd</method>
+        </case>
+    </compression>
+</clickhouse>

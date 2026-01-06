@@ -1,0 +1,83 @@
+# VIGILANCE X - Detect2Ban Scenario
+# WAF Attacks Detection and Auto-Ban
+
+name: waf_attacks
+description: Detect and ban IPs performing WAF attacks
+enabled: true
+priority: 10
+
+# Time window for detection (in minutes)
+window: 5
+
+# Conditions that must be met to trigger action
+conditions:
+  # All conditions must match (AND logic)
+  - type: log_type
+    value: WAF
+
+  - type: action
+    value: drop
+
+  # Minimum events count in window
+  - type: count
+    operator: gte
+    value: 5
+
+  # Optional: Focus on specific categories
+  # - type: category
+  #   operator: in
+  #   values:
+  #     - SQL Injection
+  #     - XSS
+  #     - RCE
+
+# Aggregation - group by source IP
+group_by:
+  - src_ip
+
+# Scoring adjustments (optional)
+scoring:
+  # Add to threat score for matching events
+  base_score: 20
+  per_event_score: 2
+  max_additional_score: 40
+
+  # Severity multipliers
+  severity_multipliers:
+    critical: 3.0
+    high: 2.0
+    medium: 1.5
+    low: 1.0
+
+# Actions to execute when conditions are met
+actions:
+  # Check threat intel before banning
+  - type: check_threat_intel
+    params:
+      min_score: 50  # Only ban if threat score >= 50
+      skip_if_cached: true
+
+  # Check whitelist
+  - type: check_whitelist
+    params:
+      skip_if_whitelisted: true
+
+  # Ban the IP
+  - type: ban
+    params:
+      reason: "WAF: Multiple attack attempts detected"
+      use_progressive_duration: true  # Use recidivism-based duration
+      sync_sophos: true
+
+  # Log the action
+  - type: log
+    params:
+      level: warn
+      message: "Auto-ban triggered for WAF attacks"
+
+# Cooldown period (minutes) before re-evaluating same IP
+cooldown: 60
+
+# Expiration - when this scenario should stop checking
+# (useful for temporary heightened security)
+# expires_at: "2025-12-31T23:59:59Z"

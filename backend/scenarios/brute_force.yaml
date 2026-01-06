@@ -1,0 +1,66 @@
+# VIGILANCE X - Detect2Ban Scenario
+# Brute Force Attack Detection
+
+name: brute_force
+description: Detect and ban IPs performing brute force attacks
+enabled: true
+priority: 5  # Higher priority than WAF attacks
+
+window: 10  # 10 minute window
+
+conditions:
+  - type: log_type
+    operator: in
+    values:
+      - VPN
+      - WAF
+      - Firewall
+
+  # Focus on authentication failures
+  - type: category
+    operator: in
+    values:
+      - Auth Failure
+      - Brute Force
+      - Login Failure
+
+  # OR message contains specific patterns
+  - type: message
+    operator: contains_any
+    values:
+      - "authentication failed"
+      - "login failed"
+      - "invalid password"
+      - "invalid credentials"
+      - "access denied"
+
+  # Minimum failures
+  - type: count
+    operator: gte
+    value: 10
+
+group_by:
+  - src_ip
+
+scoring:
+  base_score: 30
+  per_event_score: 3
+  max_additional_score: 50
+
+actions:
+  - type: check_whitelist
+    params:
+      skip_if_whitelisted: true
+
+  - type: ban
+    params:
+      reason: "Brute Force: Multiple authentication failures"
+      use_progressive_duration: true
+      sync_sophos: true
+
+  - type: log
+    params:
+      level: error
+      message: "Brute force attack detected and blocked"
+
+cooldown: 30

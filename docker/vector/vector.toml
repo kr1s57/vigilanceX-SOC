@@ -1,0 +1,467 @@
+# ============================================
+# VIGILANCE X - Vector Configuration
+# Parser pour logs Sophos XGS
+# ============================================
+
+data_dir = "/var/lib/vector"
+
+[api]
+enabled = true
+address = "0.0.0.0:8686"
+
+# ============================================
+# SOURCES
+# ============================================
+
+[sources.sophos_syslog_udp]
+type = "syslog"
+address = "0.0.0.0:514"
+mode = "udp"
+max_length = 102400
+
+[sources.sophos_syslog_tcp]
+type = "syslog"
+address = "0.0.0.0:1514"
+mode = "tcp"
+max_length = 102400
+
+# ============================================
+# TRANSFORMS - Parsing Sophos Logs
+# ============================================
+
+[transforms.parse_sophos]
+type = "remap"
+inputs = ["sophos_syslog_udp", "sophos_syslog_tcp"]
+source = '''
+# Conserver le log brut
+.raw_log = .message
+
+# Parser key=value pairs (format Sophos standard)
+parsed = parse_key_value(.message, key_value_delimiter: "=", field_delimiter: " ") ?? {}
+. = merge(., parsed)
+
+# Generer un event_id unique
+.event_id = uuid_v4()
+.ingested_at = now()
+
+# Parser le timestamp Sophos
+if exists(.date) && exists(.time) {
+    ts_str = string(.date) ?? "" + " " + string(.time) ?? ""
+    .timestamp = parse_timestamp(ts_str, "%Y-%m-%d %H:%M:%S") ?? now()
+} else {
+    .timestamp = .timestamp ?? now()
+}
+
+# Determiner le type de log
+.log_type = to_string(.log_type) ?? to_string(.log_component) ?? to_string(.log_subtype) ?? "unknown"
+
+# Normaliser log_type
+.log_type = upcase(.log_type)
+if contains(.log_type, "WAF") || contains(.log_type, "REVERSEPROXY") {
+    .log_type = "WAF"
+} else if contains(.log_type, "IPS") || contains(.log_type, "IDP") || contains(.log_type, "INTRUSION") {
+    .log_type = "IPS"
+} else if contains(.log_type, "ATP") || contains(.log_type, "SANDSTORM") {
+    .log_type = "ATP"
+} else if contains(.log_type, "VIRUS") || contains(.log_type, "ANTIVIRUS") || contains(.log_type, "AV") {
+    .log_type = "Anti-Virus"
+} else if contains(.log_type, "FIREWALL") || contains(.log_type, "FW") {
+    .log_type = "Firewall"
+} else if contains(.log_type, "VPN") || contains(.log_type, "SSLVPN") || contains(.log_type, "IPSEC") {
+    .log_type = "VPN"
+} else if contains(.log_type, "HEARTBEAT") || contains(.log_type, "ENDPOINT") {
+    .log_type = "Heartbeat"
+}
+
+# Normaliser les IPs
+.src_ip = to_string(.src_ip) ?? to_string(.srcip) ?? to_string(.sourceip) ?? to_string(.client_ip) ?? ""
+.dst_ip = to_string(.dst_ip) ?? to_string(.dstip) ?? to_string(.destip) ?? to_string(.server_ip) ?? ""
+
+# Valider et convertir les IPs
+if .src_ip != "" {
+    .src_ip = parse_regex(.src_ip, r'^(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})') ?? {}
+    .src_ip = .src_ip.ip ?? "0.0.0.0"
+} else {
+    .src_ip = "0.0.0.0"
+}
+
+if .dst_ip != "" {
+    .dst_ip = parse_regex(.dst_ip, r'^(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})') ?? {}
+    .dst_ip = .dst_ip.ip ?? "0.0.0.0"
+} else {
+    .dst_ip = "0.0.0.0"
+}
+
+# Ports
+.src_port = to_int(.src_port) ?? to_int(.srcport) ?? to_int(.sport) ?? 0
+.dst_port = to_int(.dst_port) ?? to_int(.dstport) ?? to_int(.dport) ?? 0
+
+# Normaliser action
+action_raw = downcase(to_string(.action) ?? to_string(.fw_rule_action) ?? to_string(.status) ?? "")
+if contains(action_raw, "drop") || contains(action_raw, "block") || contains(action_raw, "deny") {
+    .action = "drop"
+} else if contains(action_raw, "allow") || contains(action_raw, "pass") || contains(action_raw, "accept") {
+    .action = "allow"
+} else if contains(action_raw, "reject") {
+    .action = "reject"
+} else if contains(action_raw, "quarantine") {
+    .action = "quarantine"
+} else {
+    .action = action_raw
+}
+
+# Severity mapping (Sophos utilise des niveaux numeriques ou textuels)
+sev_raw = downcase(to_string(.severity) ?? to_string(.priority) ?? to_string(.threat_level) ?? "")
+if sev_raw == "0" || contains(sev_raw, "critical") || contains(sev_raw, "emergency") {
+    .severity = "critical"
+} else if sev_raw == "1" || contains(sev_raw, "high") || contains(sev_raw, "alert") {
+    .severity = "high"
+} else if sev_raw == "2" || contains(sev_raw, "medium") || contains(sev_raw, "warning") {
+    .severity = "medium"
+} else if sev_raw == "3" || contains(sev_raw, "low") || contains(sev_raw, "notice") {
+    .severity = "low"
+} else {
+    .severity = "info"
+}
+
+# Protocol
+.protocol = upcase(to_string(.protocol) ?? to_string(.proto) ?? "TCP")
+
+# Rule ID et nom
+.rule_id = to_string(.rule_id) ?? to_string(.ruleid) ?? to_string(.signature_id) ?? to_string(.sid) ?? ""
+.rule_name = to_string(.rule_name) ?? to_string(.rulename) ?? to_string(.signature_name) ?? to_string(.attack) ?? ""
+
+# Hostname et contexte
+.hostname = to_string(.hostname) ?? to_string(.host) ?? to_string(.device_name) ?? to_string(.server) ?? ""
+.user_name = to_string(.user) ?? to_string(.username) ?? to_string(.user_name) ?? to_string(.srcuser) ?? ""
+
+# HTTP specifics
+.url = to_string(.url) ?? to_string(.uri) ?? to_string(.request_url) ?? ""
+.http_method = upcase(to_string(.http_method) ?? to_string(.method) ?? to_string(.request_method) ?? "")
+.http_status = to_int(.http_status) ?? to_int(.status_code) ?? to_int(.response_code) ?? 0
+.user_agent = to_string(.user_agent) ?? to_string(.http_user_agent) ?? to_string(.useragent) ?? ""
+
+# Message
+.message = to_string(.message) ?? to_string(.msg) ?? to_string(.reason) ?? to_string(.description) ?? ""
+
+# Sophos ID
+.sophos_id = to_string(.log_id) ?? to_string(.id) ?? to_string(.event_id) ?? ""
+
+# Cleanup des champs temporaires du parsing
+del(.date)
+del(.time)
+del(.srcip)
+del(.dstip)
+del(.srcport)
+del(.dstport)
+del(.fw_rule_action)
+del(.proto)
+del(.sourceip)
+del(.destip)
+del(.sport)
+del(.dport)
+del(.log_component)
+del(.log_subtype)
+del(.priority)
+del(.threat_level)
+del(.ruleid)
+del(.rulename)
+del(.signature_id)
+del(.signature_name)
+del(.sid)
+del(.attack)
+del(.host)
+del(.device_name)
+del(.server)
+del(.username)
+del(.srcuser)
+del(.uri)
+del(.request_url)
+del(.method)
+del(.request_method)
+del(.status_code)
+del(.response_code)
+del(.http_user_agent)
+del(.useragent)
+del(.msg)
+del(.reason)
+del(.description)
+del(.log_id)
+'''
+
+# ============================================
+# TRANSFORM - Categorisation des attaques
+# ============================================
+
+[transforms.categorize_attacks]
+type = "remap"
+inputs = ["parse_sophos"]
+source = '''
+# Initialiser category et sub_category
+.category = ""
+.sub_category = ""
+
+msg_lower = downcase(.message ?? "")
+rule_lower = downcase(.rule_name ?? "")
+combined = msg_lower + " " + rule_lower
+
+# Categorisation basee sur le log_type et le contenu
+if .log_type == "WAF" {
+    .category = "Web Attack"
+
+    # Detection du type d attaque WAF
+    if contains(combined, "sql") || contains(combined, "injection") || contains(combined, "union") {
+        .sub_category = "SQL Injection"
+    } else if contains(combined, "xss") || contains(combined, "script") || contains(combined, "javascript") {
+        .sub_category = "XSS"
+    } else if contains(combined, "rce") || contains(combined, "command") || contains(combined, "exec") || contains(combined, "shell") {
+        .sub_category = "RCE"
+    } else if contains(combined, "lfi") || contains(combined, "path") || contains(combined, "traversal") || contains(combined, "../") {
+        .sub_category = "LFI"
+    } else if contains(combined, "rfi") || contains(combined, "remote file") {
+        .sub_category = "RFI"
+    } else if contains(combined, "ssrf") || contains(combined, "server-side") {
+        .sub_category = "SSRF"
+    } else if contains(combined, "csrf") || contains(combined, "cross-site request") {
+        .sub_category = "CSRF"
+    } else if contains(combined, "scanner") || contains(combined, "probe") || contains(combined, "nikto") || contains(combined, "nmap") {
+        .sub_category = "Scanner"
+    } else if contains(combined, "bot") || contains(combined, "crawler") {
+        .sub_category = "Bot"
+    } else {
+        .sub_category = "Other"
+    }
+} else if .log_type == "IPS" {
+    .category = "Intrusion"
+
+    if contains(combined, "scan") || contains(combined, "probe") || contains(combined, "reconnaissance") {
+        .sub_category = "Network Scan"
+    } else if contains(combined, "exploit") || contains(combined, "overflow") || contains(combined, "cve-") {
+        .sub_category = "Exploit"
+    } else if contains(combined, "dos") || contains(combined, "flood") || contains(combined, "ddos") {
+        .sub_category = "DoS"
+    } else if contains(combined, "brute") || contains(combined, "password") || contains(combined, "login") {
+        .sub_category = "Brute Force"
+    } else if contains(combined, "trojan") || contains(combined, "backdoor") || contains(combined, "rat") {
+        .sub_category = "Malware"
+    } else if contains(combined, "c2") || contains(combined, "command and control") || contains(combined, "callback") {
+        .sub_category = "C2"
+    } else {
+        .sub_category = "Other"
+    }
+} else if .log_type == "ATP" {
+    .category = "Advanced Threat"
+
+    if contains(combined, "c2") || contains(combined, "command") || contains(combined, "beacon") {
+        .sub_category = "C2 Communication"
+    } else if contains(combined, "malware") || contains(combined, "virus") {
+        .sub_category = "Malware"
+    } else if contains(combined, "phishing") || contains(combined, "credential") {
+        .sub_category = "Phishing"
+    } else if contains(combined, "botnet") {
+        .sub_category = "Botnet"
+    } else {
+        .sub_category = "Unknown Threat"
+    }
+} else if .log_type == "Anti-Virus" {
+    .category = "Malware"
+    .sub_category = to_string(.malware_type) ?? "Generic"
+} else if .log_type == "VPN" {
+    .category = "VPN"
+
+    if contains(combined, "fail") || contains(combined, "denied") || contains(combined, "invalid") {
+        .sub_category = "Auth Failure"
+    } else if contains(combined, "connect") {
+        .sub_category = "Connection"
+    } else if contains(combined, "disconnect") {
+        .sub_category = "Disconnection"
+    } else {
+        .sub_category = "Other"
+    }
+} else if .log_type == "Firewall" {
+    .category = "Firewall"
+
+    if .action == "drop" || .action == "reject" {
+        .sub_category = "Blocked"
+    } else {
+        .sub_category = "Allowed"
+    }
+} else if .log_type == "Heartbeat" {
+    .category = "Endpoint Health"
+    .sub_category = "Status"
+} else {
+    .category = "Other"
+    .sub_category = "Unknown"
+}
+'''
+
+# ============================================
+# TRANSFORM - Router par type de log
+# ============================================
+
+[transforms.route_by_type]
+type = "route"
+inputs = ["categorize_attacks"]
+route.waf = '.log_type == "WAF"'
+route.ips = '.log_type == "IPS"'
+route.atp = '.log_type == "ATP"'
+route.antivirus = '.log_type == "Anti-Virus"'
+route.firewall = '.log_type == "Firewall"'
+route.vpn = '.log_type == "VPN"'
+route.heartbeat = '.log_type == "Heartbeat"'
+route._unmatched = 'true'
+
+# ============================================
+# TRANSFORM - Prepare pour ClickHouse (events)
+# ============================================
+
+[transforms.prepare_events]
+type = "remap"
+inputs = [
+    "route_by_type.waf",
+    "route_by_type.ips",
+    "route_by_type.atp",
+    "route_by_type.antivirus",
+    "route_by_type.firewall",
+    "route_by_type._unmatched"
+]
+source = '''
+# Preparer le format final pour la table events
+. = {
+    "event_id": .event_id,
+    "timestamp": .timestamp,
+    "log_type": .log_type,
+    "category": .category,
+    "sub_category": .sub_category,
+    "severity": .severity,
+    "src_ip": .src_ip,
+    "dst_ip": .dst_ip,
+    "src_port": .src_port,
+    "dst_port": .dst_port,
+    "protocol": .protocol,
+    "action": .action,
+    "rule_id": .rule_id,
+    "rule_name": .rule_name,
+    "hostname": .hostname,
+    "user_name": .user_name,
+    "url": .url,
+    "http_method": .http_method,
+    "http_status": .http_status,
+    "user_agent": .user_agent,
+    "geo_country": "",
+    "geo_city": "",
+    "geo_asn": 0,
+    "geo_org": "",
+    "message": .message,
+    "raw_log": .raw_log,
+    "sophos_id": .sophos_id,
+    "ingested_at": .ingested_at
+}
+'''
+
+# ============================================
+# TRANSFORM - Prepare VPN events
+# ============================================
+
+[transforms.prepare_vpn]
+type = "remap"
+inputs = ["route_by_type.vpn"]
+source = '''
+# Determiner le type d evenement VPN
+event_type = "other"
+msg_lower = downcase(.message ?? "")
+
+if contains(msg_lower, "connect") && !contains(msg_lower, "disconnect") {
+    event_type = "connect"
+} else if contains(msg_lower, "disconnect") {
+    event_type = "disconnect"
+} else if contains(msg_lower, "fail") || contains(msg_lower, "denied") || contains(msg_lower, "invalid") {
+    event_type = "auth_fail"
+}
+
+# Determiner le type VPN
+vpn_type = to_string(.vpn_type) ?? ""
+if vpn_type == "" {
+    if contains(msg_lower, "ssl") || contains(msg_lower, "sslvpn") {
+        vpn_type = "ssl"
+    } else if contains(msg_lower, "ipsec") {
+        vpn_type = "ipsec"
+    } else if contains(msg_lower, "l2tp") {
+        vpn_type = "l2tp"
+    } else {
+        vpn_type = "unknown"
+    }
+}
+
+. = {
+    "event_id": .event_id,
+    "timestamp": .timestamp,
+    "event_type": event_type,
+    "vpn_type": vpn_type,
+    "user_name": .user_name,
+    "src_ip": .src_ip,
+    "assigned_ip": null,
+    "duration_seconds": 0,
+    "bytes_in": 0,
+    "bytes_out": 0,
+    "tunnel_id": to_string(.tunnel_id) ?? "",
+    "auth_method": to_string(.auth_method) ?? "",
+    "failure_reason": if event_type == "auth_fail" { .message } else { "" },
+    "geo_country": "",
+    "geo_city": ""
+}
+'''
+
+# ============================================
+# SINKS - ClickHouse
+# ============================================
+
+[sinks.clickhouse_events]
+type = "clickhouse"
+inputs = ["prepare_events"]
+endpoint = "http://clickhouse:8123"
+database = "vigilance_x"
+table = "events"
+compression = "gzip"
+skip_unknown_fields = true
+
+batch.max_events = 5000
+batch.timeout_secs = 5
+
+healthcheck.enabled = true
+
+[sinks.clickhouse_events.auth]
+strategy = "basic"
+user = "${CLICKHOUSE_USER}"
+password = "${CLICKHOUSE_PASSWORD}"
+
+[sinks.clickhouse_vpn]
+type = "clickhouse"
+inputs = ["prepare_vpn"]
+endpoint = "http://clickhouse:8123"
+database = "vigilance_x"
+table = "vpn_events"
+compression = "gzip"
+skip_unknown_fields = true
+
+batch.max_events = 1000
+batch.timeout_secs = 10
+
+[sinks.clickhouse_vpn.auth]
+strategy = "basic"
+user = "${CLICKHOUSE_USER}"
+password = "${CLICKHOUSE_PASSWORD}"
+
+# ============================================
+# SINK - Console (debug, events critiques)
+# ============================================
+
+[sinks.console_critical]
+type = "console"
+inputs = ["prepare_events"]
+encoding.codec = "json"
+target = "stdout"
+
+[sinks.console_critical.filter]
+type = "vrl"
+source = '.severity == "critical" || .severity == "high"'
