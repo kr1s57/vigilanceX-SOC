@@ -15,10 +15,12 @@ type BanStatus struct {
 	LastBan      time.Time  `json:"last_ban" ch:"last_ban"`
 	ExpiresAt    *time.Time `json:"expires_at" ch:"expires_at"`
 	Reason       string     `json:"reason" ch:"reason"`
+	Source       string     `json:"source" ch:"source"` // manual, detect2ban, threat_intel
 	TriggerRule  string     `json:"trigger_rule" ch:"trigger_rule"`
 	TriggerEvent uuid.UUID  `json:"trigger_event_id" ch:"trigger_event_id"`
 	SyncedXGS    bool       `json:"synced_xgs" ch:"synced_xgs"`
 	CreatedBy    string     `json:"created_by" ch:"created_by"`
+	UpdatedAt    time.Time  `json:"updated_at" ch:"updated_at"`
 	Version      uint64     `json:"-" ch:"version"`
 }
 
@@ -30,9 +32,12 @@ type BanHistory struct {
 	Action         string     `json:"action" ch:"action"`
 	PreviousStatus string     `json:"previous_status" ch:"previous_status"`
 	NewStatus      string     `json:"new_status" ch:"new_status"`
-	DurationHours  *uint32    `json:"duration_hours" ch:"duration_hours"`
+	DurationHours  int        `json:"duration_hours" ch:"duration_hours"`
 	Reason         string     `json:"reason" ch:"reason"`
+	Source         string     `json:"source" ch:"source"`
 	PerformedBy    string     `json:"performed_by" ch:"performed_by"`
+	SyncedXGS      bool       `json:"synced_xgs" ch:"synced_xgs"`
+	CreatedAt      time.Time  `json:"created_at" ch:"created_at"`
 	Metadata       string     `json:"metadata" ch:"metadata"`
 }
 
@@ -40,7 +45,9 @@ type BanHistory struct {
 type WhitelistEntry struct {
 	IP          string    `json:"ip" ch:"ip"`
 	CIDRMask    uint8     `json:"cidr_mask" ch:"cidr_mask"`
+	Reason      string    `json:"reason" ch:"reason"`
 	Description string    `json:"description" ch:"description"`
+	AddedBy     string    `json:"added_by" ch:"added_by"`
 	CreatedAt   time.Time `json:"created_at" ch:"created_at"`
 	CreatedBy   string    `json:"created_by" ch:"created_by"`
 	IsActive    bool      `json:"is_active" ch:"is_active"`
@@ -81,6 +88,7 @@ type BanStats struct {
 	BansLast24h        int64 `json:"bans_last_24h"`
 	UnbansLast24h      int64 `json:"unbans_last_24h"`
 	RecidivistIPs      int64 `json:"recidivist_ips"` // IPs banned more than once
+	PendingSync        int64 `json:"pending_sync"`   // Bans not yet synced to XGS
 }
 
 // BanFilters for querying bans
