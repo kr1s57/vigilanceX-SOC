@@ -7,23 +7,40 @@ import (
 // ThreatScore represents the threat intelligence score for an IP
 type ThreatScore struct {
 	IP              string    `json:"ip" ch:"ip"`
+	AggregatedScore int       `json:"aggregated_score" ch:"aggregated_score"`
 	TotalScore      uint8     `json:"total_score" ch:"total_score"`
 	ReputationScore uint8     `json:"reputation_score" ch:"reputation_score"`
 	ActivityScore   uint8     `json:"activity_score" ch:"activity_score"`
 	SeverityScore   uint8     `json:"severity_score" ch:"severity_score"`
+	Confidence      float64   `json:"confidence" ch:"confidence"`
 
 	IsMalicious  bool     `json:"is_malicious" ch:"is_malicious"`
 	ThreatLevel  string   `json:"threat_level" ch:"threat_level"`
 	Categories   []string `json:"categories" ch:"categories"`
 	Sources      []string `json:"sources" ch:"sources"`
+	Tags         []string `json:"tags" ch:"tags"`
 
-	// Per-source details
-	AbuseIPDBScore    uint8  `json:"abuseipdb_score" ch:"abuseipdb_score"`
-	AbuseIPDBReports  uint32 `json:"abuseipdb_reports" ch:"abuseipdb_reports"`
-	AbuseIPDBIsTor    bool   `json:"abuseipdb_is_tor" ch:"abuseipdb_is_tor"`
-	VirusTotalPositives uint8 `json:"virustotal_positives" ch:"virustotal_positives"`
-	VirusTotalTotal   uint8  `json:"virustotal_total" ch:"virustotal_total"`
-	AlienVaultPulses  uint16 `json:"alienvault_pulses" ch:"alienvault_pulses"`
+	// Geographic/Network info
+	Country string `json:"country" ch:"country"`
+	ASN     string `json:"asn" ch:"asn"`
+	ISP     string `json:"isp" ch:"isp"`
+	IsTor   bool   `json:"is_tor" ch:"is_tor"`
+
+	// Per-source scores (normalized 0-100)
+	AbuseIPDBScore    int    `json:"abuseipdb_score" ch:"abuseipdb_score"`
+	VirusTotalScore   int    `json:"virustotal_score" ch:"virustotal_score"`
+	OTXScore          int    `json:"otx_score" ch:"otx_score"`
+
+	// Legacy per-source details
+	AbuseIPDBReports    uint32   `json:"abuseipdb_reports" ch:"abuseipdb_reports"`
+	AbuseIPDBIsTor      bool     `json:"abuseipdb_is_tor" ch:"abuseipdb_is_tor"`
+	VirusTotalPositives uint8    `json:"virustotal_positives" ch:"virustotal_positives"`
+	VirusTotalTotal     uint8    `json:"virustotal_total" ch:"virustotal_total"`
+	AlienVaultPulses    uint16   `json:"alienvault_pulses" ch:"alienvault_pulses"`
+
+	// Enrichment data
+	MalwareFamilies []string `json:"malware_families,omitempty" ch:"malware_families"`
+	Adversaries     []string `json:"adversaries,omitempty" ch:"adversaries"`
 
 	FirstSeen    time.Time `json:"first_seen" ch:"first_seen"`
 	LastSeen     time.Time `json:"last_seen" ch:"last_seen"`
