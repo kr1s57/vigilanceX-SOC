@@ -61,7 +61,7 @@ export function TimelineChart({ data, height = 300 }: TimelineChartProps) {
             labelFormatter={(value) => format(new Date(value), 'MMM d, HH:mm')}
             formatter={(value: number, name: string) => [
               value.toLocaleString(),
-              name === 'blocked_events' ? 'Blocked' : 'Allowed'
+              name
             ]}
           />
           <Legend />

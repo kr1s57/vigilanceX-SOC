@@ -12,6 +12,7 @@ import (
 
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/handlers"
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/middleware"
+	"github.com/kr1s57/vigilancex/internal/adapter/controller/ws"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
@@ -20,6 +21,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/events"
 	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
+	"github.com/kr1s57/vigilancex/internal/usecase/reports"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
 
 	"github.com/go-chi/chi/v5"
@@ -56,6 +58,7 @@ func main() {
 	threatsRepo := clickhouse.NewThreatsRepository(chConn)
 	bansRepo := clickhouse.NewBansRepository(chConn)
 	modsecRepo := clickhouse.NewModSecRepository(chConn, logger)
+	statsRepo := clickhouse.NewStatsRepository(chConn.Conn(), logger)
 
 	// Initialize threat intelligence aggregator
 	threatAggregator := threatintel.NewAggregator(threatintel.AggregatorConfig{
@@ -123,12 +126,19 @@ func main() {
 	eventsService := events.NewService(eventsRepo, logger)
 	threatsService := threats.NewService(threatsRepo, threatAggregator)
 	bansService := bans.NewService(bansRepo, sophosClient)
+	reportsService := reports.NewService(statsRepo, logger)
 
 	// Initialize handlers
 	eventsHandler := handlers.NewEventsHandler(eventsService)
 	threatsHandler := handlers.NewThreatsHandler(threatsService)
 	bansHandler := handlers.NewBansHandler(bansService)
 	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
+	reportsHandler := handlers.NewReportsHandler(reportsService)
+
+	// Initialize WebSocket hub
+	wsHub := ws.NewHub()
+	go wsHub.Run()
+	logger.Info("WebSocket hub started")
 
 	// Create router
 	r := chi.NewRouter()
@@ -284,6 +294,14 @@ func main() {
 				r.Get("/exploits", handlers.NotImplemented)
 			})
 
+			// Reports
+			r.Route("/reports", func(r chi.Router) {
+				r.Get("/stats", reportsHandler.GetDBStats)
+				r.Get("/generate", reportsHandler.GenerateReport)
+				r.Post("/generate", reportsHandler.GenerateReport)
+				r.Get("/preview", reportsHandler.PreviewReport)
+			})
+
 			// System
 			r.Route("/system", func(r chi.Router) {
 				r.Get("/config", handlers.NotImplemented)
@@ -292,12 +310,12 @@ func main() {
 			})
 
 			// WebSocket endpoint
-			r.Get("/ws", handlers.StubWebSocket)
+			r.Get("/ws", wsHub.ServeWS)
 		})
 	})
 
-	// WebSocket endpoint
-	r.Get("/ws", handlers.StubWebSocket)
+	// WebSocket endpoint (also at root for easier access)
+	r.Get("/ws", wsHub.ServeWS)
 
 	// Create server
 	addr := fmt.Sprintf("%s:%d", cfg.App.Host, cfg.App.Port)

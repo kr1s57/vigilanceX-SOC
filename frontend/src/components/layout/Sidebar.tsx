@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Network,
   Ban,
+  FileText,
   Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -17,6 +18,7 @@ const navigation = [
   { name: 'Advanced Threat', href: '/threats', icon: AlertTriangle },
   { name: 'VPN & Network', href: '/vpn', icon: Network },
   { name: 'Active Bans', href: '/bans', icon: Ban },
+  { name: 'Reports', href: '/reports', icon: FileText },
 ]
 
 export function Sidebar() {

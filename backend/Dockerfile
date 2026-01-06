@@ -14,6 +14,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Ensure dependencies are synced (for new additions)
+RUN go mod tidy
+
 # Build the API binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s -X main.version=1.0.0" \

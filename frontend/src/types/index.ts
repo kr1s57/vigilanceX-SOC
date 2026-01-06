@@ -317,3 +317,128 @@ export interface WSMessage<T = unknown> {
   payload: T
   time: string
 }
+
+// Report types
+export interface DBStats {
+  database_size: string
+  total_events: number
+  events_by_type: Record<string, number>
+  date_range_start: string
+  date_range_end: string
+  table_stats: TableStat[]
+}
+
+export interface TableStat {
+  table_name: string
+  row_count: number
+  size: string
+}
+
+export interface ReportConfig {
+  type: 'daily' | 'weekly' | 'monthly' | 'custom'
+  format: 'pdf' | 'xml'
+  start_date?: string
+  end_date?: string
+  modules?: string[]
+}
+
+export interface ReportPreview {
+  report_type: string
+  period: string
+  start_date: string
+  end_date: string
+  generated_at: string
+  db_stats: DBStats | null
+  event_stats: ReportEventStats | null
+  threat_stats: ReportThreatStats | null
+  ban_stats: ReportBanStats | null
+  modsec_stats: ReportModSecStats | null
+  vpn_stats: ReportVPNStats | null
+}
+
+export interface ReportEventStats {
+  total_events: number
+  blocked_events: number
+  block_rate: number
+  unique_ips: number
+  critical_events: number
+  high_events: number
+  medium_events: number
+  low_events: number
+  events_by_type: Record<string, number>
+  events_by_severity: Record<string, number>
+  events_by_action: Record<string, number>
+  top_attackers: ReportAttacker[]
+  top_targets: ReportTarget[]
+  top_rules: ReportRule[]
+  top_countries: ReportCountry[]
+}
+
+export interface ReportAttacker {
+  ip: string
+  attack_count: number
+  blocked_count: number
+  unique_rules: number
+  categories: string[]
+  country: string
+}
+
+export interface ReportTarget {
+  hostname: string
+  url: string
+  attack_count: number
+  unique_ips: number
+}
+
+export interface ReportRule {
+  rule_id: string
+  rule_msg: string
+  trigger_count: number
+  unique_ips: number
+}
+
+export interface ReportCountry {
+  country: string
+  attack_count: number
+  unique_ips: number
+}
+
+export interface ReportThreatStats {
+  total_tracked: number
+  critical_count: number
+  high_count: number
+  medium_count: number
+  low_count: number
+  tor_exit_nodes: number
+}
+
+export interface ReportBanStats {
+  active_bans: number
+  permanent_bans: number
+  expired_bans: number
+  new_bans: number
+  unbans: number
+}
+
+export interface ReportModSecStats {
+  total_logs: number
+  blocking_logs: number
+  unique_rules: number
+  top_attack_types: ReportAttackType[]
+  top_triggered_rules: ReportRule[]
+}
+
+export interface ReportAttackType {
+  type: string
+  count: number
+}
+
+export interface ReportVPNStats {
+  total_events: number
+  connections: number
+  disconnections: number
+  auth_failures: number
+  unique_users: number
+  total_bytes_in: number
+  total_bytes_out: number
+}

@@ -6,6 +6,7 @@ import { AttacksAnalyzer } from '@/pages/AttacksAnalyzer'
 import { AdvancedThreat } from '@/pages/AdvancedThreat'
 import { VpnNetwork } from '@/pages/VpnNetwork'
 import { ActiveBans } from '@/pages/ActiveBans'
+import { Reports } from '@/pages/Reports'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/threats" element={<AdvancedThreat />} />
         <Route path="/vpn" element={<VpnNetwork />} />
         <Route path="/bans" element={<ActiveBans />} />
+        <Route path="/reports" element={<Reports />} />
       </Routes>
     </Layout>
   )

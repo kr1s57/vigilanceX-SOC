@@ -17,7 +17,10 @@ import type {
   NewIPDetected,
   ModSecLog,
   ModSecRequestGroup,
-  ModSecLogFilters
+  ModSecLogFilters,
+  DBStats,
+  ReportConfig,
+  ReportPreview
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -317,5 +320,66 @@ export const modsecApi = {
   testConnection: async () => {
     const response = await api.get<{ status: string; message: string }>('/modsec/test')
     return response.data
+  },
+}
+
+// Reports API
+export const reportsApi = {
+  getDBStats: async () => {
+    const response = await api.get<DBStats>('/reports/stats')
+    return response.data
+  },
+
+  getPreview: async (config: ReportConfig) => {
+    const params = new URLSearchParams()
+    params.append('type', config.type)
+    if (config.start_date) params.append('start_date', config.start_date)
+    if (config.end_date) params.append('end_date', config.end_date)
+    if (config.modules) {
+      config.modules.forEach(m => params.append('modules', m))
+    }
+    const response = await api.get<ReportPreview>(`/reports/preview?${params}`)
+    return response.data
+  },
+
+  generate: async (config: ReportConfig) => {
+    const params = new URLSearchParams()
+    params.append('type', config.type)
+    params.append('format', config.format)
+    if (config.start_date) params.append('start_date', config.start_date)
+    if (config.end_date) params.append('end_date', config.end_date)
+    if (config.modules) {
+      config.modules.forEach(m => params.append('modules', m))
+    }
+
+    const response = await api.get(`/reports/generate?${params}`, {
+      responseType: 'blob'
+    })
+
+    // Create download link
+    const blob = new Blob([response.data], {
+      type: config.format === 'pdf' ? 'application/pdf' : 'application/xml'
+    })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+
+    // Get filename from Content-Disposition header or generate one
+    const contentDisposition = response.headers['content-disposition']
+    let filename = `vigilancex_report_${config.type}.${config.format}`
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/)
+      if (match) {
+        filename = match[1]
+      }
+    }
+
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    return { success: true, filename }
   },
 }
