@@ -21,6 +21,9 @@
 11. [Endpoints API](#11-endpoints-api)
 12. [WebSocket](#12-websocket)
 13. [Detect2Ban Engine](#13-detect2ban-engine)
+14. [CyberInt - Intelligence & Response](#14-cyberint---intelligence--response)
+    - [14.1 OSINT Multi-Provider](#141-osint-multi-provider-threat-intelligence)
+    - [14.2 ActiveResponse - Systeme de Bannissement](#142-activeresponse---systeme-de-bannissement)
 
 ---
 
@@ -1451,6 +1454,969 @@ cooldown: 60m
 - Nommage des objets: `bannedIP_{ip}`
 - Synchronisation bidirectionnelle
 - Import des bans existants du Sophos
+
+---
+
+## 14. CyberInt - Intelligence & Response
+
+La section **CyberInt** represente le coeur du systeme de defense active de VIGILANCE X. Elle comprend deux composants majeurs et interdependants:
+
+1. **OSINT Multi-Provider** - Systeme de renseignement sur les menaces (Threat Intelligence)
+2. **ActiveResponse** - Systeme de reponse automatisee avec bannissement progressif
+
+Ces deux systemes travaillent en synergie pour:
+- Collecter et agreger les informations de reputation sur les IPs
+- Prendre des decisions de blocage basees sur des seuils configurables
+- Appliquer des bans progressifs selon le niveau de recidive
+- Synchroniser les blocages avec le pare-feu Sophos XGS en temps reel
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           CYBERINT ARCHITECTURE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                    OSINT - THREAT INTELLIGENCE                         │ │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                 │ │
+│  │  │  AbuseIPDB   │  │  VirusTotal  │  │ AlienVault   │                 │ │
+│  │  │   (40%)      │  │    (35%)     │  │  OTX (25%)   │                 │ │
+│  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                 │ │
+│  │         │                 │                 │                          │ │
+│  │         └─────────────────┼─────────────────┘                          │ │
+│  │                           ▼                                            │ │
+│  │               ┌───────────────────────┐                                │ │
+│  │               │  Threat Aggregator    │                                │ │
+│  │               │  Score: 0-100         │                                │ │
+│  │               │  Level: critical/high │                                │ │
+│  │               └───────────┬───────────┘                                │ │
+│  └───────────────────────────┼────────────────────────────────────────────┘ │
+│                              │                                               │
+│                              ▼                                               │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                    ACTIVERESPONSE - BAN SYSTEM                         │ │
+│  │                                                                        │ │
+│  │  ┌─────────────┐     ┌─────────────┐     ┌─────────────────────────┐  │ │
+│  │  │ Detect2Ban  │────>│ Ban Service │────>│   Sophos XGS Sync       │  │ │
+│  │  │  (Auto)     │     │ (Progressive│     │   (Bidirectional)       │  │ │
+│  │  └─────────────┘     │  1h→4h→24h→ │     └─────────────────────────┘  │ │
+│  │                      │  Permanent) │                                   │ │
+│  │  ┌─────────────┐     └──────┬──────┘     ┌─────────────────────────┐  │ │
+│  │  │ Manual Ban  │────────────┤            │   Whitelist Protection  │  │ │
+│  │  │  (API/UI)   │            │            │   (Priority Override)   │  │ │
+│  │  └─────────────┘            │            └─────────────────────────┘  │ │
+│  │                             ▼                                          │ │
+│  │               ┌───────────────────────┐                                │ │
+│  │               │  ClickHouse Storage   │                                │ │
+│  │               │  + Ban History Audit  │                                │ │
+│  │               └───────────────────────┘                                │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 14.1 OSINT Multi-Provider (Threat Intelligence)
+
+Le systeme OSINT de VIGILANCE X est un agregateur de renseignements sur les menaces qui combine les donnees de **trois providers majeurs** pour etablir un score de menace fiable et consensuel.
+
+#### 14.1.1 Architecture du Systeme
+
+**Fichiers Sources:**
+```
+backend/internal/adapter/external/threatintel/
+├── aggregator.go      # Logique d'agregation
+├── cache.go           # Cache en memoire (24h TTL)
+├── abuseipdb.go       # Client AbuseIPDB
+├── virustotal.go      # Client VirusTotal
+└── otx.go             # Client AlienVault OTX
+```
+
+**Principe de Fonctionnement:**
+
+1. Les trois providers sont interroges **en parallele** (goroutines)
+2. Chaque provider retourne un score normalise (0-100)
+3. Les scores sont **ponderes** selon la fiabilite du provider
+4. Un **score agrege** final est calcule
+5. Le resultat est mis en cache (24h) et stocke dans ClickHouse
+
+#### 14.1.2 Providers et Ponderations
+
+| Provider | Poids | Donnees Collectees | Taux API |
+|----------|-------|-------------------|----------|
+| **AbuseIPDB** | 40% | Confidence Score, Reports, Tor flag | 1000/jour |
+| **VirusTotal** | 35% | Detections malveillantes, Reputation | 4/min |
+| **AlienVault OTX** | 25% | Threat Pulses, Malware families | Illimite |
+
+**Pourquoi ces ponderations ?**
+- **AbuseIPDB (40%)** : Specialise dans les signalements d'abus, tres reactif
+- **VirusTotal (35%)** : Consensus multi-antivirus, haute precision
+- **OTX (25%)** : Contexte enrichi (malware, adversaires), mais plus de faux positifs
+
+#### 14.1.3 AbuseIPDB - Client Detaille
+
+**Endpoint:** `https://api.abuseipdb.com/api/v2/check`
+
+**Donnees Recuperees:**
+
+```json
+{
+  "ipAddress": "192.168.1.100",
+  "abuseConfidenceScore": 85,     // Score principal (0-100)
+  "totalReports": 42,             // Nombre de signalements
+  "numDistinctUsers": 15,         // Utilisateurs distincts
+  "countryCode": "RU",            // Geolocalisation
+  "isp": "Example ISP",           // Fournisseur d'acces
+  "domain": "example.com",
+  "usageType": "Data Center/Web Hosting",
+  "isTor": false,                 // Detection noeud Tor
+  "isWhitelisted": false,
+  "lastReportedAt": "2026-01-06T..."
+}
+```
+
+**Scoring AbuseIPDB:**
+- Utilise directement le `abuseConfidenceScore` (deja normalise 0-100)
+- **Tagging special:** Si `isTor=true`, ajoute le tag `tor_exit_node`
+
+**Parametres de Requete:**
+- `maxAgeInDays=90` : Ne considere que les 90 derniers jours
+- `verbose=true` : Retourne les details complets
+
+#### 14.1.4 VirusTotal - Client Detaille
+
+**Endpoint:** `https://www.virustotal.com/api/v3/ip_addresses/{ip}`
+
+**Donnees Recuperees:**
+
+```json
+{
+  "data": {
+    "attributes": {
+      "last_analysis_stats": {
+        "malicious": 5,           // Detections malveillantes
+        "suspicious": 2,          // Detections suspectes
+        "harmless": 80,           // Detections benignes
+        "undetected": 3           // Non detecte
+      },
+      "reputation": -15,          // Reputation VT (-100 a +100)
+      "asn": 12345,
+      "as_owner": "Example AS",
+      "country": "US",
+      "network": "192.168.0.0/16",
+      "tags": ["botnet", "c2"]    // Tags communautaires
+    }
+  }
+}
+```
+
+**Formule de Scoring VirusTotal:**
+
+```
+Ratio Malveillant = (malicious + suspicious) / total_engines
+Score Base = Ratio * 100
+
+Si reputation < 0:
+    Penalite = min(abs(reputation), 50)
+    Score Final = Score Base + Penalite
+
+Score Final = min(Score Final, 100)
+```
+
+**Exemple:**
+- 5 detections malveillantes sur 90 moteurs = 5.5% → Base = 6
+- Reputation = -30 → Penalite = 30
+- **Score Final = 36 (medium threat)**
+
+#### 14.1.5 AlienVault OTX - Client Detaille
+
+**Endpoints:**
+1. `GET /indicators/IPv4/{ip}/general` - Infos generales
+2. `GET /indicators/IPv4/{ip}/reputation` - Score de reputation
+
+**Donnees Recuperees:**
+
+```json
+{
+  "pulse_info": {
+    "count": 15,                      // Nombre de "pulses" (flux de menaces)
+    "pulses": [
+      {
+        "id": "...",
+        "name": "Emotet C2 Infrastructure",
+        "description": "...",
+        "tags": ["emotet", "banking-trojan"],
+        "adversary": "TA542",          // Groupe de menace
+        "malware_families": ["Emotet", "TrickBot"],
+        "attack_ids": ["T1566", "T1055"]  // MITRE ATT&CK
+      }
+    ]
+  },
+  "reputation": {
+    "threat_score": 65
+  }
+}
+```
+
+**Formule de Scoring OTX:**
+
+```
+Score Pulses   = min(pulse_count * 5, 50)     // Max 50 points
+Score Threat   = min(threat_score * 0.3, 30)  // Max 30 points
+Score Malware  = min(malware_count * 5, 20)   // Max 20 points
+
+Score Total    = Pulses + Threat + Malware    // Max 100 points
+```
+
+**Exemple:**
+- 3 pulses = 15 points
+- Threat score 50 = 15 points
+- 2 familles malware = 10 points
+- **Score Total = 40 (medium threat)**
+
+#### 14.1.6 Algorithme d'Agregation
+
+**Fichier:** `aggregator.go`
+
+```go
+func (a *Aggregator) calculateAggregatedScore(result *AggregatedResult) {
+    totalWeight := 0.0
+    weightedSum := 0.0
+
+    // Itere sur les sources disponibles uniquement
+    for _, source := range result.Sources {
+        if source.Available {
+            totalWeight += source.Weight
+            weightedSum += float64(source.Score) * source.Weight
+        }
+    }
+
+    // Normalise par le poids total disponible
+    if totalWeight > 0 {
+        result.AggregatedScore = int(weightedSum / totalWeight)
+        result.Confidence = totalWeight
+    }
+}
+```
+
+**Gestion des Providers Indisponibles:**
+
+| Providers Disponibles | Redistribution des Poids |
+|----------------------|-------------------------|
+| 3/3 (tous) | AbuseIPDB 40%, VT 35%, OTX 25% |
+| 2/3 | Poids redistribues proportionnellement |
+| 1/3 | 100% du provider disponible |
+| 0/3 | Score = 0, Confidence = 0 |
+
+**Score de Confiance:**
+- `1.0` = Les 3 providers ont repondu
+- `0.75` = 2 providers disponibles
+- `0.35-0.40` = 1 seul provider
+
+#### 14.1.7 Niveaux de Menace
+
+| Score | Niveau | Action Recommandee |
+|-------|--------|-------------------|
+| 80-100 | `critical` | **Auto-ban immediat** |
+| 60-79 | `high` | Surveillance renforcee, ban probable |
+| 40-59 | `medium` | Monitoring accru |
+| 20-39 | `low` | Notification simple |
+| 0-19 | `none` | Pas de menace identifiee |
+
+#### 14.1.8 Systeme de Cache
+
+**Fichier:** `cache.go`
+
+**Caracteristiques:**
+- **TTL:** 24 heures (configurable)
+- **Stockage:** En memoire (map[string]*cacheEntry)
+- **Thread-safe:** RWMutex pour acces concurrent
+- **Nettoyage:** Goroutine toutes les 5 minutes
+
+**Structure du Cache:**
+
+```go
+type ThreatCache struct {
+    data   map[string]*cacheEntry  // IP → resultat
+    ttl    time.Duration           // 24h par defaut
+    mu     sync.RWMutex            // Protection concurrent
+    hits   int64                   // Compteur hits
+    misses int64                   // Compteur misses
+}
+
+type cacheEntry struct {
+    result    *AggregatedResult
+    expiresAt time.Time
+}
+```
+
+**Statistiques Disponibles:**
+
+```go
+type CacheStats struct {
+    Size    int     // Entrees actuelles
+    Hits    int64   // Hits cumules
+    Misses  int64   // Misses cumules
+    HitRate float64 // Taux de hit (%)
+    TTL     string  // Duree TTL
+}
+```
+
+#### 14.1.9 Flux de Decision
+
+```
+Requete: GET /api/v1/threats/check/{ip}
+│
+├─ 1. Verification Cache
+│      ├─ HIT: Retourne resultat cache (flag cache_hit=true)
+│      └─ MISS: Continue vers etape 2
+│
+├─ 2. Lancement Goroutines Paralleles (timeout 15s max)
+│      ├─ AbuseIPDB.CheckIP()  [timeout 10s]
+│      ├─ VirusTotal.CheckIP() [timeout 15s]
+│      └─ OTX.CheckIP()        [timeout 10s]
+│
+├─ 3. Collecte Resultats (mutex-protected)
+│
+├─ 4. Calcul Score Agrege Pondere
+│
+├─ 5. Determination Niveau de Menace
+│
+├─ 6. Extraction Metadata
+│      ├─ Pays, ASN, ISP
+│      ├─ Flag Tor
+│      ├─ Familles Malware
+│      └─ Adversaires
+│
+├─ 7. Mise en Cache (TTL: 24h)
+│
+├─ 8. Sauvegarde Async ClickHouse
+│
+└─ 9. Retour Resultat Client
+```
+
+#### 14.1.10 Structure de Reponse Complete
+
+```json
+{
+  "ip": "192.0.2.1",
+  "aggregated_score": 65,
+  "threat_level": "high",
+  "confidence": 1.0,
+  "cache_hit": false,
+  "last_checked": "2026-01-07T10:30:00Z",
+
+  "sources": [
+    {
+      "provider": "AbuseIPDB",
+      "score": 70,
+      "weight": 0.4,
+      "weighted_score": 28.0,
+      "available": true
+    },
+    {
+      "provider": "VirusTotal",
+      "score": 60,
+      "weight": 0.35,
+      "weighted_score": 21.0,
+      "available": true
+    },
+    {
+      "provider": "AlienVault OTX",
+      "score": 65,
+      "weight": 0.25,
+      "weighted_score": 16.25,
+      "available": true
+    }
+  ],
+
+  "abuseipdb": {
+    "abuse_confidence_score": 70,
+    "total_reports": 45,
+    "country_code": "CN",
+    "isp": "Example ISP",
+    "is_tor": false
+  },
+
+  "virustotal": {
+    "malicious_count": 6,
+    "suspicious_count": 3,
+    "reputation": -25,
+    "as_owner": "Example ASN"
+  },
+
+  "otx": {
+    "pulse_count": 2,
+    "threat_score": 65,
+    "malware_families": ["Emotet", "TrickBot"],
+    "adversaries": ["APT28"]
+  },
+
+  "country": "CN",
+  "asn": "AS1234",
+  "isp": "Example ISP",
+  "is_tor": false,
+  "tags": ["botnet", "trojan"],
+  "malware_families": ["Emotet", "TrickBot"],
+  "adversaries": ["APT28"]
+}
+```
+
+#### 14.1.11 Endpoints API OSINT
+
+| Methode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/api/v1/threats/check/{ip}` | Verification temps reel |
+| GET | `/api/v1/threats/score/{ip}` | Score en cache/historique |
+| GET | `/api/v1/threats/should-ban/{ip}` | Decision de ban (bool) |
+| GET | `/api/v1/threats/` | Liste top menaces |
+| GET | `/api/v1/threats/level/{level}` | IPs par niveau |
+| GET | `/api/v1/threats/stats` | Statistiques globales |
+| GET | `/api/v1/threats/providers` | Statut des providers |
+| POST | `/api/v1/threats/batch` | Verification batch (max 50) |
+| POST | `/api/v1/threats/cache/clear` | Vider le cache |
+
+---
+
+### 14.2 ActiveResponse - Systeme de Bannissement
+
+Le systeme **ActiveResponse** est le module de reponse automatisee de VIGILANCE X. Il constitue le point nevralgique de la defense active, gerant l'ensemble du cycle de vie des bans IP avec un systeme de **punition progressive**.
+
+#### 14.2.1 Principes Fondamentaux
+
+1. **Punition Progressive:** Chaque recidive augmente la severite
+2. **Synchronisation Bidirectionnelle:** Coherence avec Sophos XGS
+3. **Protection Whitelist:** Les IPs autorisees ne peuvent jamais etre bannies
+4. **Audit Complet:** Chaque action est tracee pendant 365 jours
+5. **Multi-Sources:** Bans manuels, automatiques, ou importes
+
+#### 14.2.2 Architecture du Systeme
+
+**Fichiers Sources:**
+```
+backend/internal/
+├── entity/ban.go                              # Modeles de donnees
+├── usecase/bans/service.go                    # Logique metier
+├── adapter/repository/clickhouse/bans_repo.go # Persistance
+├── adapter/external/sophos/client.go          # Integration XGS
+└── usecase/detect2ban/engine.go               # Detection automatique
+```
+
+#### 14.2.3 Durees de Ban Progressives
+
+Le systeme utilise un algorithme de **punition progressive** base sur le nombre de recidives:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              ESCALADE PROGRESSIVE DES BANS                   │
+├─────────────┬─────────────┬─────────────────────────────────┤
+│  Ban Count  │   Duree     │   Description                   │
+├─────────────┼─────────────┼─────────────────────────────────┤
+│      1      │   1 heure   │   Premier avertissement         │
+│      2      │   4 heures  │   Deuxieme infraction           │
+│      3      │  24 heures  │   Troisieme infraction          │
+│     4+      │  PERMANENT  │   Recidiviste chronique         │
+└─────────────┴─────────────┴─────────────────────────────────┘
+```
+
+**Constantes (entity/ban.go):**
+
+```go
+var ProgressiveBanDurations = []time.Duration{
+    1 * time.Hour,   // Ban #1
+    4 * time.Hour,   // Ban #2
+    24 * time.Hour,  // Ban #3
+    // Ban #4+ = Permanent (nil duration)
+}
+
+const RecidivismThreshold = 4  // Seuil de recidive
+```
+
+**Exemple de Progression:**
+
+```
+Jour 1:  IP 1.2.3.4 declenche WAF → Ban 1h (banCount=1)
+         Ban expire apres 1h
+
+Jour 3:  Meme IP viole a nouveau → Ban 4h (banCount=2)
+         Ban expire apres 4h
+
+Jour 5:  Meme IP recidive       → Ban 24h (banCount=3)
+         Ban expire apres 24h
+
+Jour 8:  Meme IP persiste       → BAN PERMANENT (banCount=4)
+         Jamais d'expiration automatique
+         Requiert intervention manuelle pour debannir
+```
+
+#### 14.2.4 Cycle de Vie Complet d'un Ban
+
+**A. Creation d'un Ban (BanIP)**
+
+```
+Requete: POST /api/v1/bans
+{
+  "ip": "192.168.1.100",
+  "reason": "Multiple WAF violations",
+  "permanent": false  // Optionnel
+}
+│
+├─ 1. VERIFICATION WHITELIST
+│      └─ Si IP whitelistee → REJET avec erreur
+│
+├─ 2. RECHERCHE BAN EXISTANT
+│      ├─ Non trouve → Premiere infraction (banCount = 1)
+│      └─ Trouve → Recidiviste (banCount = existing + 1)
+│
+├─ 3. CALCUL DUREE
+│      ├─ Si permanent demande → Status = PERMANENT
+│      ├─ Si banCount >= 4     → Status = PERMANENT (auto)
+│      ├─ Si duree specifiee   → Utilise la duree fournie
+│      └─ Sinon                → Duree progressive selon banCount
+│
+├─ 4. PERSISTANCE (ClickHouse)
+│      └─ UpsertBan() dans ip_ban_status
+│
+├─ 5. HISTORIQUE
+│      └─ RecordBanHistory() dans ban_history
+│
+├─ 6. SYNC SOPHOS (Async)
+│      └─ Goroutine: AddIPToBlocklist()
+│
+└─ 7. RETOUR BanStatus
+```
+
+**B. Extension d'un Ban (ExtendBan)**
+
+```go
+// POST /api/v1/bans/{ip}/extend
+// Body: { "duration_days": 7, "reason": "Extended for investigation" }
+
+Processus:
+1. Recupere le ban existant
+2. Calcule nouvelle expiration:
+   - Si expiration future: nouvelle = expiration + jours
+   - Sinon: nouvelle = maintenant + jours
+3. Met a jour ExpiresAt
+4. Sauvegarde + Historique
+5. Retourne ban mis a jour
+```
+
+**C. Ban Permanent (MakePermanent)**
+
+```go
+// POST /api/v1/bans/{ip}/permanent
+
+Processus:
+1. Recupere le ban existant
+2. Change Status → "permanent"
+3. Met ExpiresAt → nil
+4. Sauvegarde + Historique (action: "permanent")
+5. L'IP reste bannie indefiniment
+```
+
+**D. Suppression de Ban (UnbanIP)**
+
+```go
+// DELETE /api/v1/bans/{ip}
+// Body optionnel: { "reason": "False positive verified" }
+
+Processus:
+1. Recupere le ban existant
+2. Change Status → "expired"
+3. Sauvegarde (NE SUPPRIME PAS l'enregistrement)
+4. Historique avec action "unban"
+5. Sync Sophos: RemoveIPFromBlocklist() (async)
+6. Le banCount est PRESERVE pour reference future
+```
+
+**E. Expiration Automatique**
+
+```go
+// Appele periodiquement par ProcessExpiredBans()
+
+Processus:
+1. Requete: expires_at < now() AND status = 'active'
+2. Pour chaque ban expire:
+   - Status → "expired"
+   - Historique avec action "expire", source "system"
+   - Sync Sophos: RemoveIPFromBlocklist()
+3. Retourne nombre de bans traites
+```
+
+#### 14.2.5 Statuts de Ban
+
+| Statut | Description | ExpiresAt | Transition |
+|--------|-------------|-----------|------------|
+| `active` | Ban temporaire en cours | Date future | → expired (auto) ou → permanent (manuel) |
+| `permanent` | Ban definitif | `nil` | → expired (unban manuel uniquement) |
+| `expired` | Ban termine | Date passee | → active (si nouvelle violation) |
+
+#### 14.2.6 Sources de Ban
+
+| Source | Origine | PerformedBy | Description |
+|--------|---------|-------------|-------------|
+| `manual` | API/Interface | Nom utilisateur | Ban manuel par operateur |
+| `detect2ban` | Detect2Ban Engine | "detect2ban" | Detection automatique |
+| `threat_intel` | Threat Intelligence | "system" | Score critique auto |
+| `xgs_import` | Sync Sophos | "xgs_sync" | Import depuis XGS |
+| `system` | Processus systeme | "system" | Expirations automatiques |
+
+#### 14.2.7 Integration Sophos XGS
+
+**Communication:** API XML sur port 4444 (HTTPS)
+
+**Groupe de Blocage:**
+- Nom: `VIGILANCE_X_BLOCKLIST`
+- Cree automatiquement au demarrage
+- Gere exclusivement par VIGILANCE X
+
+**Ajout d'IP au Blocklist:**
+
+```xml
+<Request>
+  <Login>
+    <Username>admin</Username>
+    <Password>****</Password>
+  </Login>
+  <Set operation="add">
+    <IPHost>
+      <Name>bannedIP_192.168.1.100</Name>
+      <IPFamily>IPv4</IPFamily>
+      <HostType>IP</HostType>
+      <IPAddress>192.168.1.100</IPAddress>
+      <HostGroupList>
+        <HostGroup>VIGILANCE_X_BLOCKLIST</HostGroup>
+      </HostGroupList>
+    </IPHost>
+  </Set>
+</Request>
+```
+
+**Synchronisation Bidirectionnelle:**
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                 SYNC BIDIRECTIONNELLE                       │
+├────────────────────────────────────────────────────────────┤
+│                                                             │
+│  PHASE 1: PUSH (VIGILANCE X → Sophos)                      │
+│  ─────────────────────────────────────                      │
+│  1. Requete: bans WHERE synced_xgs = false                 │
+│  2. Pour chaque ban non synchronise:                       │
+│     - AddIPToBlocklist(ip, reason)                         │
+│     - UpdateSyncStatus(ip, true)                           │
+│  3. Compteur: synced, failed, errors                       │
+│                                                             │
+│  PHASE 2: IMPORT (Sophos → VIGILANCE X)                    │
+│  ─────────────────────────────────────                      │
+│  1. GetBlocklistIPs() depuis Sophos                        │
+│  2. Pour chaque IP du Sophos:                              │
+│     - Si existe localement: marquer synced                 │
+│     - Si n'existe pas ET pas whiteliste:                   │
+│       - Creer ban (status=permanent, source=xgs_import)    │
+│       - Enregistrer historique                             │
+│  3. Compteur: imported                                     │
+│                                                             │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Sync Asynchrone (Ban Individuel):**
+
+```go
+func (s *Service) syncBanToXGS(ban *BanStatus) {
+    // Goroutine avec timeout 30s
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+
+    // Ajoute au blocklist Sophos
+    if err := s.sophos.AddIPToBlocklist(ban.IP, ban.Reason); err != nil {
+        log.Printf("[ERROR] Sync XGS failed: %v", err)
+        return  // Non-bloquant, reessai au prochain sync global
+    }
+
+    // Marque comme synchronise
+    s.repo.UpdateSyncStatus(ctx, ban.IP, true)
+}
+```
+
+#### 14.2.8 Mecanisme de Whitelist
+
+**Principe:** Les IPs whitelistees sont **protegees contre tout ban**, quelque soit la source.
+
+**Structure Whitelist:**
+
+```go
+type WhitelistEntry struct {
+    IP          string    // Adresse IPv4
+    CIDRMask    uint8     // Support CIDR (ex: /24), defaut 32
+    Reason      string    // Justification
+    AddedBy     string    // Qui a ajoute
+    CreatedAt   time.Time
+    IsActive    bool      // Soft delete support
+}
+```
+
+**Points de Verification:**
+
+1. **Lors du Ban:** Avant tout ban, verification whitelist
+2. **Lors du Sync XGS:** IPs whitelistees ignorees lors de l'import
+3. **Detect2Ban:** Scenarios verifient whitelist avant action
+
+**Ajout a la Whitelist:**
+
+```go
+func (s *Service) AddToWhitelist(ip, reason, addedBy string) error {
+    // 1. Si IP actuellement bannie, debannir d'abord
+    ban, err := s.repo.GetBanByIP(ctx, ip)
+    if err == nil && (ban.Status == "active" || ban.Status == "permanent") {
+        s.UnbanIP(ctx, &UnbanRequest{
+            IP:          ip,
+            Reason:      "Added to whitelist",
+            PerformedBy: addedBy,
+        })
+    }
+
+    // 2. Ajouter a la whitelist
+    return s.repo.AddToWhitelist(ctx, &WhitelistEntry{
+        IP:        ip,
+        Reason:    reason,
+        AddedBy:   addedBy,
+        CreatedAt: time.Now(),
+        IsActive:  true,
+    })
+}
+```
+
+#### 14.2.9 Historique et Audit Trail
+
+**Table:** `ban_history` (retention 365 jours)
+
+**Structure:**
+
+```sql
+CREATE TABLE ban_history (
+    id UUID DEFAULT generateUUIDv4(),
+    timestamp DateTime DEFAULT now(),
+    ip IPv4,
+    action LowCardinality(String),  -- ban, unban, extend, permanent, expire
+    previous_status String,
+    new_status String,
+    duration_hours Nullable(UInt32),
+    reason String,
+    source String,                   -- manual, detect2ban, system, xgs_import
+    performed_by String,
+    synced_xgs UInt8,
+    metadata String                  -- JSON supplementaire
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (ip, timestamp)
+TTL timestamp + INTERVAL 365 DAY;
+```
+
+**Actions Tracees:**
+
+| Action | Declencheur | Donnees Enregistrees |
+|--------|-------------|---------------------|
+| `ban` | Nouveau ban | IP, raison, duree, source, operateur |
+| `unban` | Suppression manuelle | IP, raison, operateur |
+| `extend` | Extension duree | IP, nouvelle duree, raison |
+| `permanent` | Escalade permanent | IP, operateur |
+| `expire` | Expiration auto | IP, source="system" |
+
+**Exemple Timeline:**
+
+```
+2026-01-05 10:00  BAN       1h      detect2ban  "WAF: 15 attacks"
+2026-01-05 11:00  EXPIRE    -       system      "Ban expired"
+2026-01-06 14:30  BAN       4h      detect2ban  "WAF: 8 attacks (recidivist)"
+2026-01-06 15:00  EXTEND    +24h    admin       "Extended for investigation"
+2026-01-07 15:00  EXPIRE    -       system      "Ban expired"
+2026-01-08 09:00  BAN       24h     manual      "Confirmed malicious"
+2026-01-08 10:00  PERMANENT -       admin       "Escalated to permanent"
+```
+
+#### 14.2.10 Detection de Recidivistes
+
+**Definition:** Une IP est **recidiviste** a partir de `banCount >= 4`
+
+**Methode de Detection:**
+
+```go
+func (b *BanStatus) IsRecidivist() bool {
+    return b.BanCount >= RecidivismThreshold  // 4
+}
+```
+
+**Comportement Automatique:**
+- Au 4eme ban, le systeme applique automatiquement un ban permanent
+- Aucune intervention manuelle requise
+- Le `banCount` n'est JAMAIS remis a zero (meme apres unban)
+
+**Statistiques Recidivistes:**
+
+```sql
+-- Compte les IPs bannies 3+ fois
+SELECT count() FROM ip_ban_status FINAL
+WHERE ban_count >= 3
+```
+
+#### 14.2.11 Endpoints API ActiveResponse
+
+**Gestion des Bans:**
+
+| Methode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/api/v1/bans/` | Liste tous les bans actifs/permanents |
+| GET | `/api/v1/bans/stats` | Statistiques globales |
+| GET | `/api/v1/bans/xgs-status` | Statut sync Sophos |
+| POST | `/api/v1/bans/` | Creer un nouveau ban |
+| POST | `/api/v1/bans/sync` | Synchroniser avec Sophos |
+| GET | `/api/v1/bans/{ip}` | Detail d'un ban specifique |
+| DELETE | `/api/v1/bans/{ip}` | Supprimer un ban (unban) |
+| POST | `/api/v1/bans/{ip}/extend` | Prolonger un ban |
+| POST | `/api/v1/bans/{ip}/permanent` | Rendre permanent |
+| GET | `/api/v1/bans/{ip}/history` | Historique complet |
+
+**Gestion de la Whitelist:**
+
+| Methode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/api/v1/whitelist/` | Liste la whitelist |
+| POST | `/api/v1/whitelist/` | Ajouter une IP |
+| DELETE | `/api/v1/whitelist/{ip}` | Retirer une IP |
+
+#### 14.2.12 Statistiques de Ban
+
+```go
+type BanStats struct {
+    TotalActiveBans    uint64  // status IN ('active', 'permanent')
+    TotalPermanentBans uint64  // status = 'permanent'
+    TotalExpiredBans   uint64  // status = 'expired'
+    BansLast24h        uint64  // Nouveaux bans en 24h
+    UnbansLast24h      uint64  // Unbans en 24h
+    RecidivistIPs      uint64  // IPs bannies 3+ fois
+    PendingSync        uint64  // En attente sync XGS
+}
+```
+
+#### 14.2.13 Integration Detect2Ban
+
+Le module Detect2Ban analyse les evenements en continu et declenche des bans automatiques selon des scenarios YAML.
+
+**Scenarios Actifs:**
+
+1. **brute_force.yaml**
+   - Detecte 10+ echecs auth en 10 minutes
+   - Verifie whitelist avant ban
+   - Applique durees progressives
+
+2. **waf_attacks.yaml**
+   - Detecte 5+ drops WAF en 5 minutes
+   - Verifie threat intel (score min 50)
+   - Verifie whitelist
+   - Applique durees progressives
+
+**Flux Detect2Ban:**
+
+```
+Detection Evenement
+│
+├─ Evaluation Scenario (conditions YAML)
+│
+├─ Match trouve → handleMatch()
+│      │
+│      ├─ Verification ban existant (skip si deja banni)
+│      │
+│      ├─ Verification threat intel (optionnel)
+│      │
+│      ├─ Verification whitelist
+│      │
+│      └─ executeBan()
+│            │
+│            └─ BanIP() avec:
+│                 - PerformedBy: "detect2ban"
+│                 - Reason: "Auto-ban: {scenario} ({count} events)"
+│                 - Durees progressives
+│
+└─ Cooldown (evite doubles detections)
+```
+
+#### 14.2.14 Diagramme Complet du Systeme
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        ACTIVERESPONSE FLOW                                │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│    Sources de Ban                      Decisions                          │
+│    ──────────────                      ─────────                          │
+│                                                                           │
+│    ┌──────────────┐                                                       │
+│    │  Manual API  │─────┐                                                 │
+│    └──────────────┘     │                                                 │
+│                         │                                                 │
+│    ┌──────────────┐     │         ┌────────────────────┐                 │
+│    │  Detect2Ban  │─────┼────────>│   WHITELIST CHECK  │                 │
+│    │  (Auto)      │     │         │                    │                 │
+│    └──────────────┘     │         │  Whitelisted? ─────┼──> REJET        │
+│                         │         │       │            │                 │
+│    ┌──────────────┐     │         │       ▼ Non       │                 │
+│    │ Threat Intel │─────┤         │  ┌────────────┐   │                 │
+│    │ (Score >=80) │     │         │  │ LOOKUP BAN │   │                 │
+│    └──────────────┘     │         │  └─────┬──────┘   │                 │
+│                         │         │        │          │                 │
+│    ┌──────────────┐     │         │        ▼          │                 │
+│    │  XGS Import  │─────┘         │  ┌────────────┐   │                 │
+│    └──────────────┘               │  │CALC DUREE  │   │                 │
+│                                   │  │Progressive │   │                 │
+│                                   │  └─────┬──────┘   │                 │
+│                                   └────────┼──────────┘                 │
+│                                            │                             │
+│                                            ▼                             │
+│    ┌─────────────────────────────────────────────────────────────────┐  │
+│    │                      PERSISTANCE                                 │  │
+│    │                                                                  │  │
+│    │   ip_ban_status          ban_history           ip_whitelist     │  │
+│    │   ──────────────         ───────────           ────────────     │  │
+│    │   - IP                   - Timestamp           - IP             │  │
+│    │   - Status               - Action              - Reason         │  │
+│    │   - BanCount             - Reason              - AddedBy        │  │
+│    │   - ExpiresAt            - Source              - CreatedAt      │  │
+│    │   - SyncedXGS            - PerformedBy         - IsActive       │  │
+│    │                                                                  │  │
+│    └────────────────────────────┬────────────────────────────────────┘  │
+│                                 │                                        │
+│                                 ▼                                        │
+│    ┌─────────────────────────────────────────────────────────────────┐  │
+│    │                 SOPHOS XGS SYNCHRONIZATION                       │  │
+│    │                                                                  │  │
+│    │   ┌────────────────┐              ┌────────────────┐            │  │
+│    │   │ AddIPToBlock() │              │ RemoveIPFrom() │            │  │
+│    │   │ (sur ban)      │              │ (sur unban)    │            │  │
+│    │   └───────┬────────┘              └───────┬────────┘            │  │
+│    │           │                               │                      │  │
+│    │           └───────────────┬───────────────┘                      │  │
+│    │                           │                                      │  │
+│    │                           ▼                                      │  │
+│    │              ┌────────────────────────┐                         │  │
+│    │              │  SOPHOS XGS FIREWALL   │                         │  │
+│    │              │  VIGILANCE_X_BLOCKLIST │                         │  │
+│    │              └────────────────────────┘                         │  │
+│    │                                                                  │  │
+│    └─────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│    Processus Background                                                  │
+│    ────────────────────                                                  │
+│                                                                          │
+│    ┌──────────────────┐      ┌──────────────────┐                       │
+│    │ ProcessExpired() │      │ SyncToXGS()      │                       │
+│    │ (Horaire)        │      │ (Manuel/Planifie)│                       │
+│    └──────────────────┘      └──────────────────┘                       │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
