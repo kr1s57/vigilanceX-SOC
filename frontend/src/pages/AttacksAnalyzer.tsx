@@ -32,6 +32,7 @@ import {
 } from 'recharts'
 import { modsecApi, statsApi, bansApi } from '@/lib/api'
 import { StatCard } from '@/components/dashboard/StatCard'
+import { IPThreatModal } from '@/components/IPThreatModal'
 import { formatNumber, getCountryFlag, cn, formatDateTime } from '@/lib/utils'
 import type { TopAttacker, BanStatus } from '@/types'
 
@@ -90,11 +91,13 @@ function AttackersModal({
   onClose,
   attackers,
   period,
+  onIPLookup,
 }: {
   isOpen: boolean
   onClose: () => void
   attackers: TopAttacker[]
   period: string
+  onIPLookup: (ip: string) => void
 }) {
   const [bans, setBans] = useState<BanStatus[]>([])
   const [loadingBans, setLoadingBans] = useState(false)
@@ -240,7 +243,8 @@ function AttackersModal({
                   return (
                     <tr
                       key={attacker.ip}
-                      className="border-b last:border-0 hover:bg-muted/50 transition-colors"
+                      className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => onIPLookup(attacker.ip)}
                     >
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
@@ -362,6 +366,13 @@ export function AttacksAnalyzer() {
   const [topAttackers, setTopAttackers] = useState<TopAttacker[]>([])
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set())
   const [showAttackersModal, setShowAttackersModal] = useState(false)
+  const [selectedIP, setSelectedIP] = useState<string | null>(null)
+  const [showThreatModal, setShowThreatModal] = useState(false)
+
+  const handleIPLookup = (ip: string) => {
+    setSelectedIP(ip)
+    setShowThreatModal(true)
+  }
 
   useEffect(() => {
     async function fetchData() {
@@ -705,7 +716,8 @@ export function AttacksAnalyzer() {
             {topAttackers.slice(0, 10).map((attacker, index) => (
               <div
                 key={attacker.ip}
-                className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                onClick={() => handleIPLookup(attacker.ip)}
               >
                 <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
                   {index + 1}
@@ -830,6 +842,17 @@ export function AttacksAnalyzer() {
         onClose={() => setShowAttackersModal(false)}
         attackers={topAttackers}
         period={period}
+        onIPLookup={handleIPLookup}
+      />
+
+      {/* IP Threat Modal */}
+      <IPThreatModal
+        ip={selectedIP}
+        isOpen={showThreatModal}
+        onClose={() => {
+          setShowThreatModal(false)
+          setSelectedIP(null)
+        }}
       />
     </div>
   )

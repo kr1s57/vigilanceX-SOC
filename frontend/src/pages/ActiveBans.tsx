@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Ban, Plus, RefreshCw, Clock, AlertCircle, ShieldCheck, X, Trash2 } from 'lucide-react'
 import { bansApi, whitelistApi } from '@/lib/api'
+import { IPThreatModal } from '@/components/IPThreatModal'
 import { formatDateTime } from '@/lib/utils'
 import type { BanStatus, BanStats } from '@/types'
 
@@ -20,6 +21,13 @@ export function ActiveBans() {
   const [showAddBan, setShowAddBan] = useState(false)
   const [showAddWhitelist, setShowAddWhitelist] = useState(false)
   const [whitelist, setWhitelist] = useState<WhitelistEntry[]>([])
+  const [selectedIP, setSelectedIP] = useState<string | null>(null)
+  const [showThreatModal, setShowThreatModal] = useState(false)
+
+  const handleIPLookup = (ip: string) => {
+    setSelectedIP(ip)
+    setShowThreatModal(true)
+  }
 
   // Form states
   const [banIP, setBanIP] = useState('')
@@ -237,7 +245,11 @@ export function ActiveBans() {
                 </tr>
               ) : (
                 bans.map((ban) => (
-                  <tr key={ban.ip}>
+                  <tr
+                    key={ban.ip}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => handleIPLookup(ban.ip)}
+                  >
                     <td>
                       <div className="flex items-center gap-2">
                         <span className="font-mono">{ban.ip}</span>
@@ -294,13 +306,19 @@ export function ActiveBans() {
                     <td>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleUnban(ban.ip)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleUnban(ban.ip)
+                          }}
                           className="px-2 py-1 text-xs bg-muted hover:bg-destructive hover:text-destructive-foreground rounded transition-colors"
                         >
                           Unban
                         </button>
                         {ban.status !== 'permanent' && (
-                          <button className="px-2 py-1 text-xs bg-muted hover:bg-muted/80 rounded transition-colors">
+                          <button
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-2 py-1 text-xs bg-muted hover:bg-muted/80 rounded transition-colors"
+                          >
                             Extend
                           </button>
                         )}
@@ -484,6 +502,16 @@ export function ActiveBans() {
           </div>
         </div>
       )}
+
+      {/* IP Threat Modal */}
+      <IPThreatModal
+        ip={selectedIP}
+        isOpen={showThreatModal}
+        onClose={() => {
+          setShowThreatModal(false)
+          setSelectedIP(null)
+        }}
+      />
     </div>
   )
 }
