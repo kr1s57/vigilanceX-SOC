@@ -6,9 +6,86 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ## [2.3.0] - 2026-01-07
 
-### Frontend Integration - Risk Scoring UI
+### UI Improvements & Plugin Configuration Management
 
-Intégration complète de l'interface utilisateur pour le système de scoring combiné avec freshness.
+Améliorations de l'interface utilisateur et ajout de la gestion des plugins avec test de connexion.
+
+---
+
+### ⚙️ Plugin Configuration Management
+
+Nouvelle fonctionnalité permettant de configurer et tester les intégrations directement depuis l'interface.
+
+#### Fonctionnalités
+| Feature | Description |
+|---------|-------------|
+| **Edit Button** | Bouton crayon sur chaque intégration dans Settings |
+| **Configuration Modal** | Formulaire de configuration avec champs appropriés |
+| **Connection Testing** | Test automatique de la connexion lors de la sauvegarde |
+| **Visual Feedback** | Indicateur vert (Connected) ou rouge (Failed) |
+| **Save & Restart** | Sauvegarde et rechargement automatique |
+
+#### Plugins Configurables
+| Plugin | Champs |
+|--------|--------|
+| **Sophos XGS - API** | Host, Port, Username, Password |
+| **Sophos XGS - SSH** | Host, Port, Username, SSH Key Path |
+| **AbuseIPDB** | API Key |
+| **VirusTotal** | API Key |
+| **AlienVault OTX** | API Key |
+| **GreyNoise** | API Key |
+| **Criminal IP** | API Key |
+| **Pulsedive** | API Key |
+
+#### Tests de Connexion
+| Type | Méthode de Test |
+|------|-----------------|
+| Sophos API | Test TCP vers le port configuré |
+| Sophos SSH | Connexion SSH avec clé privée |
+| Threat Intel | Validation du format de clé API |
+
+#### API Endpoints
+| Endpoint | Méthode | Description |
+|----------|---------|-------------|
+| `/config/test` | POST | Tester une configuration |
+| `/config/save` | POST | Sauvegarder et tester |
+| `/config` | GET | Récupérer les configurations (masquées) |
+
+---
+
+### 🔄 Active Bans - Simplification
+
+Suppression du module Whitelist de la page Active Bans (page dédiée existante).
+
+#### Changements
+- Suppression de la section "Whitelist" de Active Bans
+- Suppression du badge "Whitelisted" sur les IPs
+- La gestion des whitelists se fait désormais via la page dédiée `/whitelist`
+
+---
+
+### 🌍 High Risk Countries - Extension
+
+Extension de la liste des pays à haut risque de 5 à 10 pays avec affichage du code pays.
+
+#### Nouveaux Pays
+| Code | Pays | Risk Level | Base Score |
+|------|------|------------|------------|
+| KP | North Korea | Critical | 90 |
+| IR | Iran | Critical | 85 |
+| RU | Russia | High | 70 |
+| CN | China | High | 65 |
+| BY | Belarus | High | 60 |
+| VE | Venezuela | Medium | 50 |
+| SY | Syria | Medium | 50 |
+| CU | Cuba | Medium | 45 |
+| NG | Nigeria | Medium | 40 |
+| PK | Pakistan | Medium | 35 |
+
+#### Améliorations UI
+- Affichage du country code entre parenthèses : `Russia (RU)`
+- Message explicatif : "Reference list - create rules to customize behavior"
+- Scroll automatique pour les 10 entrées
 
 ---
 
@@ -33,17 +110,6 @@ Nouvelle page dédiée à l'évaluation des risques IP avec scoring multi-facteu
 | Decay factor | 7 jours | Half-life du score |
 | Floor | 10% | Score minimum après decay |
 
-#### Fonctionnalités UI
-| Section | Description |
-|---------|-------------|
-| **Scoring Weights** | Visualisation graphique des poids |
-| **Freshness Algorithm** | Explication du decay temporel |
-| **IP Risk Assessment** | Formulaire d'évaluation avec résultats détaillés |
-| **Score Components** | Barres de progression par composant |
-| **Freshness Status** | État recent/normal/stale avec multiplicateur |
-| **Ban Recommendation** | Suggestion avec niveau de confiance |
-| **Formula** | Explication mathématique du calcul |
-
 #### Risk Levels
 | Niveau | Score | Couleur |
 |--------|-------|---------|
@@ -53,21 +119,30 @@ Nouvelle page dédiée à l'évaluation des risques IP avec scoring multi-facteu
 | Low | ≥ 20 | Bleu |
 | None | < 20 | Vert |
 
-#### Navigation
-- Nouvelle entrée "Risk Scoring" dans la sidebar avec icône Activity
-- Route `/scoring` accessible
+---
 
-#### API Endpoint
-- `GET /api/v1/threats/risk/{ip}` - Évaluation combinée avec freshness
+### 📝 Version Update
 
-#### Fichiers Ajoutés/Modifiés
-| Fichier | Changement |
-|---------|------------|
-| `frontend/src/types/index.ts` | Types RiskAssessment, ScoreComponents, FreshnessInfo |
-| `frontend/src/lib/api.ts` | Méthode `threatsApi.riskAssessment()` |
-| `frontend/src/pages/RiskScoring.tsx` | Page complète |
-| `frontend/src/App.tsx` | Route `/scoring` |
-| `frontend/src/components/layout/Sidebar.tsx` | Navigation |
+- Version affichée dans Settings : `v2.3.0`
+
+---
+
+### Fichiers Créés/Modifiés
+
+#### Nouveaux Fichiers
+| Fichier | Description |
+|---------|-------------|
+| `backend/internal/adapter/controller/http/handlers/config.go` | Handler configuration avec test de connexion |
+
+#### Fichiers Modifiés
+| Fichier | Modifications |
+|---------|---------------|
+| `backend/cmd/api/main.go` | Routes `/api/v1/config/*` |
+| `backend/internal/entity/geoblocking.go` | 10 pays high-risk |
+| `frontend/src/lib/api.ts` | Module `configApi` |
+| `frontend/src/pages/Settings.tsx` | Plugin editor modal, version v2.3.0 |
+| `frontend/src/pages/ActiveBans.tsx` | Suppression section whitelist |
+| `frontend/src/pages/Geoblocking.tsx` | Country codes, message explicatif |
 
 ---
 
