@@ -580,3 +580,72 @@ export interface WhitelistStats {
   total: number
   by_type: Record<string, number>
 }
+
+// Freshness Score & Combined Risk Assessment types (v2.0)
+export interface ScoreComponents {
+  threat_intel: number
+  threat_intel_weight: number
+  blocklist: number
+  blocklist_weight: number
+  freshness: number
+  freshness_weight: number
+  geolocation: number
+  geolocation_weight: number
+  whitelist_reduction: number
+}
+
+export interface FreshnessInfo {
+  days_since_last_seen: number
+  is_recent: boolean
+  is_stale: boolean
+  multiplier: number
+  reason: string
+}
+
+export interface RiskAssessment {
+  ip: string
+  threat_score: number
+  threat_level: string
+  threat_sources: number
+  is_tor: boolean
+  is_vpn: boolean
+  is_proxy: boolean
+  is_benign: boolean
+  in_ipsum_lists: number
+  tags: string[]
+  country: string
+  in_blocklists: boolean
+  blocklist_count: number
+  blocklist_sources: string[] | null
+  blocklist_categories: string[] | null
+  blocklist_max_confidence: number
+  blocklist_last_seen?: string
+  whitelist_status?: {
+    is_whitelisted: boolean
+    type: string
+    score_modifier: number
+    allow_auto_ban: boolean
+  }
+  combined_score: number
+  combined_risk: string
+  recommend_ban: boolean
+  scoring_confidence: number
+  score_components: ScoreComponents
+  freshness?: FreshnessInfo
+}
+
+export interface ScoringWeights {
+  threat_intel: number
+  blocklist: number
+  freshness: number
+  geolocation: number
+}
+
+export interface FreshnessConfig {
+  decay_factor: number
+  min_multiplier: number
+  max_multiplier: number
+  recent_activity_boost_days: number
+  recent_activity_boost: number
+  stale_threshold_days: number
+}

@@ -8,6 +8,7 @@ import {
   Network,
   Ban,
   Globe,
+  Activity,
   FileText,
   Settings,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ const navigation = [
   { name: 'Active Bans', href: '/bans', icon: Ban },
   { name: 'Geoblocking', href: '/geoblocking', icon: Globe },
   { name: 'Whitelist', href: '/whitelist', icon: ShieldCheck },
+  { name: 'Risk Scoring', href: '/scoring', icon: Activity },
   { name: 'Reports', href: '/reports', icon: FileText },
 ]
 

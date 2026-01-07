@@ -32,7 +32,8 @@ import type {
   WhitelistEntry,
   WhitelistRequest,
   WhitelistCheckResult,
-  WhitelistStats
+  WhitelistStats,
+  RiskAssessment
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -240,6 +241,12 @@ export const threatsApi = {
 
   clearCache: async () => {
     await api.post('/threats/cache/clear')
+  },
+
+  // Combined risk assessment with freshness scoring (v2.0)
+  riskAssessment: async (ip: string) => {
+    const response = await api.get<RiskAssessment>(`/threats/risk/${ip}`)
+    return response.data
   },
 }
 

@@ -8,6 +8,7 @@ import { VpnNetwork } from '@/pages/VpnNetwork'
 import { ActiveBans } from '@/pages/ActiveBans'
 import { Geoblocking } from '@/pages/Geoblocking'
 import { SoftWhitelist } from '@/pages/SoftWhitelist'
+import { RiskScoring } from '@/pages/RiskScoring'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 
@@ -23,6 +24,7 @@ function App() {
         <Route path="/bans" element={<ActiveBans />} />
         <Route path="/geoblocking" element={<Geoblocking />} />
         <Route path="/whitelist" element={<SoftWhitelist />} />
+        <Route path="/scoring" element={<RiskScoring />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
