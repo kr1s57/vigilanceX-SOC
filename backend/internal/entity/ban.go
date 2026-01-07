@@ -48,7 +48,7 @@ type WhitelistEntry struct {
 	Type          string     `json:"type" ch:"type"` // hard, soft, monitor
 	Reason        string     `json:"reason" ch:"reason"`
 	Description   string     `json:"description" ch:"description"`
-	ScoreModifier int        `json:"score_modifier" ch:"score_modifier"` // % reduction (0-100) for soft
+	ScoreModifier int32      `json:"score_modifier" ch:"score_modifier"` // % reduction (0-100) for soft
 	AlertOnly     bool       `json:"alert_only" ch:"alert_only"`         // Alert but don't auto-ban
 	ExpiresAt     *time.Time `json:"expires_at" ch:"expires_at"`         // TTL for temporary whitelist
 	Tags          []string   `json:"tags" ch:"tags"`                     // CDN, partner, pentest, etc.
@@ -73,7 +73,7 @@ type WhitelistRequest struct {
 	Type          string   `json:"type" validate:"required"` // hard, soft, monitor
 	Reason        string   `json:"reason" validate:"required"`
 	Description   string   `json:"description"`
-	ScoreModifier int      `json:"score_modifier"` // 0-100, default 50 for soft
+	ScoreModifier int32    `json:"score_modifier"` // 0-100, default 50 for soft
 	AlertOnly     bool     `json:"alert_only"`     // Default true for soft
 	DurationDays  *int     `json:"duration_days"`  // nil = permanent
 	Tags          []string `json:"tags"`
@@ -85,7 +85,7 @@ type WhitelistCheckResult struct {
 	IsWhitelisted bool            `json:"is_whitelisted"`
 	Entry         *WhitelistEntry `json:"entry,omitempty"`
 	EffectiveType string          `json:"effective_type"` // none, hard, soft, monitor
-	ScoreModifier int             `json:"score_modifier"` // % to reduce score
+	ScoreModifier int32           `json:"score_modifier"` // % to reduce score
 	AllowAutoBan  bool            `json:"allow_auto_ban"` // Can auto-ban proceed?
 	AlertRequired bool            `json:"alert_required"` // Should generate alert?
 }
@@ -211,7 +211,7 @@ func (w *WhitelistEntry) IsExpired() bool {
 }
 
 // GetEffectiveScoreModifier returns the score modifier percentage
-func (w *WhitelistEntry) GetEffectiveScoreModifier() int {
+func (w *WhitelistEntry) GetEffectiveScoreModifier() int32 {
 	switch w.Type {
 	case WhitelistTypeHard:
 		return 100 // 100% reduction = score becomes 0

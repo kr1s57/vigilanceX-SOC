@@ -28,7 +28,11 @@ import type {
   GeoLocation,
   GeoCheckResult,
   GeoBlockStats,
-  HighRiskCountry
+  HighRiskCountry,
+  WhitelistEntry,
+  WhitelistRequest,
+  WhitelistCheckResult,
+  WhitelistStats
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -475,6 +479,46 @@ export const geoblockingApi = {
   // Cache
   refreshCache: async () => {
     const response = await api.post<{ message: string }>('/geoblocking/cache/refresh')
+    return response.data
+  },
+}
+
+// Soft Whitelist API (v2.0)
+export const softWhitelistApi = {
+  // List all whitelisted IPs (optional filter by type)
+  list: async (type?: 'hard' | 'soft' | 'monitor') => {
+    const params = type ? { type } : {}
+    const response = await api.get<{ data: WhitelistEntry[] }>('/whitelist', { params })
+    return response.data
+  },
+
+  // Get whitelist statistics by type
+  stats: async () => {
+    const response = await api.get<WhitelistStats>('/whitelist/stats')
+    return response.data
+  },
+
+  // Check if an IP is whitelisted (detailed info)
+  check: async (ip: string) => {
+    const response = await api.get<WhitelistCheckResult>(`/whitelist/check/${ip}`)
+    return response.data
+  },
+
+  // Add IP to whitelist
+  add: async (request: WhitelistRequest) => {
+    const response = await api.post<{ message: string; ip: string; type: string }>('/whitelist', request)
+    return response.data
+  },
+
+  // Update whitelist entry
+  update: async (ip: string, entry: Partial<WhitelistEntry>) => {
+    const response = await api.put<{ message: string; ip: string }>(`/whitelist/${ip}`, entry)
+    return response.data
+  },
+
+  // Remove from whitelist
+  remove: async (ip: string) => {
+    const response = await api.delete<{ message: string; ip: string }>(`/whitelist/${ip}`)
     return response.data
   },
 }

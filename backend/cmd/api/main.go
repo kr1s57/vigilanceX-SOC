@@ -274,12 +274,14 @@ func main() {
 				r.Get("/{ip}/history", bansHandler.History)
 			})
 
-			// Whitelist
+			// Whitelist (v2.0 with soft whitelist support)
 			r.Route("/whitelist", func(r chi.Router) {
 				r.Get("/", bansHandler.ListWhitelist)
+				r.Get("/stats", bansHandler.WhitelistStats)
+				r.Get("/check/{ip}", bansHandler.CheckWhitelist)
 				r.Post("/", bansHandler.AddWhitelist)
+				r.Put("/{ip}", bansHandler.UpdateWhitelist)
 				r.Delete("/{ip}", bansHandler.RemoveWhitelist)
-				r.Get("/check/{ip}", handlers.NotImplemented)
 			})
 
 			// Blocklists (v1.6 - Feed Ingester)

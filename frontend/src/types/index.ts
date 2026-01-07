@@ -536,3 +536,47 @@ export interface HighRiskCountry {
   base_score: number
   reason: string
 }
+
+// Soft Whitelist types (v2.0)
+export interface WhitelistEntry {
+  ip: string
+  cidr_mask: number
+  type: 'hard' | 'soft' | 'monitor'
+  reason: string
+  description: string
+  score_modifier: number
+  alert_only: boolean
+  expires_at: string | null
+  tags: string[]
+  added_by: string
+  created_at: string
+  created_by: string
+  is_active: boolean
+}
+
+export interface WhitelistRequest {
+  ip: string
+  cidr_mask?: number
+  type: 'hard' | 'soft' | 'monitor'
+  reason: string
+  description?: string
+  score_modifier?: number
+  alert_only?: boolean
+  duration_days?: number | null
+  tags?: string[]
+  added_by?: string
+}
+
+export interface WhitelistCheckResult {
+  is_whitelisted: boolean
+  entry?: WhitelistEntry
+  effective_type: 'none' | 'hard' | 'soft' | 'monitor'
+  score_modifier: number
+  allow_auto_ban: boolean
+  alert_required: boolean
+}
+
+export interface WhitelistStats {
+  total: number
+  by_type: Record<string, number>
+}

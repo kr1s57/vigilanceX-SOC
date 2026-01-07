@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
   Shield,
+  ShieldCheck,
   Swords,
   AlertTriangle,
   Network,
@@ -20,6 +21,7 @@ const navigation = [
   { name: 'VPN & Network', href: '/vpn', icon: Network },
   { name: 'Active Bans', href: '/bans', icon: Ban },
   { name: 'Geoblocking', href: '/geoblocking', icon: Globe },
+  { name: 'Whitelist', href: '/whitelist', icon: ShieldCheck },
   { name: 'Reports', href: '/reports', icon: FileText },
 ]
 

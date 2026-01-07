@@ -216,7 +216,7 @@ type CombinedScoreInput struct {
 	LastSeen          time.Time `json:"last_seen"`
 	GeoScore          int       `json:"geo_score"` // 0-100 based on country risk
 	IsWhitelisted     bool      `json:"is_whitelisted"`
-	WhitelistModifier int       `json:"whitelist_modifier"` // % reduction for soft whitelist
+	WhitelistModifier int32     `json:"whitelist_modifier"` // % reduction for soft whitelist
 }
 
 // CombinedScoreResult contains the final combined risk assessment
