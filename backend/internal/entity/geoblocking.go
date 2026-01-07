@@ -10,7 +10,7 @@ type GeoBlockRule struct {
 	RuleType      string    `json:"rule_type" ch:"rule_type"`           // country_block, country_watch, asn_block, asn_watch
 	Target        string    `json:"target" ch:"target"`                 // Country code (FR, US, RU) or ASN number
 	Action        string    `json:"action" ch:"action"`                 // block, watch, boost
-	ScoreModifier int       `json:"score_modifier" ch:"score_modifier"` // Points to add (positive) or subtract (negative)
+	ScoreModifier int32     `json:"score_modifier" ch:"score_modifier"` // Points to add (positive) or subtract (negative)
 	Reason        string    `json:"reason" ch:"reason"`
 	IsActive      bool      `json:"is_active" ch:"is_active"`
 	CreatedBy     string    `json:"created_by" ch:"created_by"`
@@ -56,7 +56,7 @@ type GeoBlockRequest struct {
 	RuleType      string `json:"rule_type" validate:"required"`
 	Target        string `json:"target" validate:"required"` // Country code or ASN
 	Action        string `json:"action" validate:"required"`
-	ScoreModifier int    `json:"score_modifier"`
+	ScoreModifier int32  `json:"score_modifier"`
 	Reason        string `json:"reason"`
 	CreatedBy     string `json:"created_by"`
 }
@@ -66,7 +66,7 @@ type GeoCheckResult struct {
 	IP              string         `json:"ip"`
 	GeoLocation     *GeoLocation   `json:"geo_location,omitempty"`
 	MatchedRules    []GeoBlockRule `json:"matched_rules"`
-	TotalScoreBoost int            `json:"total_score_boost"`
+	TotalScoreBoost int32          `json:"total_score_boost"`
 	ShouldBlock     bool           `json:"should_block"`
 	BlockReason     string         `json:"block_reason,omitempty"`
 	RiskFactors     []string       `json:"risk_factors"`
@@ -126,8 +126,8 @@ func IsCountryBlocked(countryCode string, rules []GeoBlockRule) bool {
 }
 
 // GetCountryScoreModifier returns the score modifier for a country
-func GetCountryScoreModifier(countryCode string, rules []GeoBlockRule) int {
-	modifier := 0
+func GetCountryScoreModifier(countryCode string, rules []GeoBlockRule) int32 {
+	var modifier int32 = 0
 	for _, rule := range rules {
 		if rule.IsActive && rule.Target == countryCode {
 			modifier += rule.ScoreModifier

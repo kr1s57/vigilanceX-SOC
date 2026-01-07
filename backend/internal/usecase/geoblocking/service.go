@@ -235,11 +235,11 @@ func (s *Service) CheckIP(ctx context.Context, ip string) (*entity.GeoCheckResul
 }
 
 // GetGeoScoreForCountry returns a base risk score for a country
-func (s *Service) GetGeoScoreForCountry(countryCode string) int {
+func (s *Service) GetGeoScoreForCountry(countryCode string) int32 {
 	// Check default high-risk countries
 	for _, risk := range entity.DefaultHighRiskCountries() {
 		if risk.CountryCode == countryCode {
-			return risk.BaseScore
+			return int32(risk.BaseScore)
 		}
 	}
 
