@@ -10,6 +10,18 @@ import (
 	"github.com/kr1s57/vigilancex/internal/entity"
 )
 
+// GeoProvider interface for geolocation lookups
+type GeoProvider interface {
+	LookupBatch(ctx context.Context, ips []string) (map[string]*GeoInfo, error)
+}
+
+// GeoInfo represents basic geolocation info
+type GeoInfo struct {
+	IP          string
+	CountryCode string
+	CountryName string
+}
+
 // Repository defines the interface for event data operations
 type Repository interface {
 	GetEvents(ctx context.Context, filters entity.EventFilters, limit, offset int) ([]entity.Event, uint64, error)
@@ -27,8 +39,9 @@ type Repository interface {
 
 // Service handles event business logic
 type Service struct {
-	repo   Repository
-	logger *slog.Logger
+	repo        Repository
+	logger      *slog.Logger
+	geoProvider GeoProvider
 }
 
 // NewService creates a new events service
@@ -37,6 +50,11 @@ func NewService(repo Repository, logger *slog.Logger) *Service {
 		repo:   repo,
 		logger: logger,
 	}
+}
+
+// SetGeoProvider sets the geolocation provider for enriching IP data
+func (s *Service) SetGeoProvider(gp GeoProvider) {
+	s.geoProvider = gp
 }
 
 // ListEventsRequest represents a request to list events
@@ -181,6 +199,11 @@ func (s *Service) GetOverview(ctx context.Context, period string) (*OverviewResp
 		return nil, err
 	}
 
+	// Enrich top attackers with geolocation
+	if s.geoProvider != nil {
+		topAttackers = s.enrichAttackersGeo(ctx, topAttackers)
+	}
+
 	// Get top targets
 	topTargets, err := s.repo.GetTopTargets(ctx, period, 10)
 	if err != nil {
@@ -196,7 +219,7 @@ func (s *Service) GetOverview(ctx context.Context, period string) (*OverviewResp
 	}, nil
 }
 
-// GetTopAttackers retrieves top attacking IPs
+// GetTopAttackers retrieves top attacking IPs with geolocation enrichment
 func (s *Service) GetTopAttackers(ctx context.Context, period string, limit int) ([]entity.TopAttacker, error) {
 	if period == "" {
 		period = "24h"
@@ -205,7 +228,52 @@ func (s *Service) GetTopAttackers(ctx context.Context, period string, limit int)
 		limit = 10
 	}
 
-	return s.repo.GetTopAttackers(ctx, period, limit)
+	attackers, err := s.repo.GetTopAttackers(ctx, period, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enrich IPs with missing geolocation
+	if s.geoProvider != nil {
+		attackers = s.enrichAttackersGeo(ctx, attackers)
+	}
+
+	return attackers, nil
+}
+
+// enrichAttackersGeo enriches top attackers with geolocation data
+func (s *Service) enrichAttackersGeo(ctx context.Context, attackers []entity.TopAttacker) []entity.TopAttacker {
+	// Collect IPs that need enrichment
+	var ipsToEnrich []string
+	for _, a := range attackers {
+		if a.Country == "" {
+			ipsToEnrich = append(ipsToEnrich, a.IP)
+		}
+	}
+
+	if len(ipsToEnrich) == 0 {
+		return attackers
+	}
+
+	s.logger.Debug("Enriching top attackers with geolocation", "count", len(ipsToEnrich))
+
+	// Lookup geolocation for missing IPs
+	geoData, err := s.geoProvider.LookupBatch(ctx, ipsToEnrich)
+	if err != nil {
+		s.logger.Warn("Failed to enrich geolocation", "error", err)
+		return attackers
+	}
+
+	// Update attackers with geo data
+	for i, a := range attackers {
+		if a.Country == "" {
+			if geo, ok := geoData[a.IP]; ok && geo != nil {
+				attackers[i].Country = geo.CountryCode
+			}
+		}
+	}
+
+	return attackers
 }
 
 // GetTopTargets retrieves top targeted hosts

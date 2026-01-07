@@ -26,12 +26,11 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
   Cell,
   Legend,
 } from 'recharts'
 import { modsecApi, statsApi, bansApi } from '@/lib/api'
+import type { ModSecRequestGroup } from '@/types'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { IPThreatModal } from '@/components/IPThreatModal'
 import { formatNumber, getCountryFlag, cn, formatDateTime } from '@/lib/utils'
@@ -84,6 +83,186 @@ const attackTypeNames: Record<string, string> = {
   'java-injection': 'Java Injection',
   dos: 'Denial of Service',
   'request-smuggling': 'Request Smuggling',
+}
+
+// Attack Type IPs Modal Component
+function AttackTypeIPsModal({
+  isOpen,
+  onClose,
+  attackType,
+  attackTypeName,
+  period,
+  onIPLookup,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  attackType: string
+  attackTypeName: string
+  period: string
+  onIPLookup: (ip: string) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [data, setData] = useState<ModSecRequestGroup[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+
+  useEffect(() => {
+    if (isOpen && attackType) {
+      setLoading(true)
+      modsecApi.getGroupedLogs({ attack_type: attackType, limit: 100 })
+        .then(res => setData(res.data || []))
+        .catch(err => console.error('Failed to fetch IPs:', err))
+        .finally(() => setLoading(false))
+    }
+  }, [isOpen, attackType])
+
+  const filteredData = useMemo(() => {
+    if (!searchTerm) return data
+    const term = searchTerm.toLowerCase()
+    return data.filter(item =>
+      item.src_ip.toLowerCase().includes(term) ||
+      item.hostname?.toLowerCase().includes(term) ||
+      item.geo_country?.toLowerCase().includes(term)
+    )
+  }, [data, searchTerm])
+
+  // Get unique IPs with aggregated stats
+  const uniqueIPs = useMemo(() => {
+    const ipMap = new Map<string, { ip: string; country?: string; count: number; hostnames: Set<string> }>()
+    filteredData.forEach(item => {
+      if (!ipMap.has(item.src_ip)) {
+        ipMap.set(item.src_ip, {
+          ip: item.src_ip,
+          country: item.geo_country,
+          count: 1,
+          hostnames: new Set([item.hostname].filter(Boolean))
+        })
+      } else {
+        const existing = ipMap.get(item.src_ip)!
+        existing.count++
+        if (item.hostname) existing.hostnames.add(item.hostname)
+      }
+    })
+    return Array.from(ipMap.values()).sort((a, b) => b.count - a.count)
+  }, [filteredData])
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card border rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden m-4">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-4 h-4 rounded-full"
+              style={{ backgroundColor: attackTypeColors[attackType] || attackTypeColors.default }}
+            />
+            <div>
+              <h2 className="text-lg font-semibold">{attackTypeName}</h2>
+              <p className="text-sm text-muted-foreground">
+                {uniqueIPs.length} unique IPs in the last {period}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="p-4 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by IP, hostname, or country..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-muted rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto max-h-[calc(85vh-180px)]">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-card border-b">
+                <tr>
+                  <th className="text-left py-3 px-4 font-medium">IP Address</th>
+                  <th className="text-left py-3 px-4 font-medium">Country</th>
+                  <th className="text-right py-3 px-4 font-medium">Attacks</th>
+                  <th className="text-left py-3 px-4 font-medium">Targets</th>
+                  <th className="text-center py-3 px-4 font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {uniqueIPs.map((item) => (
+                  <tr
+                    key={item.ip}
+                    className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => onIPLookup(item.ip)}
+                  >
+                    <td className="py-3 px-4 font-mono">{item.ip}</td>
+                    <td className="py-3 px-4">
+                      {item.country ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{getCountryFlag(item.country)}</span>
+                          <span className="text-muted-foreground">{item.country}</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-medium text-red-500">
+                      {item.count}
+                    </td>
+                    <td className="py-3 px-4 max-w-[200px]">
+                      <div className="flex flex-wrap gap-1">
+                        {Array.from(item.hostnames).slice(0, 2).map((h, i) => (
+                          <span key={i} className="text-xs px-2 py-0.5 bg-muted rounded-full truncate max-w-[100px]">
+                            {h}
+                          </span>
+                        ))}
+                        {item.hostnames.size > 2 && (
+                          <span className="text-xs text-muted-foreground">+{item.hostnames.size - 2}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onIPLookup(item.ip) }}
+                        className="text-xs px-2 py-1 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors"
+                      >
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {uniqueIPs.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                      {searchTerm ? 'No matching IPs found' : 'No IP data available'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t bg-muted/30 text-sm text-muted-foreground">
+          {uniqueIPs.length} unique IPs • {filteredData.length} total requests
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // Attackers Modal Component
@@ -370,6 +549,7 @@ export function AttacksAnalyzer() {
   const [showAttackersModal, setShowAttackersModal] = useState(false)
   const [selectedIP, setSelectedIP] = useState<string | null>(searchParams.get('src_ip'))
   const [showThreatModal, setShowThreatModal] = useState(!!searchParams.get('src_ip'))
+  const [attackTypeModal, setAttackTypeModal] = useState<{ attackType: string; attackTypeName: string } | null>(null)
 
   const handleIPLookup = (ip: string) => {
     setSelectedIP(ip)
@@ -555,31 +735,22 @@ export function AttacksAnalyzer() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Attack Type Distribution */}
+        {/* Attack Type Distribution - Horizontal Bar Chart */}
         <div className="bg-card rounded-xl border p-6">
           <h3 className="text-lg font-semibold mb-4">Attack Type Distribution</h3>
           {pieChartData.length > 0 ? (
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {pieChartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={attackTypeColors[entry.attackType] || attackTypeColors.default}
-                      />
-                    ))}
-                  </Pie>
+                <BarChart data={pieChartData} layout="vertical" margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={120}
+                    tick={{ fontSize: 11 }}
+                    stroke="hsl(var(--muted-foreground))"
+                  />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
@@ -588,7 +759,15 @@ export function AttacksAnalyzer() {
                     }}
                     formatter={(value: number) => [formatNumber(value), 'Count']}
                   />
-                </PieChart>
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {pieChartData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={attackTypeColors[entry.attackType] || attackTypeColors.default}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
@@ -772,9 +951,12 @@ export function AttacksAnalyzer() {
         </div>
       </div>
 
-      {/* Attack Types Summary Table */}
+      {/* Attack Types Summary Table - Clickable rows to view IPs */}
       <div className="bg-card rounded-xl border p-6">
-        <h3 className="text-lg font-semibold mb-4">Attack Categories Summary</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Attack Categories Summary</h3>
+          <p className="text-sm text-muted-foreground">Click a row to view IPs</p>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -789,8 +971,13 @@ export function AttacksAnalyzer() {
               {attackTypeStats.map((attack) => {
                 const maxCount = attackTypeStats[0]?.count || 1
                 const percentage = (attack.count / maxCount) * 100
+                const displayName = attackTypeNames[attack.attack_type] || attack.attack_type
                 return (
-                  <tr key={attack.attack_type} className="border-b last:border-0 hover:bg-muted/50">
+                  <tr
+                    key={attack.attack_type}
+                    className="border-b last:border-0 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setAttackTypeModal({ attackType: attack.attack_type, attackTypeName: displayName })}
+                  >
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         <div
@@ -800,15 +987,17 @@ export function AttacksAnalyzer() {
                           }}
                         />
                         <span className="font-medium">
-                          {attackTypeNames[attack.attack_type] || attack.attack_type}
+                          {displayName}
                         </span>
                       </div>
                     </td>
                     <td className="py-3 px-4 text-right font-mono">
                       {formatNumber(attack.count)}
                     </td>
-                    <td className="py-3 px-4 text-right font-mono text-muted-foreground">
-                      {formatNumber(attack.unique_ips)}
+                    <td className="py-3 px-4 text-right">
+                      <span className="font-mono text-primary hover:underline">
+                        {formatNumber(attack.unique_ips)}
+                      </span>
                     </td>
                     <td className="py-3 px-4">
                       <div className="w-full max-w-[200px]">
@@ -855,6 +1044,16 @@ export function AttacksAnalyzer() {
           setShowThreatModal(false)
           setSelectedIP(null)
         }}
+      />
+
+      {/* Attack Type IPs Modal */}
+      <AttackTypeIPsModal
+        isOpen={attackTypeModal !== null}
+        onClose={() => setAttackTypeModal(null)}
+        attackType={attackTypeModal?.attackType || ''}
+        attackTypeName={attackTypeModal?.attackTypeName || ''}
+        period={period}
+        onIPLookup={handleIPLookup}
       />
     </div>
   )

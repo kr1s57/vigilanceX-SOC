@@ -452,13 +452,16 @@ frontend/src/
 - 4 cartes KPI: Total Events, Blocked, Critical Alerts, Unique IPs
 - Graphique timeline (evenements/heure ou /jour)
 - Camembert de severite
-- Top 5 attaquants avec drapeaux pays
+- Top 5 attaquants avec drapeaux pays (enrichissement geoloc automatique)
 - Distribution par type de log
 - Modal alertes critiques (cliquable)
 
+**Enrichissement Geolocalisation:**
+Le backend enrichit automatiquement les Top Attackers avec les donnees de geolocalisation via ip-api.com pour les IPs qui n'ont pas de pays dans les logs. Les IPs privees (RFC1918) ne sont pas enrichies.
+
 **APIs appelees:**
 ```typescript
-statsApi.overview(period)       // Stats globales
+statsApi.overview(period)       // Stats globales + top attackers enrichis
 eventsApi.timeline(period)      // Donnees timeline
 alertsApi.critical(20)          // Alertes critiques
 ```
@@ -502,16 +505,22 @@ modsecApi.syncNow()                // Declenchement sync
 
 **Fonctionnalites:**
 - 4 cartes KPI: Total Triggers, Categories, Top Attack, Unique IPs
-- Camembert distribution des types d'attaque
+- **Barres horizontales** distribution des types d'attaque (meilleure lisibilite)
 - Barres horizontales des regles les plus declenchees
 - Liste detaillee des regles avec expansion
 - Top attaquants avec modal de recherche
 - Integration modal IP Threat
+- **Modal IPs par categorie d'attaque** (clic sur ligne Attack Categories Summary)
+
+**Interactions:**
+- Clic sur une ligne de "Attack Categories Summary" → ouvre un modal avec la liste des IPs uniques ayant declenche ce type d'attaque
+- Clic sur une IP dans le modal → ouvre le modal IP Threat avec analyse complete
 
 **APIs appelees:**
 ```typescript
 modsecApi.getRuleStats(period)       // Stats par regle
 modsecApi.getAttackTypeStats(period) // Stats par type
+modsecApi.getGroupedLogs({attack_type}) // IPs par type d'attaque
 statsApi.topAttackers(period, 100)   // Top attaquants
 bansApi.list()                       // Liste des bans
 ```
@@ -563,18 +572,30 @@ threatsApi.check(ip)       // Verification temps reel
 
 **Fonctionnalites:**
 - 5 cartes stats: VPN Sessions, Users, FW Events, IPS, Blocked
-- Camembert distribution par type
-- Barres trafic par pays
+- **Barres horizontales** distribution par type (meilleure lisibilite que camembert)
+- Barres horizontales trafic par pays
 - Section VPN expandable avec recherche
 - Section Network expandable (Firewall + IPS)
 - Distribution des protocoles
+- **Network Security Overview cliquable** avec modals de details
+
+**Interactions - Network Security Overview:**
+Les 3 blocs de la section Network Security Overview sont cliquables quand ils contiennent des donnees:
+- **VPN Security** → Modal avec tous les evenements VPN (user, IP, status, message)
+- **Firewall Protection** → Modal avec les evenements Firewall
+- **Intrusion Prevention** → Modal avec les alertes IPS
+
+Chaque modal affiche un tableau complet avec:
+- Horodatage, Type, Source IP, Destination, Categorie, Regle, Action
+- Barre de recherche pour filtrer
+- Indicateur visuel (icone oeil) quand des donnees sont disponibles
 
 **APIs appelees:**
 ```typescript
 statsApi.overview(period)
-eventsApi.list({ log_type: 'VPN', ... })
-eventsApi.list({ log_type: 'Firewall', ... })
-eventsApi.list({ log_type: 'IPS', ... })
+eventsApi.list({ log_type: 'VPN', limit: 100 })
+eventsApi.list({ log_type: 'Firewall', limit: 100 })
+eventsApi.list({ log_type: 'IPS', limit: 50 })
 geoApi.heatmap(period)
 ```
 

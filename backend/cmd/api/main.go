@@ -124,6 +124,7 @@ func main() {
 
 	// Initialize services
 	eventsService := events.NewService(eventsRepo, logger)
+	eventsService.SetGeoProvider(&geoProviderAdapter{geoService: geoService})
 	threatsService := threats.NewService(threatsRepo, threatAggregator)
 	bansService := bans.NewService(bansRepo, sophosClient)
 	reportsService := reports.NewService(statsRepo, logger)
@@ -361,4 +362,28 @@ func main() {
 	}
 
 	logger.Info("Server stopped")
+}
+
+// geoProviderAdapter adapts the geolocation.Service to the events.GeoProvider interface
+type geoProviderAdapter struct {
+	geoService *geolocation.Service
+}
+
+func (a *geoProviderAdapter) LookupBatch(ctx context.Context, ips []string) (map[string]*events.GeoInfo, error) {
+	geoData, err := a.geoService.LookupBatch(ctx, ips)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]*events.GeoInfo)
+	for ip, info := range geoData {
+		if info != nil {
+			result[ip] = &events.GeoInfo{
+				IP:          info.IP,
+				CountryCode: info.CountryCode,
+				CountryName: info.CountryName,
+			}
+		}
+	}
+	return result, nil
 }

@@ -15,8 +15,10 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
+  X,
+  Eye,
 } from 'lucide-react'
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { eventsApi, statsApi, geoApi } from '@/lib/api'
 import type { Event, OverviewResponse, PaginatedResponse } from '@/types'
@@ -49,12 +51,165 @@ interface GeoHeatmapEntry {
   unique_ips: number
 }
 
+// Modal for detailed events
+function EventsDetailModal({
+  isOpen,
+  onClose,
+  title,
+  icon: Icon,
+  iconColor,
+  events,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  title: string
+  icon: React.ElementType
+  iconColor: string
+  events: Event[]
+}) {
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredEvents = useMemo(() => {
+    if (!searchTerm) return events
+    const term = searchTerm.toLowerCase()
+    return events.filter(e =>
+      e.src_ip.toLowerCase().includes(term) ||
+      e.dst_ip?.toLowerCase().includes(term) ||
+      e.rule_name?.toLowerCase().includes(term) ||
+      e.action?.toLowerCase().includes(term) ||
+      e.category?.toLowerCase().includes(term)
+    )
+  }, [events, searchTerm])
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card border rounded-xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden m-4">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 ${iconColor} rounded-lg`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">{title}</h2>
+              <p className="text-sm text-muted-foreground">
+                {events.length} events total
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-lg transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="p-4 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by IP, rule, action, category..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-muted rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto max-h-[calc(85vh-180px)]">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-card border-b">
+              <tr>
+                <th className="text-left py-3 px-4 font-medium">Time</th>
+                <th className="text-left py-3 px-4 font-medium">Type</th>
+                <th className="text-left py-3 px-4 font-medium">Source</th>
+                <th className="text-left py-3 px-4 font-medium">Destination</th>
+                <th className="text-left py-3 px-4 font-medium">Category</th>
+                <th className="text-left py-3 px-4 font-medium">Rule</th>
+                <th className="text-center py-3 px-4 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredEvents.map((event, idx) => (
+                <tr key={idx} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                  <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
+                    {new Date(event.timestamp).toLocaleString('fr-FR', {
+                      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                    })}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      event.log_type === 'IPS' ? 'bg-red-500/10 text-red-500' :
+                      event.log_type === 'Firewall' ? 'bg-orange-500/10 text-orange-500' :
+                      event.log_type === 'VPN' ? 'bg-green-500/10 text-green-500' :
+                      'bg-gray-500/10 text-gray-400'
+                    }`}>
+                      {event.log_type}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 font-mono text-sm">
+                    {event.src_ip}
+                    {event.src_port > 0 && <span className="text-muted-foreground">:{event.src_port}</span>}
+                  </td>
+                  <td className="py-3 px-4 font-mono text-sm">
+                    {event.dst_ip}
+                    {event.dst_port > 0 && <span className="text-muted-foreground">:{event.dst_port}</span>}
+                  </td>
+                  <td className="py-3 px-4 text-muted-foreground max-w-[150px] truncate" title={event.category}>
+                    {event.category || '-'}
+                  </td>
+                  <td className="py-3 px-4 max-w-[200px] truncate" title={event.rule_name || event.rule_id}>
+                    {event.rule_name || event.rule_id || '-'}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      event.action === 'allow' ? 'bg-green-500/10 text-green-500' :
+                      event.action === 'drop' ? 'bg-red-500/10 text-red-500' :
+                      event.action === 'reject' ? 'bg-orange-500/10 text-orange-500' :
+                      'bg-gray-500/10 text-gray-400'
+                    }`}>
+                      {event.action || '-'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {filteredEvents.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    {searchTerm ? 'No matching events found' : 'No events available'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t bg-muted/30 text-sm text-muted-foreground">
+          Showing {filteredEvents.length} of {events.length} events
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function VpnNetwork() {
   const [period, setPeriod] = useState<Period>('24h')
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
   const [vpnFilter, setVpnFilter] = useState('')
   const [networkFilter, setNetworkFilter] = useState('')
   const [loading, setLoading] = useState(true)
+  const [detailModal, setDetailModal] = useState<{
+    type: 'vpn' | 'firewall' | 'ips' | null
+    title: string
+    icon: React.ElementType
+    iconColor: string
+    events: Event[]
+  }>({ type: null, title: '', icon: Lock, iconColor: '', events: [] })
 
   // Data states
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
@@ -325,27 +480,20 @@ export function VpnNetwork() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Log Type Distribution */}
+        {/* Log Type Distribution - Horizontal Bar Chart */}
         <div className="bg-card rounded-xl border p-6">
           <h3 className="text-lg font-semibold mb-4">Event Distribution by Type</h3>
           {logTypeDistribution.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={logTypeDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {logTypeDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
+                <BarChart data={logTypeDistribution} layout="vertical">
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={70}
+                    tick={{ fontSize: 12 }}
+                  />
                   <Tooltip
                     formatter={(value: number) => [formatNumber(value), 'Events']}
                     contentStyle={{
@@ -354,7 +502,12 @@ export function VpnNetwork() {
                       borderRadius: '8px',
                     }}
                   />
-                </PieChart>
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {logTypeDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
@@ -629,45 +782,111 @@ export function VpnNetwork() {
         </div>
       )}
 
-      {/* Quick Actions / Info */}
+      {/* Quick Actions / Info - Clickable sections */}
       <div className="bg-card rounded-xl border p-6">
         <h3 className="text-lg font-semibold mb-4">Network Security Overview</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <h4 className="font-medium flex items-center gap-2">
-              <Lock className="w-4 h-4 text-green-500" />
-              VPN Security
-            </h4>
+          {/* VPN Security */}
+          <div
+            onClick={() => stats.vpnSessions > 0 && setDetailModal({
+              type: 'vpn',
+              title: 'VPN Sessions',
+              icon: Lock,
+              iconColor: 'bg-green-500/10 text-green-500',
+              events: vpnEvents?.data || []
+            })}
+            className={`p-4 rounded-lg border transition-all ${
+              stats.vpnSessions > 0
+                ? 'hover:bg-muted/50 cursor-pointer hover:border-green-500/50'
+                : 'opacity-60'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium flex items-center gap-2">
+                <Lock className="w-4 h-4 text-green-500" />
+                VPN Security
+              </h4>
+              {stats.vpnSessions > 0 && <Eye className="w-4 h-4 text-muted-foreground" />}
+            </div>
+            <p className="text-2xl font-bold text-green-500">{formatNumber(stats.vpnSessions)}</p>
             <p className="text-sm text-muted-foreground">
               {stats.vpnSessions > 0
-                ? `${stats.uniqueVPNUsers} unique users connected via VPN`
-                : 'No active VPN sessions monitored'}
+                ? `${stats.uniqueVPNUsers} unique users`
+                : 'No sessions monitored'}
             </p>
           </div>
-          <div className="space-y-2">
-            <h4 className="font-medium flex items-center gap-2">
-              <Shield className="w-4 h-4 text-orange-500" />
-              Firewall Protection
-            </h4>
+
+          {/* Firewall Protection */}
+          <div
+            onClick={() => stats.firewallEvents > 0 && setDetailModal({
+              type: 'firewall',
+              title: 'Firewall Events',
+              icon: Shield,
+              iconColor: 'bg-orange-500/10 text-orange-500',
+              events: firewallEvents?.data || []
+            })}
+            className={`p-4 rounded-lg border transition-all ${
+              stats.firewallEvents > 0
+                ? 'hover:bg-muted/50 cursor-pointer hover:border-orange-500/50'
+                : 'opacity-60'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium flex items-center gap-2">
+                <Shield className="w-4 h-4 text-orange-500" />
+                Firewall Protection
+              </h4>
+              {stats.firewallEvents > 0 && <Eye className="w-4 h-4 text-muted-foreground" />}
+            </div>
+            <p className="text-2xl font-bold text-orange-500">{formatNumber(stats.firewallEvents)}</p>
             <p className="text-sm text-muted-foreground">
               {stats.firewallEvents > 0
-                ? `${formatNumber(stats.firewallEvents)} firewall rule matches`
-                : 'No firewall events recorded'}
+                ? 'rule matches'
+                : 'No events recorded'}
             </p>
           </div>
-          <div className="space-y-2">
-            <h4 className="font-medium flex items-center gap-2">
-              <Activity className="w-4 h-4 text-red-500" />
-              Intrusion Prevention
-            </h4>
+
+          {/* Intrusion Prevention */}
+          <div
+            onClick={() => stats.ipsEvents > 0 && setDetailModal({
+              type: 'ips',
+              title: 'IPS Alerts',
+              icon: Activity,
+              iconColor: 'bg-red-500/10 text-red-500',
+              events: ipsEvents?.data || []
+            })}
+            className={`p-4 rounded-lg border transition-all ${
+              stats.ipsEvents > 0
+                ? 'hover:bg-muted/50 cursor-pointer hover:border-red-500/50'
+                : 'opacity-60'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium flex items-center gap-2">
+                <Activity className="w-4 h-4 text-red-500" />
+                Intrusion Prevention
+              </h4>
+              {stats.ipsEvents > 0 && <Eye className="w-4 h-4 text-muted-foreground" />}
+            </div>
+            <p className="text-2xl font-bold text-red-500">{formatNumber(stats.ipsEvents)}</p>
             <p className="text-sm text-muted-foreground">
               {stats.ipsEvents > 0
-                ? `${formatNumber(stats.ipsEvents)} IPS alerts detected`
-                : 'No IPS events recorded'}
+                ? 'IPS alerts detected'
+                : 'No events recorded'}
             </p>
           </div>
         </div>
       </div>
+
+      {/* Events Detail Modal */}
+      <EventsDetailModal
+        isOpen={detailModal.type !== null}
+        onClose={() => setDetailModal({ type: null, title: '', icon: Lock, iconColor: '', events: [] })}
+        title={detailModal.title}
+        icon={detailModal.icon}
+        iconColor={detailModal.iconColor}
+        events={detailModal.events}
+      />
 
       {/* Loading overlay */}
       {loading && (
