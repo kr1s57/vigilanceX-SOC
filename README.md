@@ -1,6 +1,6 @@
 # VIGILANCE X - Live Active Response
 
-> **Version 1.5.0** | Security Operations Center pour Sophos XGS
+> **Version 1.6.5** | Security Operations Center pour Sophos XGS
 
 Solution de supervision de sécurité et de réponse active automatisée pour **Sophos XGS**.
 
@@ -8,8 +8,8 @@ Solution de supervision de sécurité et de réponse active automatisée pour **
 
 | Composant | Technologie |
 |-----------|-------------|
-| Backend | Go (Chi router, Clean Architecture) |
-| Frontend | React + TypeScript + Tailwind + Shadcn UI |
+| Backend | Go 1.22 (Chi router, Clean Architecture) |
+| Frontend | React 18 + TypeScript + Tailwind + Shadcn UI |
 | Base de données | ClickHouse (analytique temps réel) |
 | Cache | Redis |
 | Ingestion | Vector.dev (Syslog) |
@@ -23,6 +23,7 @@ Solution de supervision de sécurité et de réponse active automatisée pour **
 - **Advanced Threat** : Suivi des alertes ATP et APT
 - **VPN & Network** : Audit des accès distants
 - **Active Bans** : Gestion des blocages en temps réel
+- **Blocklist Ingester** : Synchronisation dynamique de 11 blocklists publiques *(v1.6.5)*
 - **Reports** : Génération de rapports PDF/XML (journalier, hebdomadaire, mensuel)
 - **Settings** : Configuration complète (thème, langue, notifications, intégrations)
 
@@ -34,12 +35,43 @@ Solution de supervision de sécurité et de réponse active automatisée pour **
 | **SSH** | 22 | Synchronisation des règles ModSecurity |
 | **API XML** | 4444 | Gestion des bans (ajout/suppression IP blocklist) |
 
+### Threat Intelligence (v1.6)
+
+7 providers intégrés pour une analyse complète des menaces :
+
+| Provider | Description |
+|----------|-------------|
+| AbuseIPDB | Réputation IP basée sur les reports |
+| VirusTotal | Consensus multi-AV |
+| AlienVault OTX | Contexte de menace et IOCs |
+| GreyNoise | Réduction des faux positifs (scanners bénins) |
+| IPSum | Agrégation de 30+ blocklists |
+| CriminalIP | Détection C2/VPN/Proxy |
+| Pulsedive | Corrélation IOC et acteurs de menace |
+
+### Blocklist Feed Ingester (v1.6.5)
+
+Ingestion automatique de blocklists publiques avec sync dynamique :
+
+| Feed | Catégorie | ~IPs |
+|------|-----------|------|
+| Firehol Level 1 & 2 | mixed | 590k |
+| Spamhaus DROP/EDROP | malware | 166k |
+| Blocklist.de | attacker | 24k |
+| CI Army | attacker | 15k |
+| Binary Defense | attacker | 4k |
+| Emerging Threats | attacker | 1.5k |
+| Feodo Tracker | botnet | active C2 |
+| DShield | scanner | top 20 |
+
+**Total : ~800k IPs uniques**
+
 ### Moteur Detect2Ban
 
 - Scénarios YAML configurables
 - Récidivisme automatique (4 bans = permanent)
 - Synchronisation avec groupes Sophos XGS
-- Threat Intelligence intégrée (AbuseIPDB, VirusTotal, AlienVault)
+- Combined Risk Assessment (Threat Intel + Blocklists)
 
 ## Démarrage Rapide
 
@@ -135,14 +167,36 @@ npm run build    # Build production
 
 ## API Endpoints
 
+### Core
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Health check |
 | `GET /api/v1/events` | Liste des événements |
 | `GET /api/v1/stats/overview` | Statistiques globales |
+
+### Bans
+| Endpoint | Description |
+|----------|-------------|
 | `GET /api/v1/bans` | Bans actifs |
 | `POST /api/v1/bans` | Créer un ban |
-| `GET /api/v1/threats/score/{ip}` | Score de menace |
+| `DELETE /api/v1/bans/{ip}` | Supprimer un ban |
+
+### Threats (v1.6)
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/threats/check/{ip}` | Analyse threat intel complète |
+| `GET /api/v1/threats/risk/{ip}` | Évaluation combinée threat+blocklist |
+| `GET /api/v1/threats/should-ban/{ip}` | Recommandation de ban |
+| `GET /api/v1/threats/providers` | Status des 7 providers |
+
+### Blocklists (v1.6.5)
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/blocklists/stats` | Statistiques (total IPs, feeds) |
+| `GET /api/v1/blocklists/feeds` | Status de tous les feeds |
+| `POST /api/v1/blocklists/sync` | Synchronisation manuelle |
+| `GET /api/v1/blocklists/check/{ip}` | Vérifier une IP |
+| `GET /api/v1/blocklists/high-risk` | IPs multi-sources |
 
 ## Licence
 

@@ -13,12 +13,14 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/handlers"
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/middleware"
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/ws"
+	"github.com/kr1s57/vigilancex/internal/adapter/external/blocklist"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
+	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
 	"github.com/kr1s57/vigilancex/internal/usecase/events"
 	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
 	"github.com/kr1s57/vigilancex/internal/usecase/reports"
@@ -59,6 +61,7 @@ func main() {
 	bansRepo := clickhouse.NewBansRepository(chConn)
 	modsecRepo := clickhouse.NewModSecRepository(chConn, logger)
 	statsRepo := clickhouse.NewStatsRepository(chConn.Conn(), logger)
+	blocklistRepo := clickhouse.NewBlocklistRepository(chConn)
 
 	// Initialize threat intelligence aggregator (v1.6: 7 providers)
 	threatAggregator := threatintel.NewAggregator(threatintel.AggregatorConfig{
@@ -99,6 +102,14 @@ func main() {
 	geoService := geolocation.NewService(chConn.Conn(), logger)
 	logger.Info("Geolocation service initialized")
 
+	// Initialize Feed Ingester for blocklist synchronization (v1.6)
+	feedIngester := blocklist.NewFeedIngester(blocklistRepo, blocklist.IngesterConfig{
+		HTTPTimeout:     30 * time.Second,
+		MaxConcurrent:   3,
+		DefaultInterval: 1 * time.Hour,
+	})
+	logger.Info("Feed Ingester initialized", "feeds", len(blocklist.GetEnabledFeeds()))
+
 	// Initialize ModSec sync service (SSH-based log correlation)
 	var modsecService *modsec.Service
 	if cfg.SophosSSH.Host != "" {
@@ -134,18 +145,25 @@ func main() {
 	threatsService := threats.NewService(threatsRepo, threatAggregator)
 	bansService := bans.NewService(bansRepo, sophosClient)
 	reportsService := reports.NewService(statsRepo, logger)
+	blocklistsService := blocklists.NewService(feedIngester, logger)
 
 	// Initialize handlers
 	eventsHandler := handlers.NewEventsHandler(eventsService)
 	threatsHandler := handlers.NewThreatsHandler(threatsService)
+	threatsHandler.SetBlocklistsService(blocklistsService) // v1.6: Combined risk assessment
 	bansHandler := handlers.NewBansHandler(bansService)
 	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
 	reportsHandler := handlers.NewReportsHandler(reportsService)
+	blocklistsHandler := handlers.NewBlocklistsHandler(blocklistsService)
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
 	go wsHub.Run()
 	logger.Info("WebSocket hub started")
+
+	// Start Feed Ingester for automatic blocklist synchronization
+	go blocklistsService.Start(context.Background())
+	logger.Info("Blocklist Feed Ingester started")
 
 	// Create router
 	r := chi.NewRouter()
@@ -223,6 +241,7 @@ func main() {
 				r.Get("/check/{ip}", threatsHandler.CheckIP)
 				r.Get("/score/{ip}", threatsHandler.GetStoredScore)
 				r.Get("/should-ban/{ip}", threatsHandler.ShouldBan)
+				r.Get("/risk/{ip}", threatsHandler.RiskAssessment) // v1.6: Combined threat+blocklist risk
 				r.Get("/level/{level}", threatsHandler.GetThreatsByLevel)
 				r.Post("/batch", threatsHandler.BatchCheck)
 				r.Post("/cache/clear", threatsHandler.ClearCache)
@@ -248,6 +267,17 @@ func main() {
 				r.Post("/", bansHandler.AddWhitelist)
 				r.Delete("/{ip}", bansHandler.RemoveWhitelist)
 				r.Get("/check/{ip}", handlers.NotImplemented)
+			})
+
+			// Blocklists (v1.6 - Feed Ingester)
+			r.Route("/blocklists", func(r chi.Router) {
+				r.Get("/stats", blocklistsHandler.GetStats)
+				r.Get("/feeds", blocklistsHandler.GetFeeds)
+				r.Get("/feeds/configured", blocklistsHandler.GetConfiguredFeeds)
+				r.Post("/sync", blocklistsHandler.SyncAll)
+				r.Post("/feeds/{name}/sync", blocklistsHandler.SyncFeed)
+				r.Get("/check/{ip}", blocklistsHandler.CheckIP)
+				r.Get("/high-risk", blocklistsHandler.GetHighRiskIPs)
 			})
 
 			// Anomalies
@@ -359,6 +389,10 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down server...")
+
+	// Stop Feed Ingester
+	blocklistsService.Stop()
+	logger.Info("Feed Ingester stopped")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

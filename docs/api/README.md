@@ -1,4 +1,6 @@
-# API VIGILANCE X
+# API VIGILANCE X v1.6.5
+
+> Documentation complète de l'API REST VIGILANCE X
 
 ## Base URL
 
@@ -12,6 +14,15 @@ JWT Bearer token dans le header `Authorization`:
 ```
 Authorization: Bearer <token>
 ```
+
+## Changelog API
+
+| Version | Changements |
+|---------|-------------|
+| 1.6.5 | Ajout API Blocklists, Combined Risk Assessment |
+| 1.6.0 | Ajout 4 nouveaux providers Threat Intel |
+| 1.5.0 | Ajout Reports, Settings, ModSec |
+| 1.0.0 | Release initiale |
 
 ## Endpoints
 
@@ -186,29 +197,195 @@ POST /api/v1/bans/sync
 
 ---
 
-### Threats
+### Threats (v1.6)
 
-#### Score de menace
+7 providers intégrés : AbuseIPDB, VirusTotal, AlienVault OTX, GreyNoise, IPSum, CriminalIP, Pulsedive
+
+#### Check IP (Threat Intel complet)
 
 ```http
-GET /api/v1/threats/score/{ip}
+GET /api/v1/threats/check/{ip}
 ```
 
 Réponse :
 ```json
 {
-  "ip": "192.168.1.100",
-  "total_score": 85,
-  "reputation_score": 35,
-  "activity_score": 35,
-  "severity_score": 15,
-  "threat_level": "critical",
-  "is_malicious": true,
-  "sources": ["abuseipdb", "virustotal"],
-  "categories": ["Scanner", "Brute Force"],
-  "abuseipdb_score": 95,
-  "virustotal_positives": 12,
-  "last_checked": "2025-01-06T12:00:00Z"
+  "ip": "45.148.10.121",
+  "aggregated_score": 65,
+  "threat_level": "high",
+  "confidence": 0.85,
+  "sources": [
+    {"provider": "AbuseIPDB", "score": 95, "available": true},
+    {"provider": "VirusTotal", "score": 45, "available": true},
+    {"provider": "GreyNoise", "score": 80, "is_benign_source": false},
+    {"provider": "IPSum", "score": 70, "available": true}
+  ],
+  "is_tor": false,
+  "is_vpn": false,
+  "is_benign": false,
+  "in_blocklists": 3,
+  "tags": ["internet_scanner", "greynoise_malicious"]
+}
+```
+
+#### Combined Risk Assessment (v1.6.5)
+
+```http
+GET /api/v1/threats/risk/{ip}
+```
+
+Combine Threat Intel + Blocklist Feed Ingester pour une évaluation complète.
+
+Réponse :
+```json
+{
+  "ip": "45.148.10.121",
+  "threat_score": 65,
+  "threat_level": "high",
+  "blocklist_count": 5,
+  "blocklist_sources": ["firehol_level1", "spamhaus_drop", "blocklist_de"],
+  "blocklist_categories": ["mixed", "malware", "attacker"],
+  "combined_score": 100,
+  "combined_risk": "critical",
+  "recommend_ban": true,
+  "is_tor": false,
+  "is_vpn": false,
+  "tags": ["in_blocklists", "internet_scanner"]
+}
+```
+
+#### Should Ban
+
+```http
+GET /api/v1/threats/should-ban/{ip}?threshold=80
+```
+
+#### Providers Status
+
+```http
+GET /api/v1/threats/providers
+```
+
+Réponse :
+```json
+[
+  {"name": "AbuseIPDB", "configured": true, "description": "IP abuse reports"},
+  {"name": "VirusTotal", "configured": true, "description": "Multi-AV consensus"},
+  {"name": "AlienVault OTX", "configured": true, "description": "Threat context"},
+  {"name": "GreyNoise", "configured": true, "description": "FP reduction"},
+  {"name": "IPSum", "configured": true, "description": "30+ blocklists"},
+  {"name": "CriminalIP", "configured": true, "description": "C2/VPN/Proxy"},
+  {"name": "Pulsedive", "configured": true, "description": "IOC correlation"}
+]
+```
+
+---
+
+### Blocklists (v1.6.5)
+
+Ingestion de 11 blocklists publiques avec synchronisation dynamique.
+
+#### Statistiques
+
+```http
+GET /api/v1/blocklists/stats
+```
+
+Réponse :
+```json
+{
+  "total_blocked_ips": 803544,
+  "feed_count": 11,
+  "feed_stats": [...]
+}
+```
+
+#### Status des Feeds
+
+```http
+GET /api/v1/blocklists/feeds
+```
+
+Réponse :
+```json
+{
+  "feeds": [
+    {
+      "source": "firehol_level1",
+      "display_name": "Firehol Level 1",
+      "url": "https://...",
+      "last_sync": "2026-01-07T10:00:00Z",
+      "ip_count": 564941,
+      "status": "success"
+    }
+  ],
+  "count": 11
+}
+```
+
+#### Synchronisation manuelle
+
+```http
+POST /api/v1/blocklists/sync
+```
+
+Réponse :
+```json
+{
+  "message": "Sync completed",
+  "total_feeds": 11,
+  "success_count": 9,
+  "results": [
+    {"source": "firehol_level1", "success": true, "ip_count": 564941}
+  ]
+}
+```
+
+#### Sync d'un feed spécifique
+
+```http
+POST /api/v1/blocklists/feeds/{name}/sync
+```
+
+#### Vérifier une IP
+
+```http
+GET /api/v1/blocklists/check/{ip}
+```
+
+Réponse :
+```json
+{
+  "ip": "1.0.170.22",
+  "is_blocked": true,
+  "source_count": 3,
+  "sources": ["binary_defense", "firehol_level1", "blocklist_de"],
+  "categories": ["attacker", "mixed"],
+  "max_confidence": 90,
+  "first_seen": "2026-01-07T09:00:00Z",
+  "last_seen": "2026-01-07T10:00:00Z"
+}
+```
+
+#### IPs haute-risque (multi-sources)
+
+```http
+GET /api/v1/blocklists/high-risk?min_lists=3
+```
+
+Réponse :
+```json
+{
+  "min_lists": 3,
+  "count": 1000,
+  "ips": [
+    {
+      "ip": "45.148.10.121",
+      "source_count": 5,
+      "sources": ["firehol_level1", "firehol_level2", "spamhaus_drop", "binary_defense", "blocklist_de"],
+      "max_confidence": 95
+    }
+  ]
 }
 ```
 

@@ -5,17 +5,24 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
 )
 
 // ThreatsHandler handles threat intelligence HTTP requests
 type ThreatsHandler struct {
-	service *threats.Service
+	service           *threats.Service
+	blocklistsService *blocklists.Service
 }
 
 // NewThreatsHandler creates a new threats handler
 func NewThreatsHandler(service *threats.Service) *ThreatsHandler {
 	return &ThreatsHandler{service: service}
+}
+
+// SetBlocklistsService sets the blocklists service for combined risk assessment
+func (h *ThreatsHandler) SetBlocklistsService(svc *blocklists.Service) {
+	h.blocklistsService = svc
 }
 
 // CheckIP queries threat intel for a specific IP
@@ -198,4 +205,86 @@ func (h *ThreatsHandler) ShouldBan(w http.ResponseWriter, r *http.Request) {
 		"reason":     reason,
 		"threshold":  threshold,
 	})
+}
+
+// RiskAssessment provides combined risk assessment from threat intel + blocklists
+// GET /api/v1/threats/risk/{ip}
+func (h *ThreatsHandler) RiskAssessment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ip := chi.URLParam(r, "ip")
+
+	if ip == "" {
+		ErrorResponse(w, http.StatusBadRequest, "IP address required", nil)
+		return
+	}
+
+	// Get threat intel score
+	threatResult, err := h.service.CheckIP(ctx, ip)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Threat intel check failed", err)
+		return
+	}
+
+	// Build response
+	response := map[string]interface{}{
+		"ip":               ip,
+		"threat_score":     threatResult.AggregatedScore,
+		"threat_level":     threatResult.ThreatLevel,
+		"threat_sources":   len(threatResult.Sources),
+		"is_tor":           threatResult.IsTor,
+		"is_vpn":           threatResult.IsVPN,
+		"is_proxy":         threatResult.IsProxy,
+		"is_benign":        threatResult.IsBenign,
+		"in_ipsum_lists":   threatResult.InBlocklists,
+		"tags":             threatResult.Tags,
+	}
+
+	// Add blocklist check if service is available
+	if h.blocklistsService != nil {
+		blocklistInfo, err := h.blocklistsService.CheckIP(ctx, ip)
+		if err == nil && blocklistInfo != nil {
+			response["in_blocklists"] = blocklistInfo.IsBlocked
+			response["blocklist_count"] = blocklistInfo.SourceCount
+			response["blocklist_sources"] = blocklistInfo.Sources
+			response["blocklist_categories"] = blocklistInfo.Categories
+			response["blocklist_max_confidence"] = blocklistInfo.MaxConfidence
+		}
+	}
+
+	// Calculate combined risk
+	combinedRisk := "low"
+	riskScore := threatResult.AggregatedScore
+
+	// Boost risk if in multiple blocklists
+	if blocklist, ok := response["blocklist_count"].(int); ok && blocklist > 0 {
+		// Each blocklist source adds 10 points (capped at 50)
+		boost := blocklist * 10
+		if boost > 50 {
+			boost = 50
+		}
+		riskScore += boost
+		if riskScore > 100 {
+			riskScore = 100
+		}
+	}
+
+	// Determine final risk level
+	switch {
+	case riskScore >= 80:
+		combinedRisk = "critical"
+	case riskScore >= 60:
+		combinedRisk = "high"
+	case riskScore >= 40:
+		combinedRisk = "medium"
+	case riskScore >= 20:
+		combinedRisk = "low"
+	default:
+		combinedRisk = "none"
+	}
+
+	response["combined_score"] = riskScore
+	response["combined_risk"] = combinedRisk
+	response["recommend_ban"] = riskScore >= 70
+
+	JSONResponse(w, http.StatusOK, response)
 }
