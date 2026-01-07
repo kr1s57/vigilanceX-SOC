@@ -58,7 +58,7 @@ func (s *Service) saveThreatScore(ip string, result *threatintel.AggregatedResul
 		LastChecked:     result.LastChecked,
 	}
 
-	// Individual source scores
+	// Individual source scores (v1.6: 7 providers)
 	for _, source := range result.Sources {
 		switch source.Provider {
 		case "AbuseIPDB":
@@ -67,8 +67,22 @@ func (s *Service) saveThreatScore(ip string, result *threatintel.AggregatedResul
 			score.VirusTotalScore = int32(source.Score)
 		case "AlienVault OTX":
 			score.OTXScore = int32(source.Score)
+		case "GreyNoise":
+			score.GreyNoiseScore = int32(source.Score)
+			score.IsBenign = source.IsBenignSource
+		case "IPSum":
+			score.IPSumScore = int32(source.Score)
+		case "CriminalIP":
+			score.CriminalIPScore = int32(source.Score)
+		case "Pulsedive":
+			score.PulsediveScore = int32(source.Score)
 		}
 	}
+
+	// v1.6: Store additional flags from aggregated result
+	score.IsVPN = result.IsVPN
+	score.IsProxy = result.IsProxy
+	score.InBlocklists = int32(result.InBlocklists)
 
 	// Metadata
 	if len(result.MalwareFamilies) > 0 {
@@ -199,27 +213,8 @@ func (s *Service) ClearCache() {
 	s.aggregator.ClearCache()
 }
 
-// GetProviderStatus returns the status of configured providers
-func (s *Service) GetProviderStatus() []ProviderStatus {
-	providers := s.aggregator.GetConfiguredProviders()
-	status := make([]ProviderStatus, 0, len(providers))
-
-	for _, p := range providers {
-		status = append(status, ProviderStatus{
-			Name:       p,
-			Configured: true,
-			Available:  true, // Would need health checks for actual status
-		})
-	}
-
-	return status
-}
-
-// ProviderStatus represents the status of a threat intel provider
-type ProviderStatus struct {
-	Name       string `json:"name"`
-	Configured bool   `json:"configured"`
-	Available  bool   `json:"available"`
-	LastCheck  string `json:"last_check,omitempty"`
-	Error      string `json:"error,omitempty"`
+// GetProviderStatus returns the status of all threat intel providers
+// v1.6: Returns all 7 providers with descriptions
+func (s *Service) GetProviderStatus() []threatintel.ProviderStatus {
+	return s.aggregator.GetProviderStatus()
 }

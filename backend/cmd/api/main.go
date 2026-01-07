@@ -60,11 +60,17 @@ func main() {
 	modsecRepo := clickhouse.NewModSecRepository(chConn, logger)
 	statsRepo := clickhouse.NewStatsRepository(chConn.Conn(), logger)
 
-	// Initialize threat intelligence aggregator
+	// Initialize threat intelligence aggregator (v1.6: 7 providers)
 	threatAggregator := threatintel.NewAggregator(threatintel.AggregatorConfig{
+		// Core providers
 		AbuseIPDBKey:  cfg.ThreatIntel.AbuseIPDBKey,
 		VirusTotalKey: cfg.ThreatIntel.VirusTotalKey,
 		OTXKey:        cfg.ThreatIntel.AlienVaultKey,
+		// v1.6 providers
+		GreyNoiseKey:  cfg.ThreatIntel.GreyNoiseKey,
+		CriminalIPKey: cfg.ThreatIntel.CriminalIPKey,
+		PulsediveKey:  cfg.ThreatIntel.PulsediveKey,
+		// IPSum is auto-configured (no API key needed)
 		CacheTTL:      cfg.ThreatIntel.CacheTTL,
 	})
 

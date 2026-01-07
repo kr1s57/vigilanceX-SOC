@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS ip_threat_scores (
     is_tor UInt8 DEFAULT 0,
 
     -- Details par source (scores normalises 0-100)
+    -- Core providers
     abuseipdb_score Int32 DEFAULT 0,
     abuseipdb_reports UInt32 DEFAULT 0,
     abuseipdb_is_tor UInt8 DEFAULT 0,
@@ -179,6 +180,16 @@ CREATE TABLE IF NOT EXISTS ip_threat_scores (
     virustotal_total UInt8 DEFAULT 0,
     otx_score Int32 DEFAULT 0,
     alienvault_pulses UInt16 DEFAULT 0,
+    -- v1.6 providers (OSINT etendu)
+    greynoise_score Int32 DEFAULT 0,      -- Reduce FP (benign scanners)
+    ipsum_score Int32 DEFAULT 0,          -- Aggregated blocklists
+    criminalip_score Int32 DEFAULT 0,     -- C2/VPN/Proxy detection
+    pulsedive_score Int32 DEFAULT 0,      -- IOC correlation
+    -- v1.6 infrastructure flags
+    is_benign UInt8 DEFAULT 0,            -- GreyNoise RIOT (known benign)
+    is_vpn UInt8 DEFAULT 0,               -- CriminalIP VPN flag
+    is_proxy UInt8 DEFAULT 0,             -- CriminalIP Proxy flag
+    in_blocklists Int32 DEFAULT 0,        -- IPSum blocklist count
 
     -- Enrichissement threat intel
     malware_families Array(String),

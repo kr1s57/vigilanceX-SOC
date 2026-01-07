@@ -75,15 +75,18 @@ func (r *ThreatsRepository) GetThreatScore(ctx context.Context, ip string) (*ent
 }
 
 // UpsertThreatScore creates or updates a threat score
+// v1.6: Added support for 7 threat intel providers
 func (r *ThreatsRepository) UpsertThreatScore(ctx context.Context, score *entity.ThreatScore) error {
 	query := `
 		INSERT INTO ip_threat_scores (
 			ip, aggregated_score, threat_level, confidence,
 			country, asn, isp, is_tor,
 			abuseipdb_score, virustotal_score, otx_score,
+			greynoise_score, ipsum_score, criminalip_score, pulsedive_score,
+			is_benign, is_vpn, is_proxy, in_blocklists,
 			tags, malware_families, adversaries,
 			last_checked, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	tags := score.Tags
@@ -108,9 +111,20 @@ func (r *ThreatsRepository) UpsertThreatScore(ctx context.Context, score *entity
 		score.ASN,
 		score.ISP,
 		score.IsTor,
+		// Core providers
 		score.AbuseIPDBScore,
 		score.VirusTotalScore,
 		score.OTXScore,
+		// v1.6 providers
+		score.GreyNoiseScore,
+		score.IPSumScore,
+		score.CriminalIPScore,
+		score.PulsediveScore,
+		// v1.6 flags
+		score.IsBenign,
+		score.IsVPN,
+		score.IsProxy,
+		score.InBlocklists,
 		tags,
 		malwareFamilies,
 		adversaries,

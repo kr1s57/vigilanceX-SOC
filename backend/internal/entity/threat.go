@@ -27,9 +27,20 @@ type ThreatScore struct {
 	IsTor   bool   `json:"is_tor" ch:"is_tor"`
 
 	// Per-source scores (normalized 0-100)
+	// Core providers
 	AbuseIPDBScore    int32  `json:"abuseipdb_score" ch:"abuseipdb_score"`
 	VirusTotalScore   int32  `json:"virustotal_score" ch:"virustotal_score"`
 	OTXScore          int32  `json:"otx_score" ch:"otx_score"`
+	// v1.6 providers
+	GreyNoiseScore    int32  `json:"greynoise_score" ch:"greynoise_score"`
+	IPSumScore        int32  `json:"ipsum_score" ch:"ipsum_score"`
+	CriminalIPScore   int32  `json:"criminalip_score" ch:"criminalip_score"`
+	PulsediveScore    int32  `json:"pulsedive_score" ch:"pulsedive_score"`
+	// v1.6 flags
+	IsBenign          bool   `json:"is_benign" ch:"is_benign"`           // GreyNoise benign flag
+	IsVPN             bool   `json:"is_vpn" ch:"is_vpn"`                 // CriminalIP VPN flag
+	IsProxy           bool   `json:"is_proxy" ch:"is_proxy"`             // CriminalIP Proxy flag
+	InBlocklists      int32  `json:"in_blocklists" ch:"in_blocklists"`   // IPSum blocklist count
 
 	// Legacy per-source details
 	AbuseIPDBReports    uint32   `json:"abuseipdb_reports" ch:"abuseipdb_reports"`

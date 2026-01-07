@@ -60,9 +60,15 @@ type SophosConfig struct {
 }
 
 type ThreatIntelConfig struct {
+	// Core providers
 	AbuseIPDBKey   string
 	VirusTotalKey  string
 	AlienVaultKey  string
+	// v1.6 providers
+	GreyNoiseKey   string
+	CriminalIPKey  string
+	PulsediveKey   string
+	// IPSum doesn't need API key (public GitHub data)
 	CacheTTL       time.Duration
 	RateLimitDelay time.Duration
 }
@@ -125,9 +131,14 @@ func Load() (*Config, error) {
 			Timeout:        viper.GetDuration("SOPHOS_TIMEOUT"),
 		},
 		ThreatIntel: ThreatIntelConfig{
+			// Core providers
 			AbuseIPDBKey:   viper.GetString("ABUSEIPDB_API_KEY"),
 			VirusTotalKey:  viper.GetString("VIRUSTOTAL_API_KEY"),
 			AlienVaultKey:  viper.GetString("ALIENVAULT_API_KEY"),
+			// v1.6 providers
+			GreyNoiseKey:   viper.GetString("GREYNOISE_API_KEY"),
+			CriminalIPKey:  viper.GetString("CRIMINALIP_API_KEY"),
+			PulsediveKey:   viper.GetString("PULSEDIVE_API_KEY"),
 			CacheTTL:       viper.GetDuration("THREAT_INTEL_CACHE_TTL"),
 			RateLimitDelay: viper.GetDuration("THREAT_INTEL_RATE_LIMIT"),
 		},
@@ -177,10 +188,14 @@ func bindEnvVars() {
 	viper.BindEnv("SOPHOS_PERMANENT_GROUP")
 	viper.BindEnv("SOPHOS_TIMEOUT")
 
-	// Threat Intel
+	// Threat Intel - Core providers
 	viper.BindEnv("ABUSEIPDB_API_KEY")
 	viper.BindEnv("VIRUSTOTAL_API_KEY")
 	viper.BindEnv("ALIENVAULT_API_KEY")
+	// Threat Intel - v1.6 providers
+	viper.BindEnv("GREYNOISE_API_KEY")
+	viper.BindEnv("CRIMINALIP_API_KEY")
+	viper.BindEnv("PULSEDIVE_API_KEY")
 	viper.BindEnv("THREAT_INTEL_CACHE_TTL")
 	viper.BindEnv("THREAT_INTEL_RATE_LIMIT")
 
