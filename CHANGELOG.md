@@ -4,6 +4,62 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.2.0] - 2026-01-07
+
+### Frontend Integration - Soft Whitelist UI
+
+Intégration complète de l'interface utilisateur pour le système Soft Whitelist v2.0.
+
+---
+
+### 🛡️ Soft Whitelist Dashboard
+
+Nouvelle page dédiée à la gestion des whitelists avec support des trois niveaux de confiance.
+
+#### Fonctionnalités UI
+| Section | Description |
+|---------|-------------|
+| **Stats Cards** | Total entries, Hard whitelist, Soft whitelist, Monitor only |
+| **IP Check** | Vérification d'une IP avec résultat détaillé (type, score modifier, auto-ban) |
+| **Entries List** | Liste filtrable par type avec détails complets |
+| **Add Entry Modal** | Création d'entrée avec type, raison, score modifier, TTL, tags |
+| **Type Legend** | Explication des trois niveaux de whitelist |
+
+#### Types de Whitelist
+| Type | Comportement | Icône |
+|------|--------------|-------|
+| `hard` | Full bypass - jamais banni, score ignoré | ShieldCheck (vert) |
+| `soft` | Score réduit, alerte uniquement (pas d'auto-ban) | Shield (bleu) |
+| `monitor` | Logging uniquement, pas d'impact sur score/bans | Eye (jaune) |
+
+#### Fonctionnalités Avancées
+- **Score Modifier** : Slider 0-100% pour réduction du score (type soft)
+- **Alert Only** : Option pour alerter sans auto-ban
+- **TTL Support** : Durée en jours (vide = permanent)
+- **Tags** : Catégorisation flexible (CDN, partner, pentest, etc.)
+- **CIDR Support** : Affichage des masques CIDR
+
+#### Navigation
+- Nouvelle entrée "Whitelist" dans la sidebar avec icône ShieldCheck
+- Route `/whitelist` accessible
+
+#### Corrections Backend
+- Routes API whitelist corrigées (`/stats`, `/check/{ip}`, `PUT /{ip}`)
+- Fix type `int32` pour `ScoreModifier` (compatibilité ClickHouse Int32)
+
+#### Fichiers Ajoutés/Modifiés
+| Fichier | Changement |
+|---------|------------|
+| `frontend/src/types/index.ts` | Types WhitelistEntry, WhitelistRequest, WhitelistCheckResult, WhitelistStats |
+| `frontend/src/lib/api.ts` | Module `softWhitelistApi` |
+| `frontend/src/pages/SoftWhitelist.tsx` | Page complète |
+| `frontend/src/App.tsx` | Route `/whitelist` |
+| `frontend/src/components/layout/Sidebar.tsx` | Navigation |
+| `backend/cmd/api/main.go` | Routes whitelist v2.0 |
+| `backend/internal/entity/ban.go` | Fix int32 ScoreModifier |
+
+---
+
 ## [2.1.0] - 2026-01-07
 
 ### Frontend Integration - Geoblocking UI
