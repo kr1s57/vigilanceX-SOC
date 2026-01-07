@@ -4,6 +4,53 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.1.0] - 2026-01-07
+
+### Frontend Integration - Geoblocking UI
+
+Intégration complète de l'interface utilisateur pour le module Geoblocking v2.0.
+
+---
+
+### 🌍 Geoblocking Dashboard
+
+Nouvelle page dédiée à la gestion du geoblocking avec interface complète.
+
+#### Fonctionnalités UI
+| Section | Description |
+|---------|-------------|
+| **Stats Cards** | Total rules, Active rules, Blocked countries, Watched countries |
+| **Rules Management** | Liste, création et suppression des règles |
+| **IP Check** | Vérification d'une IP contre les règles actives |
+| **GeoIP Lookup** | Recherche géographique avec détection VPN/Proxy/Tor/Datacenter |
+| **High-Risk Countries** | Affichage des pays à risque élevé avec scores |
+
+#### Types de Règles Supportés
+- `country_block` - Blocage par pays (ISO 3166-1 alpha-2)
+- `country_watch` - Surveillance par pays
+- `asn_block` - Blocage par ASN
+- `asn_watch` - Surveillance par ASN
+
+#### Actions Disponibles
+- `block` - Blocage immédiat
+- `watch` - Surveillance avec score modifier
+- `boost` - Augmentation du score de risque
+
+#### Navigation
+- Nouvelle entrée "Geoblocking" dans la sidebar avec icône Globe
+- Route `/geoblocking` accessible
+
+#### Fichiers Ajoutés/Modifiés
+| Fichier | Changement |
+|---------|------------|
+| `frontend/src/types/index.ts` | Types TypeScript geoblocking |
+| `frontend/src/lib/api.ts` | Module `geoblockingApi` |
+| `frontend/src/pages/Geoblocking.tsx` | Page complète |
+| `frontend/src/App.tsx` | Route `/geoblocking` |
+| `frontend/src/components/layout/Sidebar.tsx` | Navigation |
+
+---
+
 ## [2.0.0] - 2026-01-07
 
 ### Major Release - Advanced Risk Scoring & Geoblocking
