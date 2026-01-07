@@ -382,15 +382,18 @@ func (c *Client) TestConnection() error {
 
 // SyncStatus represents the sync state between VIGILANCE X and Sophos XGS
 type SyncStatus struct {
-	Connected      bool
-	GroupExists    bool
-	TotalInGroup   int
-	LastSyncError  string
+	Connected      bool   `json:"connected"`
+	GroupExists    bool   `json:"group_exists"`
+	TotalInGroup   int    `json:"total_in_group"`
+	LastSyncError  string `json:"last_sync_error,omitempty"`
+	Host           string `json:"host,omitempty"`
 }
 
 // GetSyncStatus returns the current sync status with Sophos XGS
 func (c *Client) GetSyncStatus() (*SyncStatus, error) {
-	status := &SyncStatus{}
+	status := &SyncStatus{
+		Host: c.baseURL,
+	}
 
 	// Get blocklist count (also serves as connection test)
 	count, err := c.GetBlocklistCount()

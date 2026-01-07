@@ -56,7 +56,7 @@ export function Settings() {
       try {
         const [providers, xgsStatus, modsecStats, sshTest, syslogStatus] = await Promise.all([
           threatsApi.providers(),
-          bansApi.xgsStatus().catch(() => ({ connected: false, host: '' })),
+          bansApi.xgsStatus().catch(() => ({ connected: false, host: '', total_in_group: 0 })),
           modsecApi.getStats().catch(() => ({ last_sync: null, is_configured: false })),
           modsecApi.testConnection().catch(() => ({ status: 'error', message: 'Connection failed' })),
           statusApi.syslog().catch(() => ({ is_receiving: false, last_event_time: '', events_last_hour: 0, seconds_since_last: 0 })),
@@ -73,7 +73,7 @@ export function Settings() {
           sophosApi: {
             connected: xgsStatus.connected || false,
             host: xgsStatus.host || 'Non configure',
-            groupCount: 0, // Will be fetched from separate endpoint if needed
+            groupCount: xgsStatus.total_in_group || 0,
           },
           sophosSsh: {
             connected: sshTest.status === 'ok',

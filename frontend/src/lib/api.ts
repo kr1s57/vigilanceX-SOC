@@ -169,7 +169,7 @@ export const bansApi = {
   },
 
   xgsStatus: async () => {
-    const response = await api.get<{ connected: boolean; host: string }>('/bans/xgs-status')
+    const response = await api.get<{ connected: boolean; host: string; total_in_group: number }>('/bans/xgs-status')
     return response.data
   },
 }
