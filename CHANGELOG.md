@@ -4,6 +4,68 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.5.0] - 2026-01-07
+
+### System IPs & Icon Style Customization
+
+Nouvelle version majeure avec gestion des IPs système protégées et personnalisation de l'interface.
+
+---
+
+### 🖥️ System Protected IPs - Whitelist Page
+
+Nouvelle section dans la page Whitelist pour visualiser les IPs système protégées.
+
+#### Fonctionnalités
+| Feature | Description |
+|---------|-------------|
+| **Section dédiée** | Nouvelle section "System Protected IPs" dans Whitelist |
+| **Vue par catégorie** | IPs groupées par DNS, Cloud, Monitoring |
+| **Toggle Show/Hide** | Affichage collapsible avec compteur d'IPs |
+| **Détails complets** | IP, nom, provider pour chaque entrée |
+
+---
+
+### 🎨 Sidebar Icon Style
+
+Option de personnalisation du style des icônes de la sidebar.
+
+#### Styles disponibles
+| Style | Description |
+|-------|-------------|
+| **Monochrome** | Icônes monochromes (style classique) |
+| **Color** | Icônes colorées par catégorie de page |
+
+#### Palette de couleurs
+| Page | Couleur |
+|------|---------|
+| Dashboard | Bleu |
+| WAF Explorer | Emeraude |
+| Attacks Analyzer | Rouge |
+| Advanced Threat | Orange |
+| VPN & Network | Violet |
+| Active Bans | Rouge foncé |
+| Geoblocking | Cyan |
+| Whitelist | Vert |
+| Risk Scoring | Jaune |
+| Reports | Indigo |
+
+---
+
+### 🔧 Bug Fixes
+
+#### Dashboard - Filtre 1h
+- Correction du filtre de période "1h" qui affichait les mêmes données que "24h"
+- Le backend gère maintenant correctement tous les filtres : 1h, 24h, 7d, 30d
+
+#### Geoblocking - Suppression des règles
+- Correction de l'affichage des règles : seules les règles actives sont affichées
+- Possibilité de supprimer toutes les règles (WATCH, BLOCK, etc.)
+
+---
+
+---
+
 ## [2.3.0] - 2026-01-07
 
 ### UI Improvements & Plugin Configuration Management

@@ -727,7 +727,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v2.3.0</p>
+        <p>VIGILANCE X v2.5.0</p>
         <p className="mt-1">Security Operations Center - Enhanced OSINT Stack</p>
       </div>
     </div>
