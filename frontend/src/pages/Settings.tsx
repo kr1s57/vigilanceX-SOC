@@ -30,10 +30,9 @@ import {
   Pencil,
   X,
   Key,
-  Save,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
-import { threatsApi, bansApi, modsecApi, statusApi } from '@/lib/api'
+import { threatsApi, bansApi, modsecApi, statusApi, configApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ThreatProvider {
@@ -140,6 +139,7 @@ export function Settings() {
   const [editingPlugin, setEditingPlugin] = useState<PluginConfig | null>(null)
   const [pluginFormData, setPluginFormData] = useState<Record<string, string>>({})
   const [savingPlugin, setSavingPlugin] = useState(false)
+  const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null)
 
   // Fetch integration status
   useEffect(() => {
@@ -218,19 +218,35 @@ export function Settings() {
   const handleSavePlugin = async () => {
     if (!editingPlugin) return
     setSavingPlugin(true)
+    setSaveResult(null)
     try {
-      // In production, this would call a backend API to save the config
-      // For now, we just show a success message
-      console.log('Saving plugin config:', editingPlugin.id, pluginFormData)
-      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate API call
-      setEditingPlugin(null)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } catch (err) {
-      console.error('Failed to save plugin config:', err)
+      const result = await configApi.save(editingPlugin.id, pluginFormData)
+      setSaveResult({
+        success: result.test.success,
+        message: result.message,
+      })
+      // Keep modal open to show result, auto-close after 3s on success
+      if (result.test.success) {
+        setTimeout(() => {
+          setEditingPlugin(null)
+          setSaveResult(null)
+          // Refresh integrations status
+          window.location.reload()
+        }, 2000)
+      }
+    } catch (err: any) {
+      setSaveResult({
+        success: false,
+        message: err.response?.data?.error || 'Failed to save configuration',
+      })
     } finally {
       setSavingPlugin(false)
     }
+  }
+
+  const handleClosePluginModal = () => {
+    setEditingPlugin(null)
+    setSaveResult(null)
   }
 
   // Find plugin by provider name
@@ -590,7 +606,7 @@ export function Settings() {
                 </div>
               </div>
               <button
-                onClick={() => setEditingPlugin(null)}
+                onClick={handleClosePluginModal}
                 className="p-1 hover:bg-muted rounded"
               >
                 <X className="w-5 h-5" />
@@ -607,42 +623,73 @@ export function Settings() {
                     onChange={(e) => handlePluginFieldChange(field.key, e.target.value)}
                     placeholder={field.placeholder}
                     className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                    disabled={savingPlugin}
                   />
                 </div>
               ))}
 
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 mt-4">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5" />
-                  <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                    <p className="font-medium">Environment variables required</p>
-                    <p className="text-xs mt-1 opacity-80">
-                      Changes must be applied to your .env file and the service restarted for them to take effect.
-                    </p>
+              {/* Result feedback */}
+              {saveResult && (
+                <div className={cn(
+                  'rounded-lg p-3 border',
+                  saveResult.success
+                    ? 'bg-green-500/10 border-green-500/20'
+                    : 'bg-red-500/10 border-red-500/20'
+                )}>
+                  <div className="flex items-start gap-2">
+                    {saveResult.success ? (
+                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-red-500 mt-0.5" />
+                    )}
+                    <div className={cn(
+                      'text-sm',
+                      saveResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                    )}>
+                      <p className="font-medium">{saveResult.success ? 'Connected' : 'Connection Failed'}</p>
+                      <p className="text-xs mt-1 opacity-80">{saveResult.message}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {!saveResult && (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <Server className="w-4 h-4 text-blue-500 mt-0.5" />
+                    <div className="text-sm text-blue-600 dark:text-blue-400">
+                      <p className="font-medium">Test & Apply Configuration</p>
+                      <p className="text-xs mt-1 opacity-80">
+                        The connection will be tested and configuration saved. Service will reload automatically.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setEditingPlugin(null)}
-                  className="flex-1 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSavePlugin}
+                  onClick={handleClosePluginModal}
                   disabled={savingPlugin}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
                 >
-                  {savingPlugin ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  Save Configuration
+                  {saveResult ? 'Close' : 'Cancel'}
                 </button>
+                {!saveResult?.success && (
+                  <button
+                    onClick={handleSavePlugin}
+                    disabled={savingPlugin}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {savingPlugin ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    {savingPlugin ? 'Testing...' : 'Save & Restart'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -391,6 +391,14 @@ func main() {
 				r.Post("/sophos/test", handlers.NotImplemented)
 			})
 
+			// Config management (v2.3 - Plugin configuration)
+			r.Route("/config", func(r chi.Router) {
+				configHandler := handlers.NewConfigHandler()
+				r.Post("/test", configHandler.TestConfig)
+				r.Post("/save", configHandler.SaveConfig)
+				r.Get("/", configHandler.GetConfig)
+			})
+
 			// WebSocket endpoint
 			r.Get("/ws", wsHub.ServeWS)
 		})

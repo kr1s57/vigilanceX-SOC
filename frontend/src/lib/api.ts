@@ -490,6 +490,30 @@ export const geoblockingApi = {
   },
 }
 
+// Config API (v2.3 - Plugin configuration)
+export const configApi = {
+  test: async (pluginId: string, fields: Record<string, string>) => {
+    const response = await api.post<{ success: boolean; message: string; status: string }>('/config/test', {
+      plugin_id: pluginId,
+      fields,
+    })
+    return response.data
+  },
+
+  save: async (pluginId: string, fields: Record<string, string>) => {
+    const response = await api.post<{ saved: boolean; test: { success: boolean; message: string; status: string }; message: string }>('/config/save', {
+      plugin_id: pluginId,
+      fields,
+    })
+    return response.data
+  },
+
+  get: async () => {
+    const response = await api.get<Record<string, Record<string, string>>>('/config')
+    return response.data
+  },
+}
+
 // Soft Whitelist API (v2.0)
 export const softWhitelistApi = {
   // List all whitelisted IPs (optional filter by type)
