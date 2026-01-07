@@ -1,0 +1,577 @@
+import { useState, useEffect } from 'react'
+import {
+  Settings as SettingsIcon,
+  Monitor,
+  Bell,
+  Shield,
+  Plug,
+  RotateCcw,
+  Sun,
+  Moon,
+  Laptop,
+  Check,
+  RefreshCw,
+  Clock,
+  Eye,
+  EyeOff,
+  Volume2,
+  VolumeX,
+  Globe,
+  Hash,
+  Calendar,
+  Users,
+  Zap,
+  Lock,
+  Server,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Loader2,
+} from 'lucide-react'
+import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
+import { threatsApi, bansApi, modsecApi } from '@/lib/api'
+import { cn } from '@/lib/utils'
+
+interface IntegrationStatus {
+  sophos: { connected: boolean; host: string }
+  threatIntel: {
+    abuseipdb: boolean
+    virustotal: boolean
+    alienvault: boolean
+  }
+  modsec: { connected: boolean; lastSync: string | null }
+}
+
+export function Settings() {
+  const { settings, updateSettings, resetSettings } = useSettings()
+  const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
+  const [loadingIntegrations, setLoadingIntegrations] = useState(true)
+  const [saved, setSaved] = useState(false)
+
+  // Fetch integration status
+  useEffect(() => {
+    async function fetchIntegrations() {
+      setLoadingIntegrations(true)
+      try {
+        const [providers, xgsStatus, modsecStats] = await Promise.all([
+          threatsApi.providers(),
+          bansApi.xgsStatus().catch(() => ({ connected: false, host: '' })),
+          modsecApi.getStats().catch(() => ({ last_sync: null })),
+        ])
+
+        // providers is ThreatProvider[] - check if provider name exists and is configured
+        const isProviderActive = (name: string) =>
+          providers.some(p => p.name === name && p.configured)
+
+        setIntegrations({
+          sophos: {
+            connected: xgsStatus.connected || false,
+            host: xgsStatus.host || 'Non configure',
+          },
+          threatIntel: {
+            abuseipdb: isProviderActive('AbuseIPDB'),
+            virustotal: isProviderActive('VirusTotal'),
+            alienvault: isProviderActive('AlienVault OTX'),
+          },
+          modsec: {
+            connected: !!modsecStats.last_sync,
+            lastSync: modsecStats.last_sync,
+          },
+        })
+      } catch (err) {
+        console.error('Failed to fetch integrations:', err)
+      } finally {
+        setLoadingIntegrations(false)
+      }
+    }
+
+    fetchIntegrations()
+  }, [])
+
+  // Show saved indicator
+  const handleChange = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    updateSettings({ [key]: value })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-3">
+            <SettingsIcon className="w-7 h-7" />
+            Settings
+          </h1>
+          <p className="text-muted-foreground">Configure your VIGILANCE X experience</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {saved && (
+            <span className="flex items-center gap-2 text-sm text-green-500 animate-in fade-in">
+              <Check className="w-4 h-4" />
+              Saved
+            </span>
+          )}
+          <button
+            onClick={resetSettings}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reset to defaults
+          </button>
+        </div>
+      </div>
+
+      {/* Display Settings */}
+      <SettingsSection
+        title="Display"
+        description="Appearance and formatting preferences"
+        icon={<Monitor className="w-5 h-5" />}
+      >
+        {/* Theme */}
+        <SettingRow
+          label="Theme"
+          description="Choose the color theme for the interface"
+          icon={<Sun className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={settings.theme}
+            onChange={(v) => handleChange('theme', v as AppSettings['theme'])}
+            options={[
+              { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
+              { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
+              { value: 'system', label: 'System', icon: <Laptop className="w-4 h-4" /> },
+            ]}
+          />
+        </SettingRow>
+
+        {/* Language */}
+        <SettingRow
+          label="Language"
+          description="Interface language"
+          icon={<Globe className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={settings.language}
+            onChange={(v) => handleChange('language', v as AppSettings['language'])}
+            options={[
+              { value: 'fr', label: 'Francais' },
+              { value: 'en', label: 'English' },
+            ]}
+          />
+        </SettingRow>
+
+        {/* Date Format */}
+        <SettingRow
+          label="Time format"
+          description="How times are displayed"
+          icon={<Clock className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={settings.dateFormat}
+            onChange={(v) => handleChange('dateFormat', v as AppSettings['dateFormat'])}
+            options={[
+              { value: '24h', label: '24h (14:30)' },
+              { value: '12h', label: '12h (2:30 PM)' },
+            ]}
+          />
+        </SettingRow>
+
+        {/* Number Format */}
+        <SettingRow
+          label="Number format"
+          description="Thousands separator style"
+          icon={<Hash className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={settings.numberFormat}
+            onChange={(v) => handleChange('numberFormat', v as AppSettings['numberFormat'])}
+            options={[
+              { value: 'fr', label: '1 234,56' },
+              { value: 'en', label: '1,234.56' },
+            ]}
+          />
+        </SettingRow>
+
+        {/* Default Period */}
+        <SettingRow
+          label="Default time period"
+          description="Default filter for dashboards and charts"
+          icon={<Calendar className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={settings.defaultPeriod}
+            onChange={(v) => handleChange('defaultPeriod', v as AppSettings['defaultPeriod'])}
+            options={[
+              { value: '1h', label: '1h' },
+              { value: '24h', label: '24h' },
+              { value: '7d', label: '7d' },
+              { value: '30d', label: '30d' },
+            ]}
+          />
+        </SettingRow>
+      </SettingsSection>
+
+      {/* Dashboard & Refresh Settings */}
+      <SettingsSection
+        title="Dashboard & Refresh"
+        description="Data refresh and display options"
+        icon={<RefreshCw className="w-5 h-5" />}
+      >
+        {/* Refresh Interval */}
+        <SettingRow
+          label="Auto-refresh interval"
+          description="How often to refresh data automatically"
+          icon={<RefreshCw className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={String(settings.refreshInterval)}
+            onChange={(v) => handleChange('refreshInterval', Number(v) as AppSettings['refreshInterval'])}
+            options={[
+              { value: '15', label: '15s' },
+              { value: '30', label: '30s' },
+              { value: '60', label: '60s' },
+              { value: '0', label: 'Manual' },
+            ]}
+          />
+        </SettingRow>
+
+        {/* Top Attackers Count */}
+        <SettingRow
+          label="Top Attackers displayed"
+          description="Number of top attackers shown on dashboard"
+          icon={<Users className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={String(settings.topAttackersCount)}
+            onChange={(v) => handleChange('topAttackersCount', Number(v) as AppSettings['topAttackersCount'])}
+            options={[
+              { value: '5', label: '5' },
+              { value: '10', label: '10' },
+              { value: '20', label: '20' },
+            ]}
+          />
+        </SettingRow>
+
+        {/* Animations */}
+        <SettingRow
+          label="Animations"
+          description="Enable smooth transitions and animations"
+          icon={<Zap className="w-4 h-4" />}
+        >
+          <ToggleSwitch
+            checked={settings.animationsEnabled}
+            onChange={(v) => handleChange('animationsEnabled', v)}
+          />
+        </SettingRow>
+      </SettingsSection>
+
+      {/* Notifications Settings */}
+      <SettingsSection
+        title="Notifications"
+        description="Alert and notification preferences"
+        icon={<Bell className="w-5 h-5" />}
+      >
+        {/* Notifications Enabled */}
+        <SettingRow
+          label="Enable notifications"
+          description="Show notifications for security alerts"
+          icon={<Bell className="w-4 h-4" />}
+        >
+          <ToggleSwitch
+            checked={settings.notificationsEnabled}
+            onChange={(v) => handleChange('notificationsEnabled', v)}
+          />
+        </SettingRow>
+
+        {/* Sound Enabled */}
+        <SettingRow
+          label="Alert sound"
+          description="Play sound for critical alerts"
+          icon={settings.soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        >
+          <ToggleSwitch
+            checked={settings.soundEnabled}
+            onChange={(v) => handleChange('soundEnabled', v)}
+            disabled={!settings.notificationsEnabled}
+          />
+        </SettingRow>
+
+        {/* Alert Threshold */}
+        <SettingRow
+          label="Alert threshold"
+          description="Which severity levels trigger notifications"
+          icon={<AlertTriangle className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={settings.alertThreshold}
+            onChange={(v) => handleChange('alertThreshold', v as AppSettings['alertThreshold'])}
+            options={[
+              { value: 'critical', label: 'Critical only' },
+              { value: 'critical+high', label: 'Critical + High' },
+            ]}
+            disabled={!settings.notificationsEnabled}
+          />
+        </SettingRow>
+      </SettingsSection>
+
+      {/* Security Settings */}
+      <SettingsSection
+        title="Security & Privacy"
+        description="Security and data display options"
+        icon={<Shield className="w-5 h-5" />}
+      >
+        {/* Session Timeout */}
+        <SettingRow
+          label="Session timeout"
+          description="Auto logout after inactivity (not implemented)"
+          icon={<Lock className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={String(settings.sessionTimeout)}
+            onChange={(v) => handleChange('sessionTimeout', Number(v) as AppSettings['sessionTimeout'])}
+            options={[
+              { value: '15', label: '15 min' },
+              { value: '30', label: '30 min' },
+              { value: '60', label: '1 hour' },
+              { value: '0', label: 'Never' },
+            ]}
+          />
+        </SettingRow>
+
+        {/* Mask Sensitive IPs */}
+        <SettingRow
+          label="Mask sensitive IPs"
+          description="Partially hide IP addresses (e.g., 192.168.1.***)"
+          icon={settings.maskSensitiveIPs ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        >
+          <ToggleSwitch
+            checked={settings.maskSensitiveIPs}
+            onChange={(v) => handleChange('maskSensitiveIPs', v)}
+          />
+        </SettingRow>
+      </SettingsSection>
+
+      {/* Integrations Status (Read-only) */}
+      <SettingsSection
+        title="Integrations"
+        description="Status of external service connections"
+        icon={<Plug className="w-5 h-5" />}
+      >
+        {loadingIntegrations ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            {/* Sophos XGS */}
+            <IntegrationRow
+              name="Sophos XGS Firewall"
+              description={integrations?.sophos.host || 'Not configured'}
+              connected={integrations?.sophos.connected || false}
+              icon={<Server className="w-4 h-4" />}
+            />
+
+            {/* AbuseIPDB */}
+            <IntegrationRow
+              name="AbuseIPDB"
+              description="IP reputation database"
+              connected={integrations?.threatIntel.abuseipdb || false}
+              icon={<Shield className="w-4 h-4" />}
+            />
+
+            {/* VirusTotal */}
+            <IntegrationRow
+              name="VirusTotal"
+              description="Malware analysis platform"
+              connected={integrations?.threatIntel.virustotal || false}
+              icon={<Shield className="w-4 h-4" />}
+            />
+
+            {/* AlienVault OTX */}
+            <IntegrationRow
+              name="AlienVault OTX"
+              description="Open threat exchange"
+              connected={integrations?.threatIntel.alienvault || false}
+              icon={<Shield className="w-4 h-4" />}
+            />
+
+            {/* ModSec Sync */}
+            <IntegrationRow
+              name="ModSecurity Sync"
+              description={
+                integrations?.modsec.lastSync
+                  ? `Last sync: ${new Date(integrations.modsec.lastSync).toLocaleString()}`
+                  : 'Never synced'
+              }
+              connected={integrations?.modsec.connected || false}
+              icon={<RefreshCw className="w-4 h-4" />}
+            />
+          </>
+        )}
+      </SettingsSection>
+
+      {/* Version Info */}
+      <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
+        <p>VIGILANCE X v1.0.0</p>
+        <p className="mt-1">Security Operations Center</p>
+      </div>
+    </div>
+  )
+}
+
+// Helper Components
+
+function SettingsSection({
+  title,
+  description,
+  icon,
+  children,
+}: {
+  title: string
+  description: string
+  icon: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <div className="bg-card rounded-xl border">
+      <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+        <div className="p-2 bg-primary/10 text-primary rounded-lg">{icon}</div>
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className="divide-y divide-border">{children}</div>
+    </div>
+  )
+}
+
+function SettingRow({
+  label,
+  description,
+  icon,
+  children,
+}: {
+  label: string
+  description: string
+  icon: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between px-6 py-4">
+      <div className="flex items-center gap-3">
+        <div className="text-muted-foreground">{icon}</div>
+        <div>
+          <p className="font-medium">{label}</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div>{children}</div>
+    </div>
+  )
+}
+
+function ToggleGroup({
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: { value: string; label: string; icon?: React.ReactNode }[]
+  disabled?: boolean
+}) {
+  return (
+    <div className={cn('flex bg-muted rounded-lg p-1', disabled && 'opacity-50 pointer-events-none')}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+            value === option.value
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          {option.icon}
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      disabled={disabled}
+      className={cn(
+        'relative w-12 h-6 rounded-full transition-colors',
+        checked ? 'bg-primary' : 'bg-muted',
+        disabled && 'opacity-50 cursor-not-allowed'
+      )}
+    >
+      <span
+        className={cn(
+          'absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform',
+          checked && 'translate-x-6'
+        )}
+      />
+    </button>
+  )
+}
+
+function IntegrationRow({
+  name,
+  description,
+  connected,
+  icon,
+}: {
+  name: string
+  description: string
+  connected: boolean
+  icon: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between px-6 py-4">
+      <div className="flex items-center gap-3">
+        <div className="text-muted-foreground">{icon}</div>
+        <div>
+          <p className="font-medium">{name}</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div
+        className={cn(
+          'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
+          connected ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+        )}
+      >
+        {connected ? (
+          <>
+            <CheckCircle className="w-4 h-4" />
+            Connected
+          </>
+        ) : (
+          <>
+            <XCircle className="w-4 h-4" />
+            Not configured
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

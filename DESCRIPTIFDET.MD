@@ -443,6 +443,7 @@ frontend/src/
 | `/vpn` | VpnNetwork | Sessions VPN et evenements reseau |
 | `/bans` | ActiveBans | Gestion des IPs bannies |
 | `/reports` | Reports | Generation de rapports PDF/XML |
+| `/settings` | Settings | Parametres utilisateur et configuration |
 
 ### 5.3 Pages Detaillees
 
@@ -651,6 +652,54 @@ reportsApi.generate(config)     // Generation + download
 - VPN & Network
 - Threat Intelligence
 - Bans & Whitelist
+
+---
+
+#### Settings (`Settings.tsx`)
+
+**Fonctionnalites:**
+Page de configuration complete pour personnaliser l'experience utilisateur.
+
+**Sections de parametres:**
+
+| Section | Options | Description |
+|---------|---------|-------------|
+| **Display** | Theme (Dark/Light/System), Language, Time format (24h/12h), Number format (FR/EN), Default period | Preferences d'affichage |
+| **Dashboard & Refresh** | Refresh interval (15s/30s/60s/Manual), Top Attackers count (5/10/20), Animations | Parametres du dashboard |
+| **Notifications** | Enable notifications, Alert sound, Alert threshold (Critical only / Critical+High) | Alertes et sons |
+| **Security** | Session timeout, Mask sensitive IPs | Securite et confidentialite |
+| **Integrations** | Statut Sophos XGS, AbuseIPDB, VirusTotal, AlienVault OTX, ModSec Sync | Lecture seule |
+
+**Persistance:** Les parametres sont sauvegardes dans localStorage (`vigilancex-settings`)
+
+**Context React:**
+```typescript
+// SettingsContext.tsx
+interface AppSettings {
+  theme: 'dark' | 'light' | 'system'
+  language: 'fr' | 'en'
+  dateFormat: '24h' | '12h'
+  numberFormat: 'fr' | 'en'
+  defaultPeriod: '1h' | '24h' | '7d' | '30d'
+  refreshInterval: 15 | 30 | 60 | 0
+  topAttackersCount: 5 | 10 | 20
+  animationsEnabled: boolean
+  notificationsEnabled: boolean
+  soundEnabled: boolean
+  alertThreshold: 'critical' | 'critical+high'
+  sessionTimeout: 15 | 30 | 60 | 0
+  maskSensitiveIPs: boolean
+}
+
+// Hooks disponibles:
+useSettings()     // Acces aux settings + updateSettings() + resetSettings()
+useFormatters()   // formatNumber(), formatDateTime(), formatTime(), maskIP()
+```
+
+**Integration Dashboard:**
+- `settings.defaultPeriod` → Periode par defaut des graphiques
+- `settings.refreshInterval` → Intervalle de rafraichissement auto
+- `settings.topAttackersCount` → Nombre de Top Attackers affiches
 
 ---
 

@@ -7,6 +7,7 @@ import { AdvancedThreat } from '@/pages/AdvancedThreat'
 import { VpnNetwork } from '@/pages/VpnNetwork'
 import { ActiveBans } from '@/pages/ActiveBans'
 import { Reports } from '@/pages/Reports'
+import { Settings } from '@/pages/Settings'
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/vpn" element={<VpnNetwork />} />
         <Route path="/bans" element={<ActiveBans />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/settings" element={<Settings />} />
       </Routes>
     </Layout>
   )

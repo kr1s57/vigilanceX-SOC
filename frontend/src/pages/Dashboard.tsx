@@ -12,13 +12,17 @@ import { TimelineChart } from '@/components/charts/TimelineChart'
 import { SeverityChart } from '@/components/charts/SeverityChart'
 import { statsApi, eventsApi, alertsApi } from '@/lib/api'
 import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
+import { useSettings } from '@/contexts/SettingsContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
 
+type Period = '1h' | '24h' | '7d' | '30d'
+
 export function Dashboard() {
+  const { settings } = useSettings()
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
   const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlert[]>([])
-  const [period, setPeriod] = useState('24h')
+  const [period, setPeriod] = useState<Period>(settings.defaultPeriod)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAlertsModal, setShowAlertsModal] = useState(false)
@@ -30,7 +34,7 @@ export function Dashboard() {
       try {
         const [overviewData, timelineData, alertsData] = await Promise.all([
           statsApi.overview(period),
-          eventsApi.timeline(period, period === '24h' ? 'hour' : 'day'),
+          eventsApi.timeline(period, period === '24h' || period === '1h' ? 'hour' : 'day'),
           alertsApi.critical(20),
         ])
         setOverview(overviewData)
@@ -46,10 +50,12 @@ export function Dashboard() {
 
     fetchData()
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
-  }, [period])
+    // Refresh based on settings (0 = manual/disabled)
+    if (settings.refreshInterval > 0) {
+      const interval = setInterval(fetchData, settings.refreshInterval * 1000)
+      return () => clearInterval(interval)
+    }
+  }, [period, settings.refreshInterval])
 
   if (loading && !overview) {
     return (
@@ -85,7 +91,7 @@ export function Dashboard() {
           <p className="text-muted-foreground">Real-time security overview</p>
         </div>
         <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-          {['24h', '7d', '30d'].map((p) => (
+          {(['1h', '24h', '7d', '30d'] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
@@ -157,7 +163,7 @@ export function Dashboard() {
         <div className="bg-card rounded-xl border p-6">
           <h3 className="text-lg font-semibold mb-4">Top Attackers</h3>
           <div className="space-y-3">
-            {overview?.top_attackers.slice(0, 5).map((attacker, index) => (
+            {overview?.top_attackers.slice(0, settings.topAttackersCount).map((attacker, index) => (
               <TopAttackerRow key={attacker.ip} attacker={attacker} rank={index + 1} />
             ))}
             {(!overview?.top_attackers || overview.top_attackers.length === 0) && (

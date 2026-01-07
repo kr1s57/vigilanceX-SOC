@@ -167,6 +167,11 @@ export const bansApi = {
   sync: async () => {
     await api.post('/bans/sync')
   },
+
+  xgsStatus: async () => {
+    const response = await api.get<{ connected: boolean; host: string }>('/bans/xgs-status')
+    return response.data
+  },
 }
 
 // Whitelist API
