@@ -73,10 +73,10 @@ const defaultPluginConfigs: PluginConfig[] = [
     name: 'Sophos XGS - SSH',
     type: 'sophos',
     fields: [
-      { key: 'SSH_HOST', label: 'Host/IP', type: 'text', value: '', placeholder: '192.168.1.1' },
+      { key: 'SSH_HOST', label: 'Host/IP', type: 'text', value: '', placeholder: '10.56.125.254' },
       { key: 'SSH_PORT', label: 'Port', type: 'number', value: '22', placeholder: '22' },
-      { key: 'SSH_USER', label: 'Username', type: 'text', value: '', placeholder: 'root' },
-      { key: 'SSH_KEY_PATH', label: 'SSH Key Path', type: 'text', value: '', placeholder: '/root/.ssh/id_rsa' },
+      { key: 'SSH_USER', label: 'Username', type: 'text', value: '', placeholder: 'admin' },
+      { key: 'SSH_KEY_PATH', label: 'SSH Key Path', type: 'text', value: '/app/.ssh/id_rsa_xgs', placeholder: '/app/.ssh/id_rsa_xgs' },
     ],
   },
   {
