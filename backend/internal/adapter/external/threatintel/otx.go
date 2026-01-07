@@ -59,18 +59,34 @@ type OTXPulseInfo struct {
 
 // OTXPulse represents a single threat feed entry
 type OTXPulse struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Description    string   `json:"description"`
-	Created        string   `json:"created"`
-	Modified       string   `json:"modified"`
-	Tags           []string `json:"tags"`
-	TLP            string   `json:"TLP"`
-	Adversary      string   `json:"adversary"`
-	TargetedCountries []string `json:"targeted_countries"`
-	Industries     []string `json:"industries"`
-	MalwareFamilies []string `json:"malware_families"`
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	Description    string         `json:"description"`
+	Created        string         `json:"created"`
+	Modified       string         `json:"modified"`
+	Tags           FlexStringList `json:"tags"`
+	TLP            string         `json:"TLP"`
+	Adversary      string         `json:"adversary"`
+	TargetedCountries FlexStringList `json:"targeted_countries"`
+	Industries     FlexStringList `json:"industries"`
+	MalwareFamilies FlexStringList `json:"malware_families"`
 	AttackIDs      []OTXAttackID `json:"attack_ids"`
+}
+
+// FlexStringList handles OTX API's inconsistent JSON (can be string array or object)
+type FlexStringList []string
+
+// UnmarshalJSON handles both array of strings and object/null formats
+func (f *FlexStringList) UnmarshalJSON(data []byte) error {
+	// Try as array of strings first
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*f = arr
+		return nil
+	}
+	// If not array, return empty (handles objects, nulls, etc.)
+	*f = []string{}
+	return nil
 }
 
 // OTXAttackID represents MITRE ATT&CK mapping

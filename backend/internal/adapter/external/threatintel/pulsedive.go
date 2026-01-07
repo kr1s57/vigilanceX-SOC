@@ -79,10 +79,23 @@ type PulsediveFeed struct {
 }
 
 // PulsediveAttrs contains technical attributes
+// Note: Pulsedive API can return this as array or object depending on data
 type PulsediveAttrs struct {
-	Port     []string `json:"port"`
-	Protocol []string `json:"protocol"`
+	Port       []string `json:"port"`
+	Protocol   []string `json:"protocol"`
 	Technology []string `json:"technology"`
+}
+
+// UnmarshalJSON handles both array and object formats from Pulsedive API
+func (p *PulsediveAttrs) UnmarshalJSON(data []byte) error {
+	// Try as object first
+	type plain PulsediveAttrs
+	if err := json.Unmarshal(data, (*plain)(p)); err == nil {
+		return nil
+	}
+	// If array, just return empty struct (no attributes)
+	*p = PulsediveAttrs{}
+	return nil
 }
 
 // PulsediveSummary contains summary statistics

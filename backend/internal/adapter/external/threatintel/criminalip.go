@@ -38,38 +38,40 @@ func NewCriminalIPClient(cfg CriminalIPConfig) *CriminalIPClient {
 	}
 }
 
-// CriminalIPResponse represents the API response
+// CriminalIPResponse represents the actual API response structure
+// Note: CriminalIP returns data at root level, not wrapped in "data" object
 type CriminalIPResponse struct {
-	Status  int              `json:"status"`
-	Message string           `json:"message"`
-	Data    CriminalIPData   `json:"data"`
+	IP              string                `json:"ip"`
+	Tags            CriminalIPTags        `json:"tags"`
+	Score           CriminalIPScore       `json:"score"`
+	UserSearchCount int                   `json:"user_search_count"`
+	Issues          CriminalIPIssueData   `json:"issues,omitempty"`
+	CurrentOpenPort CriminalIPPortData    `json:"current_open_port,omitempty"`
 }
 
-// CriminalIPData contains the IP information
-type CriminalIPData struct {
-	IP           string               `json:"ip"`
-	Score        CriminalIPScore      `json:"score"`
-	Issues       []CriminalIPIssue    `json:"issues"`
-	Whois        CriminalIPWhois      `json:"whois"`
-	IsVPN        bool                 `json:"is_vpn"`
-	IsProxy      bool                 `json:"is_proxy"`
-	IsTor        bool                 `json:"is_tor"`
-	IsHosting    bool                 `json:"is_hosting"`
-	IsCloud      bool                 `json:"is_cloud"`
-	IsDarkweb    bool                 `json:"is_darkweb"`
-	IsScanner    bool                 `json:"is_scanner"`
-	IsMobile     bool                 `json:"is_mobile"`
-	Country      string               `json:"country"`
-	City         string               `json:"city"`
-	ASN          string               `json:"as_name"`
-	ASNNumber    int                  `json:"asn"`
-	Ports        []CriminalIPPort     `json:"ports"`
+// CriminalIPTags contains boolean flags about the IP
+type CriminalIPTags struct {
+	IsVPN     bool `json:"is_vpn"`
+	IsCloud   bool `json:"is_cloud"`
+	IsTor     bool `json:"is_tor"`
+	IsProxy   bool `json:"is_proxy"`
+	IsHosting bool `json:"is_hosting"`
+	IsMobile  bool `json:"is_mobile"`
+	IsDarkweb bool `json:"is_darkweb"`
+	IsScanner bool `json:"is_scanner"`
+	IsSnort   bool `json:"is_snort"`
 }
 
-// CriminalIPScore contains threat scoring
+// CriminalIPScore contains threat scoring (0-5 scale: 0=safe, 5=critical)
 type CriminalIPScore struct {
-	Inbound  string `json:"inbound"`  // "critical", "dangerous", "moderate", "low", "safe"
-	Outbound string `json:"outbound"` // Same levels
+	Inbound  int `json:"inbound"`
+	Outbound int `json:"outbound"`
+}
+
+// CriminalIPIssueData contains security issues
+type CriminalIPIssueData struct {
+	Count int                 `json:"count"`
+	Data  []CriminalIPIssue   `json:"data"`
 }
 
 // CriminalIPIssue represents a detected security issue
@@ -77,23 +79,23 @@ type CriminalIPIssue struct {
 	Type        string `json:"type"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
-	Severity    string `json:"severity"` // "critical", "high", "medium", "low"
+	Severity    string `json:"severity"`
 }
 
-// CriminalIPWhois contains WHOIS information
-type CriminalIPWhois struct {
-	ASN      string `json:"as_name"`
-	Country  string `json:"country"`
-	City     string `json:"city"`
-	Org      string `json:"org_name"`
+// CriminalIPPortData contains open port information
+type CriminalIPPortData struct {
+	Count int                `json:"count"`
+	Data  []CriminalIPPort   `json:"data"`
 }
 
 // CriminalIPPort represents an open port
 type CriminalIPPort struct {
-	Port     int    `json:"port"`
-	Protocol string `json:"protocol"`
-	Service  string `json:"service"`
-	Banner   string `json:"banner"`
+	Port       int    `json:"port"`
+	Protocol   string `json:"protocol"`
+	Service    string `json:"service_name"`
+	Banner     string `json:"banner"`
+	AppName    string `json:"app_name"`
+	AppVersion string `json:"app_version"`
 }
 
 // CriminalIPResult represents the processed result
@@ -155,15 +157,11 @@ func (c *CriminalIPClient) CheckIP(ctx context.Context, ip string) (*CriminalIPR
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	if apiResp.Status != 200 {
-		return nil, fmt.Errorf("API error: %s", apiResp.Message)
-	}
-
 	// Count issues by severity
 	criticalCount := 0
 	highCount := 0
 	categories := make([]string, 0)
-	for _, issue := range apiResp.Data.Issues {
+	for _, issue := range apiResp.Issues.Data {
 		switch issue.Severity {
 		case "critical":
 			criticalCount++
@@ -173,26 +171,30 @@ func (c *CriminalIPClient) CheckIP(ctx context.Context, ip string) (*CriminalIPR
 		categories = append(categories, issue.Type)
 	}
 
-	// Calculate score
-	score := c.calculateScore(apiResp.Data, criticalCount, highCount)
+	// Calculate score based on new structure
+	score := c.calculateScore(apiResp, criticalCount, highCount)
+
+	// Convert inbound/outbound scores to level strings
+	inboundLevel := c.scoreToLevel(apiResp.Score.Inbound)
+	outboundLevel := c.scoreToLevel(apiResp.Score.Outbound)
 
 	result := &CriminalIPResult{
-		IP:              apiResp.Data.IP,
-		InboundScore:    apiResp.Data.Score.Inbound,
-		OutboundScore:   apiResp.Data.Score.Outbound,
-		IsVPN:           apiResp.Data.IsVPN,
-		IsProxy:         apiResp.Data.IsProxy,
-		IsTor:           apiResp.Data.IsTor,
-		IsHosting:       apiResp.Data.IsHosting,
-		IsCloud:         apiResp.Data.IsCloud,
-		IsDarkweb:       apiResp.Data.IsDarkweb,
-		IsScanner:       apiResp.Data.IsScanner,
-		IssueCount:      len(apiResp.Data.Issues),
+		IP:              apiResp.IP,
+		InboundScore:    inboundLevel,
+		OutboundScore:   outboundLevel,
+		IsVPN:           apiResp.Tags.IsVPN,
+		IsProxy:         apiResp.Tags.IsProxy,
+		IsTor:           apiResp.Tags.IsTor,
+		IsHosting:       apiResp.Tags.IsHosting,
+		IsCloud:         apiResp.Tags.IsCloud,
+		IsDarkweb:       apiResp.Tags.IsDarkweb,
+		IsScanner:       apiResp.Tags.IsScanner,
+		IssueCount:      apiResp.Issues.Count,
 		CriticalIssues:  criticalCount,
 		HighIssues:      highCount,
-		Country:         apiResp.Data.Country,
-		ASN:             apiResp.Data.ASN,
-		OpenPorts:       len(apiResp.Data.Ports),
+		Country:         "", // Not directly available in this endpoint
+		ASN:             "",
+		OpenPorts:       apiResp.CurrentOpenPort.Count,
 		Categories:      categories,
 		RawScore:        score,
 		NormalizedScore: score,
@@ -201,36 +203,46 @@ func (c *CriminalIPClient) CheckIP(ctx context.Context, ip string) (*CriminalIPR
 	return result, nil
 }
 
+// scoreToLevel converts numeric score (0-5) to level string
+func (c *CriminalIPClient) scoreToLevel(score int) string {
+	switch score {
+	case 5:
+		return "critical"
+	case 4:
+		return "dangerous"
+	case 3:
+		return "moderate"
+	case 2:
+		return "low"
+	case 1:
+		return "low"
+	default:
+		return "safe"
+	}
+}
+
 // calculateScore determines threat score based on Criminal IP data
-func (c *CriminalIPClient) calculateScore(data CriminalIPData, critical, high int) int {
+// Score scale: 0=safe to 5=critical, converted to 0-100
+func (c *CriminalIPClient) calculateScore(data CriminalIPResponse, critical, high int) int {
 	score := 0
 
-	// Score based on inbound threat level
-	switch data.Score.Inbound {
-	case "critical":
-		score += 50
-	case "dangerous":
-		score += 35
-	case "moderate":
-		score += 20
-	case "low":
-		score += 10
-	}
+	// Score based on inbound threat level (0-5 scale -> 0-50 points)
+	score += data.Score.Inbound * 10
 
 	// Add points for infrastructure flags (used by attackers)
-	if data.IsVPN {
+	if data.Tags.IsVPN {
 		score += 10 // VPNs commonly used to hide origin
 	}
-	if data.IsProxy {
+	if data.Tags.IsProxy {
 		score += 15 // Proxies often used for attacks
 	}
-	if data.IsTor {
+	if data.Tags.IsTor {
 		score += 20 // Tor exit nodes = high anonymity
 	}
-	if data.IsDarkweb {
+	if data.Tags.IsDarkweb {
 		score += 25 // Darkweb association = very suspicious
 	}
-	if data.IsScanner {
+	if data.Tags.IsScanner {
 		score += 15 // Known scanner
 	}
 
