@@ -453,12 +453,14 @@ export function Geoblocking() {
               <AlertTriangle className="h-5 w-5 text-red-400" />
               High Risk Countries
             </h3>
-            <div className="space-y-2">
+            <p className="text-gray-500 text-xs mb-3">Reference list - create rules to customize behavior</p>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
               {highRiskCountries.map((country) => (
                 <div key={country.country_code} className="flex items-center justify-between py-2 border-b border-gray-700 last:border-0">
                   <div className="flex items-center gap-2">
                     <span>{getCountryFlag(country.country_code)}</span>
                     <span className="text-white">{country.country_name}</span>
+                    <span className="text-gray-500 text-xs font-mono">({country.country_code})</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`px-2 py-0.5 rounded text-xs ${getRiskColor(country.risk_level)}`}>

@@ -86,10 +86,15 @@ type CountryRiskLevel struct {
 func DefaultHighRiskCountries() []CountryRiskLevel {
 	return []CountryRiskLevel{
 		{CountryCode: "KP", CountryName: "North Korea", RiskLevel: "critical", BaseScore: 90, Reason: "Sanctioned country"},
-		{CountryCode: "IR", CountryName: "Iran", RiskLevel: "high", BaseScore: 70, Reason: "High threat activity"},
-		{CountryCode: "RU", CountryName: "Russia", RiskLevel: "high", BaseScore: 60, Reason: "High threat activity"},
-		{CountryCode: "CN", CountryName: "China", RiskLevel: "medium", BaseScore: 40, Reason: "Elevated threat activity"},
-		{CountryCode: "BY", CountryName: "Belarus", RiskLevel: "medium", BaseScore: 40, Reason: "Elevated threat activity"},
+		{CountryCode: "IR", CountryName: "Iran", RiskLevel: "critical", BaseScore: 85, Reason: "State-sponsored cyber activity"},
+		{CountryCode: "RU", CountryName: "Russia", RiskLevel: "high", BaseScore: 70, Reason: "High threat activity"},
+		{CountryCode: "CN", CountryName: "China", RiskLevel: "high", BaseScore: 65, Reason: "High threat activity"},
+		{CountryCode: "BY", CountryName: "Belarus", RiskLevel: "high", BaseScore: 60, Reason: "Elevated threat activity"},
+		{CountryCode: "VE", CountryName: "Venezuela", RiskLevel: "medium", BaseScore: 50, Reason: "Elevated threat activity"},
+		{CountryCode: "SY", CountryName: "Syria", RiskLevel: "medium", BaseScore: 50, Reason: "Sanctioned country"},
+		{CountryCode: "CU", CountryName: "Cuba", RiskLevel: "medium", BaseScore: 45, Reason: "Sanctioned country"},
+		{CountryCode: "NG", CountryName: "Nigeria", RiskLevel: "medium", BaseScore: 40, Reason: "Fraud activity"},
+		{CountryCode: "PK", CountryName: "Pakistan", RiskLevel: "medium", BaseScore: 35, Reason: "Elevated threat activity"},
 	}
 }
 

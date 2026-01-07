@@ -27,6 +27,10 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
+  Pencil,
+  X,
+  Key,
+  Save,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { threatsApi, bansApi, modsecApi, statusApi } from '@/lib/api'
@@ -45,11 +49,97 @@ interface IntegrationStatus {
   threatProviders: ThreatProvider[]
 }
 
+interface PluginConfig {
+  id: string
+  name: string
+  type: 'sophos' | 'threat_intel' | 'syslog'
+  fields: { key: string; label: string; type: 'text' | 'password' | 'number'; value: string; placeholder?: string }[]
+}
+
+// Plugin configurations (would come from backend in production)
+const defaultPluginConfigs: PluginConfig[] = [
+  {
+    id: 'sophos_api',
+    name: 'Sophos XGS - API',
+    type: 'sophos',
+    fields: [
+      { key: 'SOPHOS_HOST', label: 'Host/IP', type: 'text', value: '', placeholder: '192.168.1.1' },
+      { key: 'SOPHOS_PORT', label: 'Port', type: 'number', value: '4444', placeholder: '4444' },
+      { key: 'SOPHOS_USER', label: 'Username', type: 'text', value: '', placeholder: 'admin' },
+      { key: 'SOPHOS_PASSWORD', label: 'Password', type: 'password', value: '', placeholder: '********' },
+    ],
+  },
+  {
+    id: 'sophos_ssh',
+    name: 'Sophos XGS - SSH',
+    type: 'sophos',
+    fields: [
+      { key: 'SSH_HOST', label: 'Host/IP', type: 'text', value: '', placeholder: '192.168.1.1' },
+      { key: 'SSH_PORT', label: 'Port', type: 'number', value: '22', placeholder: '22' },
+      { key: 'SSH_USER', label: 'Username', type: 'text', value: '', placeholder: 'root' },
+      { key: 'SSH_KEY_PATH', label: 'SSH Key Path', type: 'text', value: '', placeholder: '/root/.ssh/id_rsa' },
+    ],
+  },
+  {
+    id: 'abuseipdb',
+    name: 'AbuseIPDB',
+    type: 'threat_intel',
+    fields: [
+      { key: 'ABUSEIPDB_API_KEY', label: 'API Key', type: 'password', value: '', placeholder: 'Enter API key...' },
+    ],
+  },
+  {
+    id: 'virustotal',
+    name: 'VirusTotal',
+    type: 'threat_intel',
+    fields: [
+      { key: 'VIRUSTOTAL_API_KEY', label: 'API Key', type: 'password', value: '', placeholder: 'Enter API key...' },
+    ],
+  },
+  {
+    id: 'alienvault',
+    name: 'AlienVault OTX',
+    type: 'threat_intel',
+    fields: [
+      { key: 'ALIENVAULT_API_KEY', label: 'API Key', type: 'password', value: '', placeholder: 'Enter API key...' },
+    ],
+  },
+  {
+    id: 'greynoise',
+    name: 'GreyNoise',
+    type: 'threat_intel',
+    fields: [
+      { key: 'GREYNOISE_API_KEY', label: 'API Key', type: 'password', value: '', placeholder: 'Enter API key...' },
+    ],
+  },
+  {
+    id: 'criminalip',
+    name: 'Criminal IP',
+    type: 'threat_intel',
+    fields: [
+      { key: 'CRIMINALIP_API_KEY', label: 'API Key', type: 'password', value: '', placeholder: 'Enter API key...' },
+    ],
+  },
+  {
+    id: 'pulsedive',
+    name: 'Pulsedive',
+    type: 'threat_intel',
+    fields: [
+      { key: 'PULSEDIVE_API_KEY', label: 'API Key', type: 'password', value: '', placeholder: 'Enter API key...' },
+    ],
+  },
+]
+
 export function Settings() {
   const { settings, updateSettings, resetSettings } = useSettings()
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
   const [loadingIntegrations, setLoadingIntegrations] = useState(true)
   const [saved, setSaved] = useState(false)
+
+  // Plugin editor state
+  const [editingPlugin, setEditingPlugin] = useState<PluginConfig | null>(null)
+  const [pluginFormData, setPluginFormData] = useState<Record<string, string>>({})
+  const [savingPlugin, setSavingPlugin] = useState(false)
 
   // Fetch integration status
   useEffect(() => {
@@ -105,6 +195,56 @@ export function Settings() {
     updateSettings({ [key]: value })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  // Plugin editor functions
+  const handleEditPlugin = (pluginId: string) => {
+    const plugin = defaultPluginConfigs.find(p => p.id === pluginId)
+    if (plugin) {
+      setEditingPlugin(plugin)
+      // Initialize form data with current values
+      const initialData: Record<string, string> = {}
+      plugin.fields.forEach(field => {
+        initialData[field.key] = field.value
+      })
+      setPluginFormData(initialData)
+    }
+  }
+
+  const handlePluginFieldChange = (key: string, value: string) => {
+    setPluginFormData(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleSavePlugin = async () => {
+    if (!editingPlugin) return
+    setSavingPlugin(true)
+    try {
+      // In production, this would call a backend API to save the config
+      // For now, we just show a success message
+      console.log('Saving plugin config:', editingPlugin.id, pluginFormData)
+      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate API call
+      setEditingPlugin(null)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to save plugin config:', err)
+    } finally {
+      setSavingPlugin(false)
+    }
+  }
+
+  // Find plugin by provider name
+  const findPluginByName = (name: string): string | null => {
+    const nameMap: Record<string, string> = {
+      'AbuseIPDB': 'abuseipdb',
+      'VirusTotal': 'virustotal',
+      'AlienVault OTX': 'alienvault',
+      'GreyNoise': 'greynoise',
+      'Criminal IP': 'criminalip',
+      'Pulsedive': 'pulsedive',
+      'IPSum': null as unknown as string, // No API key needed
+    }
+    return nameMap[name] || null
   }
 
   return (
@@ -365,10 +505,10 @@ export function Settings() {
         </SettingRow>
       </SettingsSection>
 
-      {/* Integrations Status (Read-only) */}
+      {/* Integrations Status */}
       <SettingsSection
         title="Integrations"
-        description="Status of external service connections"
+        description="Status and configuration of external services"
         icon={<Plug className="w-5 h-5" />}
       >
         {loadingIntegrations ? (
@@ -401,6 +541,7 @@ export function Settings() {
               }
               connected={integrations?.sophosSsh.connected || false}
               icon={<RefreshCw className="w-4 h-4" />}
+              onEdit={() => handleEditPlugin('sophos_ssh')}
             />
 
             {/* Sophos XGS API */}
@@ -413,25 +554,104 @@ export function Settings() {
               }
               connected={integrations?.sophosApi.connected || false}
               icon={<Plug className="w-4 h-4" />}
+              onEdit={() => handleEditPlugin('sophos_api')}
             />
 
-            {/* v1.6: Dynamic Threat Intel Providers (7 total) */}
-            {integrations?.threatProviders.map((provider) => (
-              <IntegrationRow
-                key={provider.name}
-                name={provider.name}
-                description={provider.description}
-                connected={provider.configured}
-                icon={<Shield className="w-4 h-4" />}
-              />
-            ))}
+            {/* Threat Intel Providers */}
+            {integrations?.threatProviders.map((provider) => {
+              const pluginId = findPluginByName(provider.name)
+              return (
+                <IntegrationRow
+                  key={provider.name}
+                  name={provider.name}
+                  description={provider.description}
+                  connected={provider.configured}
+                  icon={<Shield className="w-4 h-4" />}
+                  onEdit={pluginId ? () => handleEditPlugin(pluginId) : undefined}
+                />
+              )
+            })}
           </>
         )}
       </SettingsSection>
 
+      {/* Plugin Edit Modal */}
+      {editingPlugin && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-xl border p-6 w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Key className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold">{editingPlugin.name}</h3>
+                  <p className="text-sm text-muted-foreground">Configure integration settings</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingPlugin(null)}
+                className="p-1 hover:bg-muted rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {editingPlugin.fields.map((field) => (
+                <div key={field.key}>
+                  <label className="block text-sm font-medium mb-1">{field.label}</label>
+                  <input
+                    type={field.type}
+                    value={pluginFormData[field.key] || ''}
+                    onChange={(e) => handlePluginFieldChange(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  />
+                </div>
+              ))}
+
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 mt-4">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5" />
+                  <div className="text-sm text-yellow-600 dark:text-yellow-400">
+                    <p className="font-medium">Environment variables required</p>
+                    <p className="text-xs mt-1 opacity-80">
+                      Changes must be applied to your .env file and the service restarted for them to take effect.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingPlugin(null)}
+                  className="flex-1 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSavePlugin}
+                  disabled={savingPlugin}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {savingPlugin ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save Configuration
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v1.6.0</p>
+        <p>VIGILANCE X v2.3.0</p>
         <p className="mt-1">Security Operations Center - Enhanced OSINT Stack</p>
       </div>
     </div>
@@ -556,11 +776,13 @@ function IntegrationRow({
   description,
   connected,
   icon,
+  onEdit,
 }: {
   name: string
   description: string
   connected: boolean
   icon: React.ReactNode
+  onEdit?: () => void
 }) {
   return (
     <div className="flex items-center justify-between px-6 py-4">
@@ -571,23 +793,34 @@ function IntegrationRow({
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
       </div>
-      <div
-        className={cn(
-          'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
-          connected ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+      <div className="flex items-center gap-3">
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            title="Edit configuration"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
         )}
-      >
-        {connected ? (
-          <>
-            <CheckCircle className="w-4 h-4" />
-            Connected
-          </>
-        ) : (
-          <>
-            <XCircle className="w-4 h-4" />
-            Not configured
-          </>
-        )}
+        <div
+          className={cn(
+            'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
+            connected ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+          )}
+        >
+          {connected ? (
+            <>
+              <CheckCircle className="w-4 h-4" />
+              Connected
+            </>
+          ) : (
+            <>
+              <XCircle className="w-4 h-4" />
+              Not configured
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
