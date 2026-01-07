@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar } from 'lucide-react'
 import { modsecApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, getCountryName } from '@/lib/utils'
+import { useSettings } from '@/contexts/SettingsContext'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
 
 // Attack type colors
@@ -62,6 +63,7 @@ interface DayGroup {
 }
 
 export function WafExplorer() {
+  const { shouldShowIP } = useSettings()
   const [searchParams] = useSearchParams()
   const [requests, setRequests] = useState<ModSecRequestGroup[]>([])
   const [pagination, setPagination] = useState({ total: 0, limit: 100, offset: 0, has_more: false })
@@ -114,11 +116,14 @@ export function WafExplorer() {
     fetchRequests()
   }, [search, hostname, attackType, pagination.offset])
 
-  // Group requests by day
+  // Group requests by day (filtered by system whitelist)
   const dayGroups = useMemo((): DayGroup[] => {
+    // First filter out system IPs (DNS, CDN, etc.)
+    const filteredRequests = requests.filter(r => shouldShowIP(r.src_ip))
+
     const groups: Record<string, ModSecRequestGroup[]> = {}
 
-    for (const request of requests) {
+    for (const request of filteredRequests) {
       const dateKey = getDateKey(request.timestamp)
       if (!groups[dateKey]) {
         groups[dateKey] = []
@@ -136,7 +141,7 @@ export function WafExplorer() {
       totalBlocked: groups[date].filter(r => r.is_blocked).length,
       totalDetected: groups[date].filter(r => !r.is_blocked).length,
     }))
-  }, [requests])
+  }, [requests, shouldShowIP])
 
   // Auto-expand first day on load
   useEffect(() => {

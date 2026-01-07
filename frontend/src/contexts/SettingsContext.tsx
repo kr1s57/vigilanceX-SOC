@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { configApi, SystemWhitelistEntry } from '@/lib/api'
 
 // Settings types
 export interface AppSettings {
@@ -8,6 +9,7 @@ export interface AppSettings {
   dateFormat: '24h' | '12h'
   numberFormat: 'fr' | 'en'
   defaultPeriod: '1h' | '24h' | '7d' | '30d'
+  iconStyle: 'mono' | 'color' // v2.3: Icon style option
 
   // Dashboard & Refresh
   refreshInterval: 15 | 30 | 60 | 0 // 0 = manual
@@ -22,6 +24,7 @@ export interface AppSettings {
   // Security
   sessionTimeout: 15 | 30 | 60 | 0 // 0 = never
   maskSensitiveIPs: boolean
+  hideSystemIPs: boolean // v2.3: Hide protected system IPs from logs
 }
 
 const defaultSettings: AppSettings = {
@@ -31,6 +34,7 @@ const defaultSettings: AppSettings = {
   dateFormat: '24h',
   numberFormat: 'fr',
   defaultPeriod: '24h',
+  iconStyle: 'mono',
 
   // Dashboard & Refresh
   refreshInterval: 30,
@@ -45,12 +49,18 @@ const defaultSettings: AppSettings = {
   // Security
   sessionTimeout: 30,
   maskSensitiveIPs: false,
+  hideSystemIPs: true, // Default: hide system IPs
 }
 
 interface SettingsContextType {
   settings: AppSettings
   updateSettings: (newSettings: Partial<AppSettings>) => void
   resetSettings: () => void
+  // System whitelist helpers
+  systemWhitelistIPs: string[]
+  systemWhitelistEntries: SystemWhitelistEntry[]
+  isSystemIP: (ip: string) => boolean
+  shouldShowIP: (ip: string) => boolean // Returns false if IP should be hidden
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
@@ -70,6 +80,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
     return defaultSettings
   })
+
+  // System whitelist state
+  const [systemWhitelistIPs, setSystemWhitelistIPs] = useState<string[]>([])
+  const [systemWhitelistEntries, setSystemWhitelistEntries] = useState<SystemWhitelistEntry[]>([])
+
+  // Load system whitelist on mount
+  useEffect(() => {
+    const loadSystemWhitelist = async () => {
+      try {
+        const data = await configApi.getSystemWhitelist()
+        setSystemWhitelistIPs(data.ips)
+        setSystemWhitelistEntries(data.entries)
+      } catch (error) {
+        console.error('Failed to load system whitelist:', error)
+        // Fallback to empty - IPs will show normally
+      }
+    }
+    loadSystemWhitelist()
+  }, [])
 
   // Save to localStorage when settings change
   useEffect(() => {
@@ -99,8 +128,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY)
   }
 
+  // Check if an IP is in the system whitelist
+  const isSystemIP = useCallback((ip: string): boolean => {
+    return systemWhitelistIPs.includes(ip)
+  }, [systemWhitelistIPs])
+
+  // Check if an IP should be shown (based on settings and whitelist)
+  const shouldShowIP = useCallback((ip: string): boolean => {
+    if (!settings.hideSystemIPs) return true
+    return !systemWhitelistIPs.includes(ip)
+  }, [settings.hideSystemIPs, systemWhitelistIPs])
+
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, resetSettings }}>
+    <SettingsContext.Provider value={{
+      settings,
+      updateSettings,
+      resetSettings,
+      systemWhitelistIPs,
+      systemWhitelistEntries,
+      isSystemIP,
+      shouldShowIP
+    }}>
       {children}
     </SettingsContext.Provider>
   )

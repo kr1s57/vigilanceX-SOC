@@ -12,6 +12,62 @@ Améliorations de l'interface utilisateur et ajout de la gestion des plugins ave
 
 ---
 
+### 🛡️ System Whitelist - Protected IPs
+
+Nouveau système de whitelist pour les IPs légitimes (DNS, CDN, health checks) qui ne doivent jamais être bloquées.
+
+#### IPs Protégées
+| Provider | IPs | Category |
+|----------|-----|----------|
+| **Cloudflare DNS** | 1.1.1.1, 1.0.0.1 | DNS |
+| **Google DNS** | 8.8.8.8, 8.8.4.4 | DNS |
+| **Quad9** | 9.9.9.9, 149.112.112.112 | DNS |
+| **OpenDNS** | 208.67.222.222, 208.67.220.220 | DNS |
+| **AWS** | 54.243.31.192 | Cloud |
+| **Google Cloud** | 35.191.0.1, 130.211.0.1 | Cloud |
+| **UptimeRobot** | 216.144.250.150 | Monitoring |
+| **Pingdom** | 76.72.167.154 | Monitoring |
+| **NIST NTP** | 129.6.15.28, 129.6.15.29 | Monitoring |
+
+#### Fonctionnalités
+- Filtrage automatique des IPs système dans tous les logs (WAF, Threats, etc.)
+- Option "Hide system IPs" dans Settings > Security & Privacy
+- API endpoints pour consulter et vérifier la whitelist système
+
+#### API Endpoints
+| Endpoint | Méthode | Description |
+|----------|---------|-------------|
+| `/config/system-whitelist` | GET | Liste complète des IPs protégées |
+| `/config/system-whitelist/check/{ip}` | GET | Vérifier si une IP est protégée |
+
+---
+
+### 🎨 Icon Style Option
+
+Nouvelle option pour choisir le style des icônes de la sidebar.
+
+#### Options
+| Style | Description |
+|-------|-------------|
+| **Monochrome** | Icônes monochromes (style par défaut) |
+| **Color** | Icônes colorées par catégorie |
+
+#### Couleurs par Page
+| Page | Couleur |
+|------|---------|
+| Dashboard | Blue |
+| WAF Explorer | Emerald |
+| Attacks Analyzer | Red |
+| Advanced Threat | Orange |
+| VPN & Network | Purple |
+| Active Bans | Red |
+| Geoblocking | Cyan |
+| Whitelist | Green |
+| Risk Scoring | Yellow |
+| Reports | Indigo |
+
+---
+
 ### ⚙️ Plugin Configuration Management
 
 Nouvelle fonctionnalité permettant de configurer et tester les intégrations directement depuis l'interface.

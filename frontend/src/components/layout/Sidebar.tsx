@@ -11,23 +11,35 @@ import {
   Activity,
   FileText,
   Settings,
+  LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSettings } from '@/contexts/SettingsContext'
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'WAF Explorer', href: '/waf', icon: Shield },
-  { name: 'Attacks Analyzer', href: '/attacks', icon: Swords },
-  { name: 'Advanced Threat', href: '/threats', icon: AlertTriangle },
-  { name: 'VPN & Network', href: '/vpn', icon: Network },
-  { name: 'Active Bans', href: '/bans', icon: Ban },
-  { name: 'Geoblocking', href: '/geoblocking', icon: Globe },
-  { name: 'Whitelist', href: '/whitelist', icon: ShieldCheck },
-  { name: 'Risk Scoring', href: '/scoring', icon: Activity },
-  { name: 'Reports', href: '/reports', icon: FileText },
+interface NavItem {
+  name: string
+  href: string
+  icon: LucideIcon
+  colorClass: string // Color for 'color' icon style
+}
+
+const navigation: NavItem[] = [
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, colorClass: 'text-blue-500' },
+  { name: 'WAF Explorer', href: '/waf', icon: Shield, colorClass: 'text-emerald-500' },
+  { name: 'Attacks Analyzer', href: '/attacks', icon: Swords, colorClass: 'text-red-500' },
+  { name: 'Advanced Threat', href: '/threats', icon: AlertTriangle, colorClass: 'text-orange-500' },
+  { name: 'VPN & Network', href: '/vpn', icon: Network, colorClass: 'text-purple-500' },
+  { name: 'Active Bans', href: '/bans', icon: Ban, colorClass: 'text-red-600' },
+  { name: 'Geoblocking', href: '/geoblocking', icon: Globe, colorClass: 'text-cyan-500' },
+  { name: 'Whitelist', href: '/whitelist', icon: ShieldCheck, colorClass: 'text-green-500' },
+  { name: 'Risk Scoring', href: '/scoring', icon: Activity, colorClass: 'text-yellow-500' },
+  { name: 'Reports', href: '/reports', icon: FileText, colorClass: 'text-indigo-500' },
 ]
 
 export function Sidebar() {
+  const { settings } = useSettings()
+  const useColorIcons = settings.iconStyle === 'color'
+
   return (
     <aside className="w-64 bg-card border-r border-border flex flex-col">
       {/* Logo */}
@@ -58,8 +70,17 @@ export function Sidebar() {
               )
             }
           >
-            <item.icon className="w-5 h-5" />
-            {item.name}
+            {({ isActive }) => (
+              <>
+                <item.icon
+                  className={cn(
+                    'w-5 h-5 transition-colors',
+                    useColorIcons && !isActive ? item.colorClass : ''
+                  )}
+                />
+                {item.name}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
@@ -77,8 +98,17 @@ export function Sidebar() {
             )
           }
         >
-          <Settings className="w-5 h-5" />
-          Settings
+          {({ isActive }) => (
+            <>
+              <Settings
+                className={cn(
+                  'w-5 h-5 transition-colors',
+                  useColorIcons && !isActive ? 'text-gray-400' : ''
+                )}
+              />
+              Settings
+            </>
+          )}
         </NavLink>
       </div>
     </aside>

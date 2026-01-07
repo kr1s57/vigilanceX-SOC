@@ -397,6 +397,9 @@ func main() {
 				r.Post("/test", configHandler.TestConfig)
 				r.Post("/save", configHandler.SaveConfig)
 				r.Get("/", configHandler.GetConfig)
+				// System whitelist (v2.3 - Protected IPs)
+				r.Get("/system-whitelist", configHandler.GetSystemWhitelist)
+				r.Get("/system-whitelist/check/*", configHandler.CheckSystemWhitelist)
 			})
 
 			// WebSocket endpoint

@@ -30,6 +30,7 @@ import {
   Pencil,
   X,
   Key,
+  Palette,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { threatsApi, bansApi, modsecApi, statusApi, configApi } from '@/lib/api'
@@ -330,6 +331,22 @@ export function Settings() {
           />
         </SettingRow>
 
+        {/* Icon Style */}
+        <SettingRow
+          label="Icon style"
+          description="Sidebar icon appearance"
+          icon={<Palette className="w-4 h-4" />}
+        >
+          <ToggleGroup
+            value={settings.iconStyle}
+            onChange={(v) => handleChange('iconStyle', v as AppSettings['iconStyle'])}
+            options={[
+              { value: 'mono', label: 'Monochrome' },
+              { value: 'color', label: 'Color' },
+            ]}
+          />
+        </SettingRow>
+
         {/* Date Format */}
         <SettingRow
           label="Time format"
@@ -517,6 +534,18 @@ export function Settings() {
           <ToggleSwitch
             checked={settings.maskSensitiveIPs}
             onChange={(v) => handleChange('maskSensitiveIPs', v)}
+          />
+        </SettingRow>
+
+        {/* Hide System IPs */}
+        <SettingRow
+          label="Hide system IPs"
+          description="Filter out legitimate IPs from logs (DNS, CDN, health checks)"
+          icon={<Shield className="w-4 h-4" />}
+        >
+          <ToggleSwitch
+            checked={settings.hideSystemIPs}
+            onChange={(v) => handleChange('hideSystemIPs', v)}
           />
         </SettingRow>
       </SettingsSection>

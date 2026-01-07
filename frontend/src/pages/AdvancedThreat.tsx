@@ -15,6 +15,7 @@ import { threatsApi } from '@/lib/api'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { IPThreatModal } from '@/components/IPThreatModal'
 import { formatNumber, getCountryFlag, formatDateTime, cn } from '@/lib/utils'
+import { useSettings } from '@/contexts/SettingsContext'
 import type { ThreatScore, ThreatStats, ThreatProvider } from '@/types'
 
 // Threat level colors
@@ -28,6 +29,7 @@ const threatLevelColors: Record<string, { bg: string; text: string; border: stri
 }
 
 export function AdvancedThreat() {
+  const { shouldShowIP } = useSettings()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<ThreatStats | null>(null)
@@ -64,11 +66,13 @@ export function AdvancedThreat() {
     return () => clearInterval(interval)
   }, [])
 
-  // Filter threats by level
+  // Filter threats by level and system whitelist
   const filteredThreats = useMemo(() => {
-    let filtered = threats
+    // First filter out system IPs (DNS, CDN, etc.)
+    let filtered = threats.filter(t => shouldShowIP(t.ip))
+
     if (selectedLevel !== 'all') {
-      filtered = threats.filter(t => t.threat_level === selectedLevel)
+      filtered = filtered.filter(t => t.threat_level === selectedLevel)
     }
     if (searchIP) {
       const term = searchIP.toLowerCase()
@@ -79,7 +83,7 @@ export function AdvancedThreat() {
       )
     }
     return filtered
-  }, [threats, selectedLevel, searchIP])
+  }, [threats, selectedLevel, searchIP, shouldShowIP])
 
   const handleIPClick = (ip: string) => {
     setSelectedIP(ip)

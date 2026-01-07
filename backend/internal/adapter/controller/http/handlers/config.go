@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kr1s57/vigilancex/internal/entity"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -346,4 +347,43 @@ func (h *ConfigHandler) applyConfigToEnv(pluginID string, fields map[string]stri
 			os.Setenv(key, value)
 		}
 	}
+}
+
+// GetSystemWhitelist returns the system whitelist of protected IPs
+// GET /api/v1/config/system-whitelist
+func (h *ConfigHandler) GetSystemWhitelist(w http.ResponseWriter, r *http.Request) {
+	whitelist := entity.DefaultSystemWhitelist()
+
+	// Group by category
+	byCategory := make(map[string][]entity.SystemWhitelistEntry)
+	for _, entry := range whitelist {
+		byCategory[entry.Category] = append(byCategory[entry.Category], entry)
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"entries":     whitelist,
+		"by_category": byCategory,
+		"ips":         entity.GetSystemWhitelistIPs(),
+		"count":       len(whitelist),
+	})
+}
+
+// CheckSystemWhitelist checks if an IP is in the system whitelist
+// GET /api/v1/config/system-whitelist/check/{ip}
+func (h *ConfigHandler) CheckSystemWhitelist(w http.ResponseWriter, r *http.Request) {
+	ip := r.URL.Path[len("/api/v1/config/system-whitelist/check/"):]
+
+	if entry := entity.GetSystemWhitelistEntry(ip); entry != nil {
+		JSONResponse(w, http.StatusOK, map[string]interface{}{
+			"is_protected": true,
+			"entry":        entry,
+			"message":      fmt.Sprintf("IP %s is a protected system IP (%s - %s)", ip, entry.Provider, entry.Name),
+		})
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"is_protected": false,
+		"message":      fmt.Sprintf("IP %s is not in the system whitelist", ip),
+	})
 }

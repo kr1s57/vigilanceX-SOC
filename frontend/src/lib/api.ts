@@ -490,6 +490,15 @@ export const geoblockingApi = {
   },
 }
 
+// System Whitelist Entry type (protected IPs like DNS, CDN)
+export interface SystemWhitelistEntry {
+  ip: string
+  name: string
+  provider: string
+  category: string
+  description: string
+}
+
 // Config API (v2.3 - Plugin configuration)
 export const configApi = {
   test: async (pluginId: string, fields: Record<string, string>) => {
@@ -510,6 +519,26 @@ export const configApi = {
 
   get: async () => {
     const response = await api.get<Record<string, Record<string, string>>>('/config')
+    return response.data
+  },
+
+  // System whitelist (v2.3 - Protected IPs that should never be blocked)
+  getSystemWhitelist: async () => {
+    const response = await api.get<{
+      entries: SystemWhitelistEntry[]
+      by_category: Record<string, SystemWhitelistEntry[]>
+      ips: string[]
+      count: number
+    }>('/config/system-whitelist')
+    return response.data
+  },
+
+  checkSystemWhitelist: async (ip: string) => {
+    const response = await api.get<{
+      is_protected: boolean
+      entry?: SystemWhitelistEntry
+      message: string
+    }>(`/config/system-whitelist/check/${ip}`)
     return response.data
   },
 }
