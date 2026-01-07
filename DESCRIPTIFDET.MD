@@ -1,6 +1,6 @@
 # VIGILANCE X - Documentation Technique Detaillee
 
-> **Version:** 1.0.0
+> **Version:** 1.5.0
 > **Date:** Janvier 2026
 > **Plateforme:** Security Operations Center (SOC) pour Sophos XGS
 
@@ -668,7 +668,15 @@ Page de configuration complete pour personnaliser l'experience utilisateur.
 | **Dashboard & Refresh** | Refresh interval (15s/30s/60s/Manual), Top Attackers count (5/10/20), Animations | Parametres du dashboard |
 | **Notifications** | Enable notifications, Alert sound, Alert threshold (Critical only / Critical+High) | Alertes et sons |
 | **Security** | Session timeout, Mask sensitive IPs | Securite et confidentialite |
-| **Integrations** | Statut Sophos XGS, AbuseIPDB, VirusTotal, AlienVault OTX, ModSec Sync | Lecture seule |
+| **Integrations** | Sophos XGS (Syslog, SSH, API), AbuseIPDB, VirusTotal, AlienVault OTX | Lecture seule - Statut connexion |
+
+**Integrations Sophos XGS (3 methodes):**
+
+| Methode | Endpoint | Description |
+|---------|----------|-------------|
+| **Syslog** | `GET /api/v1/status/syslog` | Reception des logs firewall (UDP 514/TCP 1514) - Affiche events/min |
+| **SSH** | `GET /api/v1/modsec/test` | Session shell pour sync ModSecurity - Affiche derniere sync |
+| **API** | `GET /api/v1/bans/xgs-status` | API XML pour gestion des bans - Affiche host + nb bans dans groupe |
 
 **Persistance:** Les parametres sont sauvegardes dans localStorage (`vigilancex-settings`)
 

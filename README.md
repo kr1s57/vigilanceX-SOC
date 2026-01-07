@@ -1,5 +1,7 @@
 # VIGILANCE X - Live Active Response
 
+> **Version 1.5.0** | Security Operations Center pour Sophos XGS
+
 Solution de supervision de sécurité et de réponse active automatisée pour **Sophos XGS**.
 
 ## Stack Technique
@@ -21,6 +23,16 @@ Solution de supervision de sécurité et de réponse active automatisée pour **
 - **Advanced Threat** : Suivi des alertes ATP et APT
 - **VPN & Network** : Audit des accès distants
 - **Active Bans** : Gestion des blocages en temps réel
+- **Reports** : Génération de rapports PDF/XML (journalier, hebdomadaire, mensuel)
+- **Settings** : Configuration complète (thème, langue, notifications, intégrations)
+
+### Intégrations Sophos XGS
+
+| Méthode | Port | Usage |
+|---------|------|-------|
+| **Syslog** | UDP 514 / TCP 1514 | Réception des logs firewall en temps réel |
+| **SSH** | 22 | Synchronisation des règles ModSecurity |
+| **API XML** | 4444 | Gestion des bans (ajout/suppression IP blocklist) |
 
 ### Moteur Detect2Ban
 
