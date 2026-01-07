@@ -1,6 +1,6 @@
 # VIGILANCE X - Live Active Response
 
-> **Version 2.5.0** | Security Operations Center pour Sophos XGS
+> **Version 2.6.0** | Security Operations Center pour Sophos XGS
 
 Solution de supervision de sécurité et de réponse active automatisée pour **Sophos XGS**.
 
@@ -30,6 +30,8 @@ Solution de supervision de sécurité et de réponse active automatisée pour **
 - **Risk Scoring UI** : Interface de visualisation des scores de risque *(v2.3)*
 - **System Protected IPs** : IPs système protégées (DNS, CDN, Monitoring) *(v2.5)*
 - **Icon Style** : Personnalisation des icônes sidebar (Monochrome/Color) *(v2.5)*
+- **Authentication** : Portail de connexion JWT avec RBAC (admin/audit) *(v2.6)*
+- **User Management** : Gestion des utilisateurs et rôles (admin) *(v2.6)*
 - **Reports** : Génération de rapports PDF/XML (journalier, hebdomadaire, mensuel)
 - **Settings** : Configuration complète (thème, langue, notifications, intégrations)
 
@@ -133,6 +135,33 @@ Personnalisation du style des icônes de navigation :
 |-------|-------------|
 | **Monochrome** | Icônes monochromes classiques |
 | **Color** | Icônes colorées par catégorie |
+
+### Authentication & RBAC (v2.6)
+
+Système d'authentification complet avec contrôle d'accès basé sur les rôles.
+
+#### Rôles
+
+| Rôle | Description | Accès |
+|------|-------------|-------|
+| **admin** | Administrateur | Accès complet + Settings + Gestion utilisateurs |
+| **audit** | Audit/Lecture seule | Visualisation uniquement, pas de ban/unban |
+
+#### Restrictions Audit
+
+| Page | Accès |
+|------|-------|
+| Dashboard, WAF, Attacks, Threats, VPN, Bans, Geoblocking, Whitelist, Scoring | ✅ Lecture |
+| Reports, Settings, Users | ❌ Admin uniquement |
+| Actions ban/unban | ❌ Désactivé |
+
+#### Fonctionnalités
+
+- **JWT Authentication** : Tokens avec validité 24h
+- **Login Portal** : Interface de connexion sécurisée
+- **User Management** : CRUD utilisateurs (admin)
+- **Password Reset CLI** : Outil de récupération d'urgence
+- **WebSocket Auth** : Connexions temps réel authentifiées
 
 ### Moteur Detect2Ban
 
@@ -291,6 +320,55 @@ npm run build    # Build production
 | `GET /api/v1/config/system-whitelist` | IPs système protégées |
 | `GET /api/v1/config/settings` | Paramètres application |
 | `PUT /api/v1/config/settings` | Modifier paramètres |
+
+### Authentication (v2.6)
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/auth/login` | Authentification (retourne JWT) |
+| `POST /api/v1/auth/logout` | Déconnexion |
+| `GET /api/v1/auth/me` | Infos utilisateur courant |
+| `POST /api/v1/auth/change-password` | Changer son mot de passe |
+
+### Users (v2.6 - Admin)
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/users` | Liste des utilisateurs |
+| `POST /api/v1/users` | Créer un utilisateur |
+| `GET /api/v1/users/{id}` | Détails utilisateur |
+| `PUT /api/v1/users/{id}` | Modifier utilisateur |
+| `DELETE /api/v1/users/{id}` | Supprimer utilisateur |
+| `POST /api/v1/users/{id}/reset-password` | Reset mot de passe |
+
+## Configuration Authentification
+
+### Variables d'environnement
+
+```bash
+# JWT
+JWT_SECRET=your-secure-jwt-secret-min-32-chars
+JWT_EXPIRY=24h
+
+# Admin par défaut (premier démarrage)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=VigilanceX2024!
+```
+
+### Utilisateur Admin par défaut
+
+Au premier démarrage, si aucun utilisateur n'existe, un compte admin est créé automatiquement avec les credentials définis dans les variables d'environnement.
+
+### Reset mot de passe (urgence)
+
+En cas de perte du mot de passe admin :
+
+```bash
+docker exec vigilance_backend /app/reset-password <username> <new_password>
+```
+
+Exemple :
+```bash
+docker exec vigilance_backend /app/reset-password admin MonNouveauPass123!
+```
 
 ## Licence
 
