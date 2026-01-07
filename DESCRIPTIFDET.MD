@@ -1,6 +1,6 @@
 # VIGILANCE X - Documentation Technique Detaillee
 
-> **Version:** 2.5.0
+> **Version:** 2.6.0
 > **Date:** Janvier 2026
 > **Plateforme:** Security Operations Center (SOC) pour Sophos XGS
 
@@ -31,6 +31,7 @@
 19. [Risk Scoring UI (v2.3)](#19-risk-scoring-ui-v23)
 20. [System Protected IPs (v2.5)](#20-system-protected-ips-v25)
 21. [Personnalisation Interface (v2.5)](#21-personnalisation-interface-v25)
+22. [Authentication & RBAC (v2.6)](#22-authentication--rbac-v26)
 
 ---
 
@@ -62,6 +63,9 @@
 | **Risk Scoring UI (v2.3)** | Interface de visualisation des scores de risque |
 | **System Protected IPs (v2.5)** | Protection des IPs critiques (DNS, CDN, Monitoring) |
 | **Personnalisation (v2.5)** | Style d'icones, filtrage IPs systeme dans logs |
+| **Authentication (v2.6)** | Portail de connexion JWT avec tokens 24h |
+| **RBAC (v2.6)** | Controle d'acces par roles (admin/audit) |
+| **User Management (v2.6)** | Gestion des utilisateurs (admin only) |
 
 ---
 
@@ -2898,6 +2902,309 @@ Les preferences sont sauvegardees dans `localStorage`:
 
 ---
 
+## 22. Authentication & RBAC (v2.6)
+
+Systeme d'authentification complet avec controle d'acces base sur les roles.
+
+### 22.1 Architecture Authentication
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Authentication Flow                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐                │
+│   │  Login Page  │────>│  Auth API    │────>│  ClickHouse  │                │
+│   │  (Frontend)  │     │  (Backend)   │     │   (Users)    │                │
+│   └──────────────┘     └──────────────┘     └──────────────┘                │
+│         │                     │                                              │
+│         │                     │ Validate credentials                         │
+│         │                     │ Generate JWT (24h)                          │
+│         │                     ▼                                              │
+│         │              ┌──────────────┐                                     │
+│         │<─────────────│  JWT Token   │                                     │
+│         │              │ (localStorage)│                                    │
+│         ▼              └──────────────┘                                     │
+│   ┌──────────────┐            │                                             │
+│   │  Protected   │<───────────┘ Authorization header                        │
+│   │    Routes    │              Bearer <token>                              │
+│   └──────────────┘                                                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 22.2 Roles et Permissions
+
+| Role | Description | Permissions |
+|------|-------------|-------------|
+| **admin** | Administrateur | Acces complet + Settings + User Management |
+| **audit** | Audit/Lecture seule | Visualisation uniquement, pas de modifications |
+
+**Matrice d'acces:**
+
+| Page | admin | audit |
+|------|-------|-------|
+| Dashboard | ✅ | ✅ |
+| WAF Explorer | ✅ | ✅ |
+| Attacks Analyzer | ✅ | ✅ |
+| Advanced Threat | ✅ | ✅ |
+| VPN & Network | ✅ | ✅ |
+| Active Bans | ✅ (actions) | ✅ (lecture) |
+| Geoblocking | ✅ | ✅ |
+| Whitelist | ✅ | ✅ |
+| Risk Scoring | ✅ | ✅ |
+| Reports | ✅ | ❌ |
+| Settings | ✅ | ❌ |
+| User Management | ✅ | ❌ |
+
+### 22.3 API Endpoints
+
+#### Authentication
+
+| Endpoint | Methode | Description | Auth |
+|----------|---------|-------------|------|
+| `/api/v1/auth/login` | POST | Authentification utilisateur | Non |
+| `/api/v1/auth/logout` | POST | Deconnexion | Oui |
+| `/api/v1/auth/me` | GET | Infos utilisateur courant | Oui |
+| `/api/v1/auth/change-password` | POST | Changer son mot de passe | Oui |
+
+**Request Login:**
+```json
+{
+  "username": "admin",
+  "password": "VigilanceX2024!"
+}
+```
+
+**Response Login:**
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_at": 1704672000,
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "admin",
+    "role": "admin"
+  }
+}
+```
+
+#### User Management (Admin Only)
+
+| Endpoint | Methode | Description |
+|----------|---------|-------------|
+| `GET /api/v1/users` | GET | Liste des utilisateurs |
+| `POST /api/v1/users` | POST | Creer un utilisateur |
+| `GET /api/v1/users/{id}` | GET | Details utilisateur |
+| `PUT /api/v1/users/{id}` | PUT | Modifier utilisateur |
+| `DELETE /api/v1/users/{id}` | DELETE | Supprimer utilisateur |
+| `POST /api/v1/users/{id}/reset-password` | POST | Reset mot de passe |
+
+**Request Create User:**
+```json
+{
+  "username": "analyst",
+  "email": "analyst@company.com",
+  "password": "SecurePass123!",
+  "role": "audit"
+}
+```
+
+### 22.4 JWT Token Structure
+
+```json
+{
+  "header": {
+    "alg": "HS256",
+    "typ": "JWT"
+  },
+  "payload": {
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "admin",
+    "role": "admin",
+    "exp": 1704672000,
+    "iat": 1704585600
+  }
+}
+```
+
+### 22.5 Backend Implementation
+
+#### Middleware JWT
+
+```go
+// middleware/jwt.go
+func JWTAuth(authService *auth.Service) func(next http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            var tokenString string
+
+            // Try Authorization header first
+            authHeader := r.Header.Get("Authorization")
+            if authHeader != "" {
+                parts := strings.SplitN(authHeader, " ", 2)
+                if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+                    tokenString = parts[1]
+                }
+            }
+
+            // Fallback to query param (WebSocket)
+            if tokenString == "" {
+                tokenString = r.URL.Query().Get("token")
+            }
+
+            // Validate and add to context
+            claims, err := authService.ValidateToken(tokenString)
+            if err != nil {
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
+                return
+            }
+
+            ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+            ctx = context.WithValue(ctx, RoleKey, claims.Role)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+```
+
+#### Password Hashing
+
+```go
+// usecase/auth/service.go
+import "golang.org/x/crypto/bcrypt"
+
+const bcryptCost = 12
+
+func (s *Service) HashPassword(password string) (string, error) {
+    bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+    return string(bytes), err
+}
+
+func (s *Service) CheckPassword(hash, password string) bool {
+    err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+    return err == nil
+}
+```
+
+### 22.6 Frontend Implementation
+
+#### AuthContext
+
+```typescript
+// contexts/AuthContext.tsx
+interface AuthContextType {
+  user: UserInfo | null
+  isAuthenticated: boolean
+  isLoading: boolean
+  isAdmin: boolean
+  isAudit: boolean
+  login: (username: string, password: string) => Promise<void>
+  logout: () => void
+  refreshUser: () => Promise<void>
+}
+
+const TOKEN_KEY = 'auth_token'
+const TOKEN_EXPIRY_KEY = 'auth_token_expiry'
+```
+
+#### Protected Routes
+
+```typescript
+// components/ProtectedRoute.tsx
+export default function ProtectedRoute({ element, adminOnly }: Props) {
+  const { isAuthenticated, isLoading, isAdmin } = useAuth()
+
+  if (isLoading) return <LoadingSpinner />
+  if (!isAuthenticated) return <Navigate to="/login" />
+  if (adminOnly && !isAdmin) return <AccessDenied />
+
+  return element
+}
+
+// components/AdminRoute.tsx
+export default function AdminRoute({ children }: Props) {
+  const { isAdmin, isAuthenticated } = useAuth()
+
+  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!isAdmin) return <AccessDenied />
+
+  return <>{children}</>
+}
+```
+
+### 22.7 Configuration
+
+#### Variables d'environnement
+
+```bash
+# JWT Configuration
+JWT_SECRET=your-secure-jwt-secret-minimum-32-characters
+JWT_EXPIRY=24h
+
+# Default Admin (premier demarrage)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=VigilanceX2024!
+```
+
+#### Table ClickHouse
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+    id UUID DEFAULT generateUUIDv4(),
+    username String,
+    email String,
+    password_hash String,
+    role LowCardinality(String),  -- admin, audit
+    is_active UInt8 DEFAULT 1,
+    last_login Nullable(DateTime),
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now(),
+    version UInt64
+)
+ENGINE = ReplacingMergeTree(version)
+ORDER BY username;
+```
+
+### 22.8 Password Reset CLI
+
+Outil de recuperation d'urgence en cas de perte du mot de passe admin:
+
+```bash
+# Depuis l'hote Docker
+docker exec vigilance_backend /app/reset-password <username> <new_password>
+
+# Exemple
+docker exec vigilance_backend /app/reset-password admin NouveauMotDePasse123!
+```
+
+**Output:**
+```
+VIGILANCE X - Admin Password Reset Tool
+========================================
+Connecting to ClickHouse...
+Looking up user: admin
+User found: admin (role: admin)
+Generating new password hash...
+Updating password in database...
+
+SUCCESS: Password updated for user 'admin'
+You can now login with the new password.
+```
+
+### 22.9 Securite
+
+| Mesure | Implementation |
+|--------|----------------|
+| **Password Hashing** | bcrypt avec cout 12 |
+| **JWT Signature** | HMAC-SHA256 |
+| **Token Expiry** | 24 heures |
+| **HTTPS** | Requis en production |
+| **Rate Limiting** | Recommande sur /auth/login |
+
+---
+
 ## Annexes
 
 ### A. Codes de Severite
@@ -2931,4 +3238,4 @@ Les drapeaux sont affiches via emojis Unicode:
 
 ---
 
-**Document genere automatiquement - VIGILANCE X v2.5.0**
+**Document genere automatiquement - VIGILANCE X v2.6.0**
