@@ -20,7 +20,7 @@ func NewGeoblockingRepository(conn *Connection) *GeoblockingRepository {
 	return &GeoblockingRepository{conn: conn}
 }
 
-// GetAllRules retrieves all geoblocking rules
+// GetAllRules retrieves all active geoblocking rules
 func (r *GeoblockingRepository) GetAllRules(ctx context.Context) ([]entity.GeoBlockRule, error) {
 	query := `
 		SELECT
@@ -35,6 +35,7 @@ func (r *GeoblockingRepository) GetAllRules(ctx context.Context) ([]entity.GeoBl
 			created_at,
 			updated_at
 		FROM geoblock_rules FINAL
+		WHERE is_active = 1
 		ORDER BY rule_type, target
 	`
 

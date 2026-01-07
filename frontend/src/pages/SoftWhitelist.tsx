@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Shield, ShieldCheck, Eye, Plus, Trash2, Search, RefreshCw, Clock, Tag } from 'lucide-react'
-import { softWhitelistApi } from '@/lib/api'
+import { Shield, ShieldCheck, Eye, Plus, Trash2, Search, RefreshCw, Clock, Tag, Server, Globe } from 'lucide-react'
+import { softWhitelistApi, configApi, SystemWhitelistEntry } from '@/lib/api'
 import type { WhitelistEntry, WhitelistStats, WhitelistCheckResult, WhitelistRequest } from '@/types'
 
 export function SoftWhitelist() {
@@ -9,6 +9,13 @@ export function SoftWhitelist() {
   const [filterType, setFilterType] = useState<'all' | 'hard' | 'soft' | 'monitor'>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // System whitelist (protected IPs)
+  const [systemWhitelist, setSystemWhitelist] = useState<{
+    entries: SystemWhitelistEntry[]
+    by_category: Record<string, SystemWhitelistEntry[]>
+  } | null>(null)
+  const [showSystemIPs, setShowSystemIPs] = useState(false)
 
   // Add entry modal
   const [showAddModal, setShowAddModal] = useState(false)
@@ -32,6 +39,13 @@ export function SoftWhitelist() {
   useEffect(() => {
     loadData()
   }, [filterType])
+
+  // Load system whitelist on mount
+  useEffect(() => {
+    configApi.getSystemWhitelist()
+      .then(setSystemWhitelist)
+      .catch(err => console.error('Failed to load system whitelist:', err))
+  }, [])
 
   const loadData = async () => {
     try {
@@ -410,6 +424,61 @@ export function SoftWhitelist() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* System IPs Section */}
+      <div className="bg-card border border-border rounded-lg">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-cyan-500/20 rounded-lg">
+              <Server className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">System Protected IPs</h2>
+              <p className="text-sm text-muted-foreground">
+                Infrastructure IPs that are never blocked (DNS, CDN, Health Checks)
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowSystemIPs(!showSystemIPs)}
+            className="px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+          >
+            {showSystemIPs ? 'Hide' : 'Show'} ({systemWhitelist?.entries.length || 0} IPs)
+          </button>
+        </div>
+
+        {showSystemIPs && systemWhitelist && (
+          <div className="p-4">
+            {Object.entries(systemWhitelist.by_category).map(([category, ips]) => (
+              <div key={category} className="mb-4 last:mb-0">
+                <h4 className="text-sm font-medium text-muted-foreground mb-2 capitalize flex items-center gap-2">
+                  {category === 'dns' && <Globe className="w-4 h-4" />}
+                  {category === 'cloud' && <Server className="w-4 h-4" />}
+                  {category === 'monitoring' && <Eye className="w-4 h-4" />}
+                  {category.toUpperCase()} ({ips.length})
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {ips.map((ip) => (
+                    <div
+                      key={ip.ip}
+                      className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg"
+                    >
+                      <code className="text-sm font-mono text-cyan-400">{ip.ip}</code>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{ip.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{ip.provider}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground mt-4 italic">
+              These IPs are automatically filtered from logs when "Hide system IPs" is enabled in Settings.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Add Entry Modal */}

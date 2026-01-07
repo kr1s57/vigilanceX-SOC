@@ -166,6 +166,8 @@ func (r *EventsRepository) GetTimeline(ctx context.Context, period string, inter
 	now := time.Now()
 
 	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -223,6 +225,8 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 	now := time.Now()
 
 	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -272,6 +276,8 @@ func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, l
 	now := time.Now()
 
 	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -321,6 +327,8 @@ func (r *EventsRepository) GetTopTargets(ctx context.Context, period string, lim
 	now := time.Now()
 
 	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -367,6 +375,8 @@ func (r *EventsRepository) GetStatsByLogType(ctx context.Context, period string)
 	now := time.Now()
 
 	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -409,6 +419,8 @@ func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]
 	now := time.Now()
 
 	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
