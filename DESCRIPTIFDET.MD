@@ -1,6 +1,6 @@
 # VIGILANCE X - Documentation Technique Detaillee
 
-> **Version:** 1.5.0
+> **Version:** 2.5.0
 > **Date:** Janvier 2026
 > **Plateforme:** Security Operations Center (SOC) pour Sophos XGS
 
@@ -24,6 +24,13 @@
 14. [CyberInt - Intelligence & Response](#14-cyberint---intelligence--response)
     - [14.1 OSINT Multi-Provider](#141-osint-multi-provider-threat-intelligence)
     - [14.2 ActiveResponse - Systeme de Bannissement](#142-activeresponse---systeme-de-bannissement)
+15. [Blocklist Feed Ingester (v1.6)](#15-blocklist-feed-ingester-v16)
+16. [Soft Whitelist (v2.0)](#16-soft-whitelist-v20)
+17. [Geoblocking (v2.0)](#17-geoblocking-v20)
+18. [Freshness Score (v2.0)](#18-freshness-score-v20)
+19. [Risk Scoring UI (v2.3)](#19-risk-scoring-ui-v23)
+20. [System Protected IPs (v2.5)](#20-system-protected-ips-v25)
+21. [Personnalisation Interface (v2.5)](#21-personnalisation-interface-v25)
 
 ---
 
@@ -41,13 +48,20 @@
 
 | Fonctionnalite | Description |
 |----------------|-------------|
-| **Multi-Source Threat Intel** | Integration AbuseIPDB, VirusTotal, AlienVault OTX |
+| **Multi-Source Threat Intel** | Integration 7 providers (AbuseIPDB, VirusTotal, AlienVault OTX, GreyNoise, IPSum, CriminalIP, Pulsedive) |
+| **Blocklist Feed Ingester** | Synchronisation de 11 blocklists publiques (~800k IPs) |
 | **ModSec Log Correlation** | Correlation des regles ModSecurity avec les evenements WAF |
 | **Progressive Banning** | Systeme de ban progressif (1h -> 4h -> 24h -> permanent) |
 | **Real-time Dashboard** | Tableau de bord en temps reel via WebSocket |
 | **Report Generation** | Generation de rapports PDF/XML |
 | **Geolocation** | Enrichissement geographique des IPs |
 | **Sophos XGS Sync** | Synchronisation bidirectionnelle des bans |
+| **Soft Whitelist (v2.0)** | Whitelist graduee (hard/soft/monitor) avec TTL et modificateurs |
+| **Geoblocking (v2.0)** | Blocage par pays/ASN avec detection VPN/Proxy/Tor |
+| **Freshness Score (v2.0)** | Scoring temporel avec decroissance exponentielle |
+| **Risk Scoring UI (v2.3)** | Interface de visualisation des scores de risque |
+| **System Protected IPs (v2.5)** | Protection des IPs critiques (DNS, CDN, Monitoring) |
+| **Personnalisation (v2.5)** | Style d'icones, filtrage IPs systeme dans logs |
 
 ---
 
@@ -2498,6 +2512,392 @@ Detection Evenement
 
 ---
 
+## 15. Blocklist Feed Ingester (v1.6)
+
+Le module **Blocklist Feed Ingester** permet de synchroniser automatiquement les IPs malveillantes depuis des sources publiques de threat intelligence.
+
+### 15.1 Feeds Disponibles
+
+| Feed | Categorie | IPs Estimees | Frequence Sync |
+|------|-----------|--------------|----------------|
+| **Firehol Level 1** | mixed | ~350k | 6h |
+| **Firehol Level 2** | mixed | ~240k | 6h |
+| **Spamhaus DROP** | malware | ~100k | 24h |
+| **Spamhaus EDROP** | malware | ~66k | 24h |
+| **Blocklist.de** | attacker | ~24k | 1h |
+| **CI Army** | attacker | ~15k | 24h |
+| **Binary Defense** | attacker | ~4k | 1h |
+| **Emerging Threats** | attacker | ~1.5k | 6h |
+| **Feodo Tracker** | botnet (C2) | ~300 | 30min |
+| **DShield** | scanner | Top 20 | 1h |
+
+**Total approximatif : ~800,000 IPs uniques**
+
+### 15.2 API Endpoints
+
+| Methode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/api/v1/blocklists/stats` | Statistiques (total IPs, feeds actifs) |
+| GET | `/api/v1/blocklists/feeds` | Status de tous les feeds |
+| POST | `/api/v1/blocklists/sync` | Declenchement synchronisation manuelle |
+| GET | `/api/v1/blocklists/check/{ip}` | Verifier si IP dans blocklists |
+| GET | `/api/v1/blocklists/high-risk` | IPs multi-sources (haute confiance) |
+
+### 15.3 Threat Intelligence Providers (7 Sources)
+
+En plus des 3 providers principaux (AbuseIPDB, VirusTotal, OTX), 4 providers supplementaires:
+
+| Provider | Description | Donnees |
+|----------|-------------|---------|
+| **GreyNoise** | Reduction faux positifs | Detection scanners benings vs malveillants |
+| **IPSum** | Agregation 30+ blocklists | Score de confiance multi-source |
+| **CriminalIP** | Detection infrastructure malveillante | C2, VPN, Proxy, Datacenter |
+| **Pulsedive** | Correlation IOC | Acteurs de menace, TTP MITRE |
+
+---
+
+## 16. Soft Whitelist (v2.0)
+
+Le systeme **Soft Whitelist** remplace le whitelist binaire (oui/non) par un systeme gradue permettant un controle fin du comportement.
+
+### 16.1 Types de Whitelist
+
+| Type | Comportement | Score Modifier | Ban Possible |
+|------|--------------|----------------|--------------|
+| **hard** | Bypass total | 0% (ignore) | Non - jamais |
+| **soft** | Score reduit | Configurable (10-90%) | Non - alerte uniquement |
+| **monitor** | Logging uniquement | 100% (normal) | Oui - avec logging |
+
+### 16.2 Structure de Donnees
+
+```go
+type SoftWhitelistEntry struct {
+    IP            string    // Adresse IPv4 ou CIDR
+    Type          string    // hard, soft, monitor
+    ScoreModifier float64   // 0.0 a 1.0 (multiplicateur)
+    TTL           *int64    // Secondes, nil = permanent
+    ExpiresAt     *time.Time
+    Reason        string
+    Tags          []string  // Categorisation libre
+    CreatedBy     string
+    CreatedAt     time.Time
+    IsActive      bool
+}
+```
+
+### 16.3 Exemples d'Utilisation
+
+| Scenario | Type | Score Modifier | TTL |
+|----------|------|----------------|-----|
+| Serveur de monitoring interne | hard | 0% | Permanent |
+| Partenaire commercial | soft | 30% | 90 jours |
+| Test penetration planifie | monitor | 100% | 7 jours |
+| CDN legitime | soft | 20% | Permanent |
+
+### 16.4 API Endpoints
+
+| Methode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/api/v1/whitelist` | Liste toutes les entrees |
+| GET | `/api/v1/whitelist/{ip}` | Detail d'une entree |
+| POST | `/api/v1/whitelist` | Ajouter (type, TTL, score_modifier, tags) |
+| PUT | `/api/v1/whitelist/{ip}` | Modifier une entree |
+| DELETE | `/api/v1/whitelist/{ip}` | Supprimer |
+| GET | `/api/v1/whitelist/check/{ip}` | Verifier status d'une IP |
+
+---
+
+## 17. Geoblocking (v2.0)
+
+Le module **Geoblocking** permet de bloquer ou surveiller le trafic par pays ou ASN avec enrichissement geographique automatique.
+
+### 17.1 Types de Regles
+
+| Type | Action | Description |
+|------|--------|-------------|
+| `country_block` | Blocage | Bloque toutes les IPs du pays |
+| `country_watch` | Surveillance | Augmente le score des IPs du pays |
+| `asn_block` | Blocage | Bloque toutes les IPs de l'ASN |
+| `asn_watch` | Surveillance | Augmente le score des IPs de l'ASN |
+
+### 17.2 Pays Haute-Risque Preconfigures
+
+10 pays identifies comme sources frequentes d'attaques:
+
+| Code | Pays | Raison |
+|------|------|--------|
+| RU | Russie | Cyberattaques etatiques |
+| CN | Chine | APT, espionnage |
+| KP | Coree du Nord | Lazarus Group |
+| IR | Iran | Campagnes de phishing |
+| BY | Bielorussie | Proxy cyberattaques |
+| NG | Nigeria | Fraude, BEC |
+| RO | Roumanie | Fraude financiere |
+| UA | Ukraine | Botnets |
+| VN | Vietnam | Scans massifs |
+| IN | Inde | Attaques brute force |
+
+### 17.3 Detection VPN/Proxy/Tor
+
+Le service GeoIP detecte automatiquement:
+
+| Flag | Description | Impact Score |
+|------|-------------|--------------|
+| `is_vpn` | Service VPN commercial | +20 |
+| `is_proxy` | Proxy public/commercial | +15 |
+| `is_tor` | Noeud de sortie Tor | +30 |
+| `is_datacenter` | IP de datacenter/hosting | +10 |
+
+### 17.4 API Endpoints
+
+| Methode | Endpoint | Description |
+|---------|----------|-------------|
+| GET | `/api/v1/geoblocking/rules` | Liste des regles actives |
+| POST | `/api/v1/geoblocking/rules` | Creer une regle |
+| PUT | `/api/v1/geoblocking/rules/{id}` | Modifier une regle |
+| DELETE | `/api/v1/geoblocking/rules/{id}` | Supprimer une regle |
+| GET | `/api/v1/geoblocking/check/{ip}` | Verifier une IP |
+| GET | `/api/v1/geoblocking/lookup/{ip}` | Geolocalisation complete |
+| GET | `/api/v1/geoblocking/stats` | Statistiques par pays/ASN |
+| GET | `/api/v1/geoblocking/countries/high-risk` | Liste pays haute-risque |
+
+---
+
+## 18. Freshness Score (v2.0)
+
+Le **Freshness Score** applique une decroissance temporelle aux scores de menace pour privilegier les donnees recentes.
+
+### 18.1 Principe
+
+Les informations de threat intelligence perdent leur pertinence avec le temps. Un IP malveillante il y a 6 mois peut etre devenue legitime.
+
+### 18.2 Formule de Decroissance
+
+```
+freshness_multiplier = exp(-age_days / half_life)
+
+Avec:
+- age_days: Nombre de jours depuis la detection
+- half_life: 7 jours (configurable)
+- Minimum: 0.1 (ne descend jamais en dessous de 10%)
+```
+
+### 18.3 Table de Multiplicateurs
+
+| Age des Donnees | Multiplicateur | Impact |
+|-----------------|----------------|--------|
+| Aujourd'hui | 1.25x | Boost recence |
+| 1-3 jours | 1.0x | Score complet |
+| 7 jours | ~0.75x | 3/4 du score |
+| 14 jours | ~0.37x | 1/3 du score |
+| 21 jours | ~0.22x | 1/5 du score |
+| 30+ jours | 0.10x | Score minimal |
+
+### 18.4 Application
+
+Le multiplicateur s'applique a:
+1. Scores Threat Intel agriges
+2. Scores individuels par provider
+3. Compteurs de blocklist
+
+```go
+func ApplyFreshnessScore(baseScore int, lastSeen time.Time) int {
+    ageHours := time.Since(lastSeen).Hours()
+    ageDays := ageHours / 24
+
+    // Decroissance exponentielle avec demi-vie de 7 jours
+    multiplier := math.Exp(-ageDays / 7.0)
+
+    // Minimum 10%
+    if multiplier < 0.1 {
+        multiplier = 0.1
+    }
+
+    // Boost pour donnees recentes (< 3 jours)
+    if ageDays < 3 {
+        multiplier = 1.25
+    }
+
+    return int(float64(baseScore) * multiplier)
+}
+```
+
+---
+
+## 19. Risk Scoring UI (v2.3)
+
+L'interface **Risk Scoring** permet de visualiser et comprendre les scores de risque calcules.
+
+### 19.1 Composants Visuels
+
+| Element | Description |
+|---------|-------------|
+| **Jauge circulaire** | Score agrege (0-100) avec code couleur |
+| **Badge niveau** | critical/high/medium/low/none |
+| **Breakdown par provider** | Score individuel pour chaque source |
+| **Timeline historique** | Evolution du score dans le temps |
+| **Tags de risque** | Indicateurs visuels (Tor, VPN, Botnet, etc.) |
+
+### 19.2 Code Couleur
+
+```css
+.score-critical { background: #dc2626; } /* 80-100 - Rouge */
+.score-high     { background: #f97316; } /* 60-79  - Orange */
+.score-medium   { background: #eab308; } /* 40-59  - Jaune */
+.score-low      { background: #3b82f6; } /* 20-39  - Bleu */
+.score-none     { background: #22c55e; } /* 0-19   - Vert */
+```
+
+### 19.3 Modal IP Threat
+
+Le modal IP Threat affiche pour chaque IP:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  IP: 192.168.1.100                        Score: 72/100    │
+│  Level: HIGH                              [████████░░]     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Provider Scores:                                           │
+│  ├─ AbuseIPDB:    75  [████████░░]  45 reports            │
+│  ├─ VirusTotal:   68  [███████░░░]  3/90 malicious        │
+│  └─ OTX:          65  [███████░░░]  2 pulses              │
+│                                                             │
+│  Geolocation:                                               │
+│  ├─ Country: CN (China)                                    │
+│  ├─ ASN: AS4134 ChinaNet                                   │
+│  └─ City: Beijing                                          │
+│                                                             │
+│  Indicators:  🌐 VPN  🕵️ Proxy  📡 Datacenter             │
+│                                                             │
+│  Tags: botnet, trojan, scanning                            │
+│                                                             │
+│  [Refresh] [Ban IP] [Add to Whitelist]                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 20. System Protected IPs (v2.5)
+
+Les **System Protected IPs** sont des adresses IP critiques pour le fonctionnement d'Internet qui ne doivent jamais etre bloquees.
+
+### 20.1 Categories Protegees
+
+| Categorie | Fournisseurs | IPs |
+|-----------|-------------|-----|
+| **DNS** | Cloudflare, Google, Quad9, OpenDNS | 1.1.1.1, 1.0.0.1, 8.8.8.8, 8.8.4.4, 9.9.9.9, 208.67.222.222 |
+| **Cloud Health** | AWS, Google Cloud | Plages health check |
+| **Monitoring** | UptimeRobot, Pingdom, StatusCake | IPs de monitoring |
+| **NTP** | NIST | time.nist.gov |
+
+### 20.2 Structure de Donnees
+
+```go
+type SystemWhitelistEntry struct {
+    IP       string `json:"ip"`
+    Name     string `json:"name"`
+    Provider string `json:"provider"`
+    Category string `json:"category"` // dns, cloud, monitoring, ntp
+}
+
+var SystemWhitelist = []SystemWhitelistEntry{
+    // DNS Providers
+    {IP: "1.1.1.1", Name: "Cloudflare DNS Primary", Provider: "Cloudflare", Category: "dns"},
+    {IP: "1.0.0.1", Name: "Cloudflare DNS Secondary", Provider: "Cloudflare", Category: "dns"},
+    {IP: "8.8.8.8", Name: "Google DNS Primary", Provider: "Google", Category: "dns"},
+    {IP: "8.8.4.4", Name: "Google DNS Secondary", Provider: "Google", Category: "dns"},
+    {IP: "9.9.9.9", Name: "Quad9 DNS Primary", Provider: "Quad9", Category: "dns"},
+    {IP: "208.67.222.222", Name: "OpenDNS Primary", Provider: "OpenDNS", Category: "dns"},
+    // ... autres entrees
+}
+```
+
+### 20.3 Interface Whitelist
+
+La page Whitelist affiche une section **System Protected IPs** avec:
+- Toggle pour afficher/masquer
+- Groupage par categorie
+- Compteur d'IPs par categorie
+- Detail complet (IP, nom, provider)
+
+### 20.4 API Endpoint
+
+```
+GET /api/v1/config/system-whitelist
+```
+
+Retourne:
+```json
+{
+  "categories": {
+    "dns": [
+      {"ip": "1.1.1.1", "name": "Cloudflare DNS Primary", "provider": "Cloudflare"},
+      {"ip": "8.8.8.8", "name": "Google DNS Primary", "provider": "Google"}
+    ],
+    "cloud": [...],
+    "monitoring": [...],
+    "ntp": [...]
+  },
+  "total_count": 24
+}
+```
+
+---
+
+## 21. Personnalisation Interface (v2.5)
+
+### 21.1 Style des Icones Sidebar
+
+Deux styles disponibles pour les icones de navigation:
+
+| Style | Description | Code |
+|-------|-------------|------|
+| **Monochrome** | Icones d'une seule couleur (classique) | `iconStyle: 'mono'` |
+| **Color** | Icones colorees par categorie de page | `iconStyle: 'color'` |
+
+**Couleurs par categorie (mode Color):**
+
+| Page | Couleur |
+|------|---------|
+| Dashboard | Bleu |
+| WAF Explorer | Violet |
+| Attacks | Rouge |
+| Threats | Orange |
+| VPN/Network | Vert |
+| Active Bans | Rouge fonce |
+| Reports | Bleu clair |
+| Settings | Gris |
+
+### 21.2 Filtrage IPs Systeme
+
+Option pour masquer les IPs systeme protegees dans les logs et tableaux:
+
+```typescript
+interface AppSettings {
+  // ... autres settings
+  iconStyle: 'mono' | 'color';
+  hideSystemIPs: boolean;  // Masquer 1.1.1.1, 8.8.8.8, etc. dans logs
+}
+```
+
+### 21.3 Persistance
+
+Les preferences sont sauvegardees dans `localStorage`:
+
+```javascript
+// Cle: vigilancex-settings
+{
+  "theme": "dark",
+  "language": "fr",
+  "iconStyle": "color",
+  "hideSystemIPs": false,
+  // ... autres settings
+}
+```
+
+---
+
 ## Annexes
 
 ### A. Codes de Severite
@@ -2531,4 +2931,4 @@ Les drapeaux sont affiches via emojis Unicode:
 
 ---
 
-**Document genere automatiquement - VIGILANCE X v1.0.0**
+**Document genere automatiquement - VIGILANCE X v2.5.0**

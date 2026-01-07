@@ -1,6 +1,6 @@
 # VIGILANCE X - Live Active Response
 
-> **Version 2.0.0** | Security Operations Center pour Sophos XGS
+> **Version 2.5.0** | Security Operations Center pour Sophos XGS
 
 Solution de supervision de sécurité et de réponse active automatisée pour **Sophos XGS**.
 
@@ -27,6 +27,9 @@ Solution de supervision de sécurité et de réponse active automatisée pour **
 - **Soft Whitelist** : Système de whitelist graduée (hard/soft/monitor) *(v2.0)*
 - **Geoblocking** : Blocage par pays/ASN avec GeoIP lookup *(v2.0)*
 - **Freshness Score** : Scoring temporel avec décroissance exponentielle *(v2.0)*
+- **Risk Scoring UI** : Interface de visualisation des scores de risque *(v2.3)*
+- **System Protected IPs** : IPs système protégées (DNS, CDN, Monitoring) *(v2.5)*
+- **Icon Style** : Personnalisation des icônes sidebar (Monochrome/Color) *(v2.5)*
 - **Reports** : Génération de rapports PDF/XML (journalier, hebdomadaire, mensuel)
 - **Settings** : Configuration complète (thème, langue, notifications, intégrations)
 
@@ -108,6 +111,28 @@ Scoring temporel avec décroissance exponentielle :
 | 7 jours | ~0.75x |
 | 14 jours | ~0.37x |
 | > 30 jours | 0.1x (minimal) |
+
+### System Protected IPs (v2.5)
+
+IPs système protégées automatiquement contre tout blocage :
+
+| Catégorie | Fournisseurs |
+|-----------|-------------|
+| **DNS** | Cloudflare (1.1.1.1, 1.0.0.1), Google (8.8.8.8, 8.8.4.4), Quad9, OpenDNS |
+| **Cloud** | AWS Health Checks, Google Cloud Health |
+| **Monitoring** | UptimeRobot, Pingdom, StatusCake |
+| **NTP** | NIST Time Servers |
+
+Ces IPs sont visibles dans la page Whitelist avec toggle affichage.
+
+### Icon Style (v2.5)
+
+Personnalisation du style des icônes de navigation :
+
+| Style | Description |
+|-------|-------------|
+| **Monochrome** | Icônes monochromes classiques |
+| **Color** | Icônes colorées par catégorie |
 
 ### Moteur Detect2Ban
 
@@ -259,6 +284,13 @@ npm run build    # Build production
 | `GET /api/v1/whitelist` | Liste des entrées |
 | `POST /api/v1/whitelist` | Ajouter (type, TTL, score_modifier) |
 | `DELETE /api/v1/whitelist/{ip}` | Supprimer |
+
+### Config (v2.5)
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/config/system-whitelist` | IPs système protégées |
+| `GET /api/v1/config/settings` | Paramètres application |
+| `PUT /api/v1/config/settings` | Modifier paramètres |
 
 ## Licence
 
