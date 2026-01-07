@@ -54,14 +54,12 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Handle auth errors
+// Handle auth errors - don't redirect here, let AuthContext handle it
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token')
-      window.location.href = '/login'
-    }
+    // Don't auto-redirect on 401 - let components handle authentication state
+    // This prevents flickering and allows proper React Router navigation
     return Promise.reject(error)
   }
 )

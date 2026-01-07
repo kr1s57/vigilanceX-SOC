@@ -85,19 +85,38 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [systemWhitelistIPs, setSystemWhitelistIPs] = useState<string[]>([])
   const [systemWhitelistEntries, setSystemWhitelistEntries] = useState<SystemWhitelistEntry[]>([])
 
-  // Load system whitelist on mount
+  // Load system whitelist when authenticated
   useEffect(() => {
     const loadSystemWhitelist = async () => {
+      // Only load if we have an auth token
+      const token = localStorage.getItem('auth_token')
+      if (!token) return
+
       try {
         const data = await configApi.getSystemWhitelist()
         setSystemWhitelistIPs(data.ips)
         setSystemWhitelistEntries(data.entries)
       } catch (error) {
-        console.error('Failed to load system whitelist:', error)
-        // Fallback to empty - IPs will show normally
+        // Silently fail - IPs will show normally if whitelist can't load
+        // This happens during logout or token expiry
       }
     }
     loadSystemWhitelist()
+
+    // Re-run when token changes (login/logout)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'auth_token') {
+        if (e.newValue) {
+          loadSystemWhitelist()
+        } else {
+          // Clear on logout
+          setSystemWhitelistIPs([])
+          setSystemWhitelistEntries([])
+        }
+      }
+    }
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
 
   // Save to localStorage when settings change

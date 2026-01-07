@@ -51,8 +51,10 @@ export function Sidebar() {
   const filteredNavigation = navigation.filter(item => !item.adminOnly || isAdmin)
 
   const handleLogout = () => {
-    logout()
-    navigate('/login')
+    // Navigate first, then logout to prevent flickering from ProtectedRoute redirect
+    navigate('/login', { replace: true })
+    // Small delay to ensure navigation starts before state changes
+    setTimeout(() => logout(), 50)
   }
 
   return (

@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Shield, Eye, EyeOff, Loader2, AlertCircle, LogIn } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isLoading: authLoading } = useAuth()
+  const { login, isAuthenticated, isLoading: authLoading } = useAuth()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -17,6 +17,13 @@ export default function Login() {
 
   // Get the redirect path from location state
   const from = (location.state as { from?: string })?.from || '/'
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      navigate(from, { replace: true })
+    }
+  }, [isAuthenticated, authLoading, navigate, from])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -41,6 +48,30 @@ export default function Login() {
   }
 
   const loading = isLoading || authLoading
+
+  // Show loading while checking auth status
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-950 to-black">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-red-500 animate-spin" />
+          <p className="text-zinc-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render login form if already authenticated (will redirect via useEffect)
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-950 to-black">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-red-500 animate-spin" />
+          <p className="text-zinc-400">Redirecting...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-4">
