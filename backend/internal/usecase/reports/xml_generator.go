@@ -16,17 +16,17 @@ func NewXMLGenerator() *XMLGenerator {
 
 // XMLReport represents the root XML structure
 type XMLReport struct {
-	XMLName     xml.Name       `xml:"VigilanceXReport"`
-	Version     string         `xml:"version,attr"`
-	GeneratedAt string         `xml:"generatedAt,attr"`
-	Metadata    XMLMetadata    `xml:"Metadata"`
-	Summary     XMLSummary     `xml:"Summary"`
-	Events      *XMLEvents     `xml:"Events,omitempty"`
-	WAF         *XMLWAF        `xml:"WAF,omitempty"`
-	VPN         *XMLVPN        `xml:"VPN,omitempty"`
-	Threats     *XMLThreats    `xml:"Threats,omitempty"`
-	Bans        *XMLBans       `xml:"Bans,omitempty"`
-	Attackers   *XMLAttackers  `xml:"Attackers,omitempty"`
+	XMLName     xml.Name      `xml:"VigilanceXReport"`
+	Version     string        `xml:"version,attr"`
+	GeneratedAt string        `xml:"generatedAt,attr"`
+	Metadata    XMLMetadata   `xml:"Metadata"`
+	Summary     XMLSummary    `xml:"Summary"`
+	Events      *XMLEvents    `xml:"Events,omitempty"`
+	WAF         *XMLWAF       `xml:"WAF,omitempty"`
+	VPN         *XMLVPN       `xml:"VPN,omitempty"`
+	Threats     *XMLThreats   `xml:"Threats,omitempty"`
+	Bans        *XMLBans      `xml:"Bans,omitempty"`
+	Attackers   *XMLAttackers `xml:"Attackers,omitempty"`
 }
 
 // XMLMetadata contains report metadata
@@ -36,56 +36,56 @@ type XMLMetadata struct {
 	StartDate    string `xml:"StartDate"`
 	EndDate      string `xml:"EndDate"`
 	DatabaseSize string `xml:"DatabaseSize,omitempty"`
-	TotalRecords uint64  `xml:"TotalRecords,omitempty"`
+	TotalRecords uint64 `xml:"TotalRecords,omitempty"`
 }
 
 // XMLSummary contains executive summary data
 type XMLSummary struct {
-	TotalEvents    uint64   `xml:"TotalEvents"`
-	BlockedEvents  uint64   `xml:"BlockedEvents"`
+	TotalEvents    uint64  `xml:"TotalEvents"`
+	BlockedEvents  uint64  `xml:"BlockedEvents"`
 	BlockRate      float64 `xml:"BlockRate"`
-	UniqueIPs      uint64   `xml:"UniqueIPs"`
-	CriticalEvents uint64   `xml:"CriticalEvents"`
-	HighEvents     uint64   `xml:"HighEvents"`
-	MediumEvents   uint64   `xml:"MediumEvents"`
-	LowEvents      uint64   `xml:"LowEvents"`
+	UniqueIPs      uint64  `xml:"UniqueIPs"`
+	CriticalEvents uint64  `xml:"CriticalEvents"`
+	HighEvents     uint64  `xml:"HighEvents"`
+	MediumEvents   uint64  `xml:"MediumEvents"`
+	LowEvents      uint64  `xml:"LowEvents"`
 }
 
 // XMLEvents contains event breakdown
 type XMLEvents struct {
-	ByType     []XMLEventType   `xml:"ByType>Type"`
-	BySeverity []XMLEventType   `xml:"BySeverity>Severity"`
-	ByAction   []XMLEventType   `xml:"ByAction>Action"`
-	TopTargets []XMLTarget      `xml:"TopTargets>Target"`
-	TopRules   []XMLRule        `xml:"TopRules>Rule"`
+	ByType     []XMLEventType `xml:"ByType>Type"`
+	BySeverity []XMLEventType `xml:"BySeverity>Severity"`
+	ByAction   []XMLEventType `xml:"ByAction>Action"`
+	TopTargets []XMLTarget    `xml:"TopTargets>Target"`
+	TopRules   []XMLRule      `xml:"TopRules>Rule"`
 }
 
 // XMLEventType represents a type/severity/action breakdown
 type XMLEventType struct {
 	Name  string `xml:"name,attr"`
-	Count uint64  `xml:"count,attr"`
+	Count uint64 `xml:"count,attr"`
 }
 
 // XMLTarget represents a targeted host
 type XMLTarget struct {
 	Hostname    string `xml:"hostname,attr"`
-	AttackCount uint64  `xml:"attackCount,attr"`
-	UniqueIPs   uint64  `xml:"uniqueIPs,attr"`
+	AttackCount uint64 `xml:"attackCount,attr"`
+	UniqueIPs   uint64 `xml:"uniqueIPs,attr"`
 }
 
 // XMLRule represents a triggered rule
 type XMLRule struct {
 	ID           string `xml:"id,attr"`
 	Message      string `xml:"message,attr"`
-	TriggerCount uint64  `xml:"triggerCount,attr"`
-	UniqueIPs    uint64  `xml:"uniqueIPs,attr"`
+	TriggerCount uint64 `xml:"triggerCount,attr"`
+	UniqueIPs    uint64 `xml:"uniqueIPs,attr"`
 }
 
 // XMLWAF contains WAF/ModSecurity data
 type XMLWAF struct {
-	TotalDetections uint64           `xml:"TotalDetections"`
-	BlockingEvents  uint64           `xml:"BlockingEvents"`
-	UniqueRules     uint64           `xml:"UniqueRules"`
+	TotalDetections uint64          `xml:"TotalDetections"`
+	BlockingEvents  uint64          `xml:"BlockingEvents"`
+	UniqueRules     uint64          `xml:"UniqueRules"`
 	AttackTypes     []XMLAttackType `xml:"AttackTypes>AttackType"`
 	TopRules        []XMLRule       `xml:"TopRules>Rule"`
 }
@@ -93,7 +93,7 @@ type XMLWAF struct {
 // XMLAttackType represents an attack type
 type XMLAttackType struct {
 	Type  string `xml:"type,attr"`
-	Count uint64  `xml:"count,attr"`
+	Count uint64 `xml:"count,attr"`
 }
 
 // XMLVPN contains VPN statistics
@@ -107,19 +107,19 @@ type XMLVPN struct {
 
 // XMLThreats contains threat intelligence data
 type XMLThreats struct {
-	TotalTracked  uint64            `xml:"TotalTracked"`
-	CriticalCount uint64            `xml:"CriticalCount"`
-	HighCount     uint64            `xml:"HighCount"`
-	MediumCount   uint64            `xml:"MediumCount"`
-	LowCount      uint64            `xml:"LowCount"`
-	TorExitNodes  uint64            `xml:"TorExitNodes"`
+	TotalTracked  uint64           `xml:"TotalTracked"`
+	CriticalCount uint64           `xml:"CriticalCount"`
+	HighCount     uint64           `xml:"HighCount"`
+	MediumCount   uint64           `xml:"MediumCount"`
+	LowCount      uint64           `xml:"LowCount"`
+	TorExitNodes  uint64           `xml:"TorExitNodes"`
 	Distribution  []XMLThreatLevel `xml:"Distribution>Level"`
 }
 
 // XMLThreatLevel represents a threat level distribution
 type XMLThreatLevel struct {
 	Level string `xml:"level,attr"`
-	Count uint64  `xml:"count,attr"`
+	Count uint64 `xml:"count,attr"`
 }
 
 // XMLBans contains ban management data
@@ -141,16 +141,16 @@ type XMLAttackers struct {
 type XMLAttacker struct {
 	IP           string `xml:"ip,attr"`
 	Country      string `xml:"country,attr"`
-	AttackCount  uint64  `xml:"attackCount,attr"`
-	BlockedCount uint64  `xml:"blockedCount,attr"`
-	UniqueRules  uint64  `xml:"uniqueRules,attr"`
+	AttackCount  uint64 `xml:"attackCount,attr"`
+	BlockedCount uint64 `xml:"blockedCount,attr"`
+	UniqueRules  uint64 `xml:"uniqueRules,attr"`
 }
 
 // XMLCountry represents country statistics
 type XMLCountry struct {
 	Name        string `xml:"name,attr"`
-	AttackCount uint64  `xml:"attackCount,attr"`
-	UniqueIPs   uint64  `xml:"uniqueIPs,attr"`
+	AttackCount uint64 `xml:"attackCount,attr"`
+	UniqueIPs   uint64 `xml:"uniqueIPs,attr"`
 }
 
 // Generate creates an XML report from the report data

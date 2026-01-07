@@ -69,13 +69,13 @@ func (s *Service) DetectSpikes(ctx context.Context, config *SpikeConfig) ([]enti
 			severity := calculateSpikeSeverity(deviation)
 
 			spike := entity.Spike{
-				Timestamp:   timestamp,
-				EventCount:  count,
-				Baseline:    int64(mean),
-				Threshold:   int64(threshold),
-				Deviation:   deviation,
-				Severity:    severity,
-				DetectedAt:  time.Now(),
+				Timestamp:  timestamp,
+				EventCount: count,
+				Baseline:   int64(mean),
+				Threshold:  int64(threshold),
+				Deviation:  deviation,
+				Severity:   severity,
+				DetectedAt: time.Now(),
 			}
 			spikes = append(spikes, spike)
 
@@ -89,10 +89,10 @@ func (s *Service) DetectSpikes(ctx context.Context, config *SpikeConfig) ([]enti
 
 // SpikeConfig configures spike detection
 type SpikeConfig struct {
-	BaselineWindow   time.Duration // How far back for baseline (default: 7 days)
-	DetectionWindow  time.Duration // How far back to check for spikes (default: 1 hour)
-	SigmaThreshold   float64       // Standard deviations above mean (default: 3)
-	MinEventCount    int64         // Minimum events to consider a spike
+	BaselineWindow  time.Duration // How far back for baseline (default: 7 days)
+	DetectionWindow time.Duration // How far back to check for spikes (default: 1 hour)
+	SigmaThreshold  float64       // Standard deviations above mean (default: 3)
+	MinEventCount   int64         // Minimum events to consider a spike
 }
 
 // DefaultSpikeConfig returns default spike detection config

@@ -21,16 +21,16 @@ type Hub struct {
 
 // Client represents a WebSocket client
 type Client struct {
-	hub      *Hub
-	conn     *websocket.Conn
-	send     chan []byte
-	topics   map[string]bool
-	mu       sync.RWMutex
+	hub    *Hub
+	conn   *websocket.Conn
+	send   chan []byte
+	topics map[string]bool
+	mu     sync.RWMutex
 }
 
 // Message represents a WebSocket message
 type Message struct {
-	Type      string      `json:"type"`      // event, ban, alert, stats, connection
+	Type      string      `json:"type"` // event, ban, alert, stats, connection
 	Payload   interface{} `json:"payload"`
 	Timestamp string      `json:"timestamp"`
 	Topic     string      `json:"-"` // Internal: filter by topic

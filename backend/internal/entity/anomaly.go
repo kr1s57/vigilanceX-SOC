@@ -8,18 +8,18 @@ import (
 
 // AnomalySpike represents a detected anomaly in the system
 type AnomalySpike struct {
-	ID             uuid.UUID `json:"id" ch:"id"`
-	DetectedAt     time.Time `json:"detected_at" ch:"detected_at"`
-	AnomalyType    string    `json:"anomaly_type" ch:"anomaly_type"`
-	MetricName     string    `json:"metric_name" ch:"metric_name"`
-	CurrentValue   float64   `json:"current_value" ch:"current_value"`
-	BaselineValue  float64   `json:"baseline_value" ch:"baseline_value"`
-	DeviationSigma float64   `json:"deviation_sigma" ch:"deviation_sigma"`
-	AffectedIPs    []string  `json:"affected_ips" ch:"affected_ips"`
-	AffectedRules  []string  `json:"affected_rules" ch:"affected_rules"`
-	Description    string    `json:"description" ch:"description"`
-	IsAcknowledged bool      `json:"is_acknowledged" ch:"is_acknowledged"`
-	AcknowledgedBy string    `json:"acknowledged_by" ch:"acknowledged_by"`
+	ID             uuid.UUID  `json:"id" ch:"id"`
+	DetectedAt     time.Time  `json:"detected_at" ch:"detected_at"`
+	AnomalyType    string     `json:"anomaly_type" ch:"anomaly_type"`
+	MetricName     string     `json:"metric_name" ch:"metric_name"`
+	CurrentValue   float64    `json:"current_value" ch:"current_value"`
+	BaselineValue  float64    `json:"baseline_value" ch:"baseline_value"`
+	DeviationSigma float64    `json:"deviation_sigma" ch:"deviation_sigma"`
+	AffectedIPs    []string   `json:"affected_ips" ch:"affected_ips"`
+	AffectedRules  []string   `json:"affected_rules" ch:"affected_rules"`
+	Description    string     `json:"description" ch:"description"`
+	IsAcknowledged bool       `json:"is_acknowledged" ch:"is_acknowledged"`
+	AcknowledgedBy string     `json:"acknowledged_by" ch:"acknowledged_by"`
 	AcknowledgedAt *time.Time `json:"acknowledged_at" ch:"acknowledged_at"`
 }
 
@@ -40,39 +40,39 @@ type NewIPDetected struct {
 
 // AnomalyStats represents anomaly detection statistics
 type AnomalyStats struct {
-	TotalDetected      int64 `json:"total_detected"`
-	TotalSpikes        int64 `json:"total_spikes"`
+	TotalDetected        int64 `json:"total_detected"`
+	TotalSpikes          int64 `json:"total_spikes"`
 	UnacknowledgedSpikes int64 `json:"unacknowledged_spikes"`
-	SpikesLast24h      int64 `json:"spikes_last_24h"`
-	NewIPsLast24h      int64 `json:"new_ips_last_24h"`
-	MultiVectorLast24h int64 `json:"multi_vector_last_24h"`
-	RiskyNewIPs        int64 `json:"risky_new_ips"`
-	CriticalCount      int64 `json:"critical_count"`
-	HighCount          int64 `json:"high_count"`
-	PatternDetections  int64 `json:"pattern_detections"`
+	SpikesLast24h        int64 `json:"spikes_last_24h"`
+	NewIPsLast24h        int64 `json:"new_ips_last_24h"`
+	MultiVectorLast24h   int64 `json:"multi_vector_last_24h"`
+	RiskyNewIPs          int64 `json:"risky_new_ips"`
+	CriticalCount        int64 `json:"critical_count"`
+	HighCount            int64 `json:"high_count"`
+	PatternDetections    int64 `json:"pattern_detections"`
 }
 
 // PatternAnomaly represents a detected attack pattern
 type PatternAnomaly struct {
-	Type           string    `json:"type"`
-	Description    string    `json:"description"`
-	AffectedIPs    []string  `json:"affected_ips"`
-	AffectedHosts  []string  `json:"affected_hosts"`
-	DetectedAt     time.Time `json:"detected_at"`
-	Severity       string    `json:"severity"`
+	Type          string    `json:"type"`
+	Description   string    `json:"description"`
+	AffectedIPs   []string  `json:"affected_ips"`
+	AffectedHosts []string  `json:"affected_hosts"`
+	DetectedAt    time.Time `json:"detected_at"`
+	Severity      string    `json:"severity"`
 }
 
 // Spike represents a statistical spike anomaly
 type Spike struct {
-	ID          uuid.UUID `json:"id" ch:"id"`
-	Timestamp   time.Time `json:"timestamp" ch:"timestamp"`
-	EventCount  int64     `json:"event_count" ch:"event_count"`
-	Baseline    int64     `json:"baseline" ch:"baseline"`
-	Threshold   int64     `json:"threshold" ch:"threshold"`
-	Deviation   float64   `json:"deviation" ch:"deviation"`
-	Severity    string    `json:"severity" ch:"severity"`
-	LogType     string    `json:"log_type,omitempty" ch:"log_type"`
-	DetectedAt  time.Time `json:"detected_at" ch:"detected_at"`
+	ID         uuid.UUID `json:"id" ch:"id"`
+	Timestamp  time.Time `json:"timestamp" ch:"timestamp"`
+	EventCount int64     `json:"event_count" ch:"event_count"`
+	Baseline   int64     `json:"baseline" ch:"baseline"`
+	Threshold  int64     `json:"threshold" ch:"threshold"`
+	Deviation  float64   `json:"deviation" ch:"deviation"`
+	Severity   string    `json:"severity" ch:"severity"`
+	LogType    string    `json:"log_type,omitempty" ch:"log_type"`
+	DetectedAt time.Time `json:"detected_at" ch:"detected_at"`
 }
 
 // NewIPAnomaly represents a new IP detection
@@ -87,43 +87,43 @@ type NewIPAnomaly struct {
 
 // MultiVectorAttack represents an IP attacking via multiple vectors
 type MultiVectorAttack struct {
-	IP          string    `json:"ip"`
-	Vectors     []string  `json:"vectors"` // WAF, IPS, VPN, etc.
-	EventCount  int64     `json:"event_count"`
-	FirstSeen   time.Time `json:"first_seen"`
-	LastSeen    time.Time `json:"last_seen"`
-	Country     string    `json:"country"`
+	IP         string    `json:"ip"`
+	Vectors    []string  `json:"vectors"` // WAF, IPS, VPN, etc.
+	EventCount int64     `json:"event_count"`
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+	Country    string    `json:"country"`
 }
 
 // TargetedCampaign represents multiple IPs targeting the same resource
 type TargetedCampaign struct {
-	Target      string    `json:"target"` // hostname or URL
-	SourceIPs   []string  `json:"source_ips"`
-	EventCount  int64     `json:"event_count"`
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
+	Target     string    `json:"target"` // hostname or URL
+	SourceIPs  []string  `json:"source_ips"`
+	EventCount int64     `json:"event_count"`
+	StartTime  time.Time `json:"start_time"`
+	EndTime    time.Time `json:"end_time"`
 }
 
 // BruteForcePattern represents a brute force attack pattern
 type BruteForcePattern struct {
-	IP            string    `json:"ip"`
-	Target        string    `json:"target"`
-	FailedAttempts int64    `json:"failed_attempts"`
-	Window        string    `json:"window"`
-	FirstAttempt  time.Time `json:"first_attempt"`
-	LastAttempt   time.Time `json:"last_attempt"`
+	IP             string    `json:"ip"`
+	Target         string    `json:"target"`
+	FailedAttempts int64     `json:"failed_attempts"`
+	Window         string    `json:"window"`
+	FirstAttempt   time.Time `json:"first_attempt"`
+	LastAttempt    time.Time `json:"last_attempt"`
 }
 
 // Anomaly is a generic anomaly record
 type Anomaly struct {
-	ID          uuid.UUID `json:"id"`
-	Type        string    `json:"type"`
-	Severity    string    `json:"severity"`
-	IP          string    `json:"ip,omitempty"`
-	Description string    `json:"description"`
-	Details     string    `json:"details,omitempty"`
-	DetectedAt  time.Time `json:"detected_at"`
-	Acknowledged bool     `json:"acknowledged"`
+	ID           uuid.UUID `json:"id"`
+	Type         string    `json:"type"`
+	Severity     string    `json:"severity"`
+	IP           string    `json:"ip,omitempty"`
+	Description  string    `json:"description"`
+	Details      string    `json:"details,omitempty"`
+	DetectedAt   time.Time `json:"detected_at"`
+	Acknowledged bool      `json:"acknowledged"`
 }
 
 // Anomaly type constants
@@ -148,15 +148,15 @@ const DefaultSpikeThreshold = 3.0
 
 // Thresholds for pattern detection
 const (
-	MultiVectorThreshold = 3   // Minimum different attack types
-	CampaignThreshold    = 5   // Minimum source IPs targeting same host
-	ScanningThreshold    = 10  // Minimum different hosts from same IP
+	MultiVectorThreshold = 3  // Minimum different attack types
+	CampaignThreshold    = 5  // Minimum source IPs targeting same host
+	ScanningThreshold    = 10 // Minimum different hosts from same IP
 )
 
 // Risk thresholds for new IPs
 const (
-	RiskyThreatScore    = 80
-	RiskyEventCount     = 10
+	RiskyThreatScore       = 80
+	RiskyEventCount        = 10
 	RiskySeverityThreshold = "high"
 )
 

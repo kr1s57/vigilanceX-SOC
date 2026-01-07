@@ -6,19 +6,19 @@ import (
 
 // ThreatScore represents the threat intelligence score for an IP
 type ThreatScore struct {
-	IP              string    `json:"ip" ch:"ip"`
-	AggregatedScore int32     `json:"aggregated_score" ch:"aggregated_score"`
-	TotalScore      uint8     `json:"total_score" ch:"total_score"`
-	ReputationScore uint8     `json:"reputation_score" ch:"reputation_score"`
-	ActivityScore   uint8     `json:"activity_score" ch:"activity_score"`
-	SeverityScore   uint8     `json:"severity_score" ch:"severity_score"`
-	Confidence      float64   `json:"confidence" ch:"confidence"`
+	IP              string  `json:"ip" ch:"ip"`
+	AggregatedScore int32   `json:"aggregated_score" ch:"aggregated_score"`
+	TotalScore      uint8   `json:"total_score" ch:"total_score"`
+	ReputationScore uint8   `json:"reputation_score" ch:"reputation_score"`
+	ActivityScore   uint8   `json:"activity_score" ch:"activity_score"`
+	SeverityScore   uint8   `json:"severity_score" ch:"severity_score"`
+	Confidence      float64 `json:"confidence" ch:"confidence"`
 
-	IsMalicious  bool     `json:"is_malicious" ch:"is_malicious"`
-	ThreatLevel  string   `json:"threat_level" ch:"threat_level"`
-	Categories   []string `json:"categories" ch:"categories"`
-	Sources      []string `json:"sources" ch:"sources"`
-	Tags         []string `json:"tags" ch:"tags"`
+	IsMalicious bool     `json:"is_malicious" ch:"is_malicious"`
+	ThreatLevel string   `json:"threat_level" ch:"threat_level"`
+	Categories  []string `json:"categories" ch:"categories"`
+	Sources     []string `json:"sources" ch:"sources"`
+	Tags        []string `json:"tags" ch:"tags"`
 
 	// Geographic/Network info
 	Country string `json:"country" ch:"country"`
@@ -28,26 +28,26 @@ type ThreatScore struct {
 
 	// Per-source scores (normalized 0-100)
 	// Core providers
-	AbuseIPDBScore    int32  `json:"abuseipdb_score" ch:"abuseipdb_score"`
-	VirusTotalScore   int32  `json:"virustotal_score" ch:"virustotal_score"`
-	OTXScore          int32  `json:"otx_score" ch:"otx_score"`
+	AbuseIPDBScore  int32 `json:"abuseipdb_score" ch:"abuseipdb_score"`
+	VirusTotalScore int32 `json:"virustotal_score" ch:"virustotal_score"`
+	OTXScore        int32 `json:"otx_score" ch:"otx_score"`
 	// v1.6 providers
-	GreyNoiseScore    int32  `json:"greynoise_score" ch:"greynoise_score"`
-	IPSumScore        int32  `json:"ipsum_score" ch:"ipsum_score"`
-	CriminalIPScore   int32  `json:"criminalip_score" ch:"criminalip_score"`
-	PulsediveScore    int32  `json:"pulsedive_score" ch:"pulsedive_score"`
+	GreyNoiseScore  int32 `json:"greynoise_score" ch:"greynoise_score"`
+	IPSumScore      int32 `json:"ipsum_score" ch:"ipsum_score"`
+	CriminalIPScore int32 `json:"criminalip_score" ch:"criminalip_score"`
+	PulsediveScore  int32 `json:"pulsedive_score" ch:"pulsedive_score"`
 	// v1.6 flags
-	IsBenign          bool   `json:"is_benign" ch:"is_benign"`           // GreyNoise benign flag
-	IsVPN             bool   `json:"is_vpn" ch:"is_vpn"`                 // CriminalIP VPN flag
-	IsProxy           bool   `json:"is_proxy" ch:"is_proxy"`             // CriminalIP Proxy flag
-	InBlocklists      int32  `json:"in_blocklists" ch:"in_blocklists"`   // IPSum blocklist count
+	IsBenign     bool  `json:"is_benign" ch:"is_benign"`         // GreyNoise benign flag
+	IsVPN        bool  `json:"is_vpn" ch:"is_vpn"`               // CriminalIP VPN flag
+	IsProxy      bool  `json:"is_proxy" ch:"is_proxy"`           // CriminalIP Proxy flag
+	InBlocklists int32 `json:"in_blocklists" ch:"in_blocklists"` // IPSum blocklist count
 
 	// Legacy per-source details
-	AbuseIPDBReports    uint32   `json:"abuseipdb_reports" ch:"abuseipdb_reports"`
-	AbuseIPDBIsTor      bool     `json:"abuseipdb_is_tor" ch:"abuseipdb_is_tor"`
-	VirusTotalPositives uint8    `json:"virustotal_positives" ch:"virustotal_positives"`
-	VirusTotalTotal     uint8    `json:"virustotal_total" ch:"virustotal_total"`
-	AlienVaultPulses    uint16   `json:"alienvault_pulses" ch:"alienvault_pulses"`
+	AbuseIPDBReports    uint32 `json:"abuseipdb_reports" ch:"abuseipdb_reports"`
+	AbuseIPDBIsTor      bool   `json:"abuseipdb_is_tor" ch:"abuseipdb_is_tor"`
+	VirusTotalPositives uint8  `json:"virustotal_positives" ch:"virustotal_positives"`
+	VirusTotalTotal     uint8  `json:"virustotal_total" ch:"virustotal_total"`
+	AlienVaultPulses    uint16 `json:"alienvault_pulses" ch:"alienvault_pulses"`
 
 	// Enrichment data
 	MalwareFamilies []string `json:"malware_families,omitempty" ch:"malware_families"`
@@ -79,20 +79,20 @@ type IPGeolocation struct {
 
 // AbuseIPDBResponse represents the response from AbuseIPDB API
 type AbuseIPDBResponse struct {
-	IPAddress            string   `json:"ipAddress"`
-	IsPublic             bool     `json:"isPublic"`
-	IPVersion            int      `json:"ipVersion"`
-	IsWhitelisted        bool     `json:"isWhitelisted"`
-	AbuseConfidenceScore int      `json:"abuseConfidenceScore"`
-	CountryCode          string   `json:"countryCode"`
-	UsageType            string   `json:"usageType"`
-	ISP                  string   `json:"isp"`
-	Domain               string   `json:"domain"`
-	TotalReports         int      `json:"totalReports"`
-	NumDistinctUsers     int      `json:"numDistinctUsers"`
-	LastReportedAt       string   `json:"lastReportedAt"`
-	IsTor                bool     `json:"isTor"`
-	Categories           []int    `json:"reports"`
+	IPAddress            string `json:"ipAddress"`
+	IsPublic             bool   `json:"isPublic"`
+	IPVersion            int    `json:"ipVersion"`
+	IsWhitelisted        bool   `json:"isWhitelisted"`
+	AbuseConfidenceScore int    `json:"abuseConfidenceScore"`
+	CountryCode          string `json:"countryCode"`
+	UsageType            string `json:"usageType"`
+	ISP                  string `json:"isp"`
+	Domain               string `json:"domain"`
+	TotalReports         int    `json:"totalReports"`
+	NumDistinctUsers     int    `json:"numDistinctUsers"`
+	LastReportedAt       string `json:"lastReportedAt"`
+	IsTor                bool   `json:"isTor"`
+	Categories           []int  `json:"reports"`
 }
 
 // VirusTotalResponse represents the response from VirusTotal API
@@ -117,9 +117,9 @@ type VirusTotalResponse struct {
 type AlienVaultResponse struct {
 	PulseCount int `json:"pulse_info"`
 	General    struct {
-		Reputation int      `json:"reputation"`
-		Indicator  string   `json:"indicator"`
-		Pulses     []Pulse  `json:"pulse_info"`
+		Reputation int     `json:"reputation"`
+		Indicator  string  `json:"indicator"`
+		Pulses     []Pulse `json:"pulse_info"`
 	} `json:"general"`
 }
 
@@ -132,13 +132,13 @@ type Pulse struct {
 
 // ThreatIntelResult represents aggregated threat intel from all sources
 type ThreatIntelResult struct {
-	IP           string         `json:"ip"`
-	AbuseIPDB    *AbuseIPDBData `json:"abuseipdb,omitempty"`
-	VirusTotal   *VirusTotalData `json:"virustotal,omitempty"`
-	AlienVault   *AlienVaultData `json:"alienvault,omitempty"`
-	Geolocation  *IPGeolocation `json:"geolocation,omitempty"`
-	ThreatScore  *ThreatScore   `json:"threat_score"`
-	CheckedAt    time.Time      `json:"checked_at"`
+	IP          string          `json:"ip"`
+	AbuseIPDB   *AbuseIPDBData  `json:"abuseipdb,omitempty"`
+	VirusTotal  *VirusTotalData `json:"virustotal,omitempty"`
+	AlienVault  *AlienVaultData `json:"alienvault,omitempty"`
+	Geolocation *IPGeolocation  `json:"geolocation,omitempty"`
+	ThreatScore *ThreatScore    `json:"threat_score"`
+	CheckedAt   time.Time       `json:"checked_at"`
 }
 
 // AbuseIPDBData represents processed AbuseIPDB data
@@ -190,9 +190,9 @@ const (
 
 // Score weights for threat intel sources
 const (
-	AbuseIPDBWeight   = 0.40
-	VirusTotalWeight  = 0.35
-	AlienVaultWeight  = 0.25
+	AbuseIPDBWeight  = 0.40
+	VirusTotalWeight = 0.35
+	AlienVaultWeight = 0.25
 )
 
 // GetThreatLevel returns the threat level based on the total score

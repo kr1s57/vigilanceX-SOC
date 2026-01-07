@@ -17,17 +17,17 @@ import (
 
 // LogEntry represents a parsed ModSec log entry
 type LogEntry struct {
-	Timestamp     time.Time
-	SrcIP         string
-	SrcPort       string
-	RuleID        string
-	Message       string
-	Severity      string
-	Hostname      string
-	URI           string
-	UniqueID      string
-	RuleFile      string
-	FullLog       string
+	Timestamp time.Time
+	SrcIP     string
+	SrcPort   string
+	RuleID    string
+	Message   string
+	Severity  string
+	Hostname  string
+	URI       string
+	UniqueID  string
+	RuleFile  string
+	FullLog   string
 	// New fields for detailed parsing
 	RuleData      string   // Matched data
 	CRSVersion    string   // e.g., "OWASP_CRS/3.3.3"
@@ -40,12 +40,12 @@ type LogEntry struct {
 
 // Client handles SSH connection to Sophos XGS for ModSec log retrieval
 type Client struct {
-	host     string
-	port     int
-	user     string
-	keyPath  string
-	logPath  string
-	logger   *slog.Logger
+	host    string
+	port    int
+	user    string
+	keyPath string
+	logPath string
+	logger  *slog.Logger
 }
 
 // Config holds client configuration

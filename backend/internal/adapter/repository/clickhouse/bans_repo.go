@@ -400,12 +400,14 @@ func (r *BansRepository) GetUnsyncedBans(ctx context.Context) ([]entity.BanStatu
 	return bans, nil
 }
 
-// IsWhitelisted checks if an IP is in the whitelist
+// IsWhitelisted checks if an IP is in the whitelist (legacy - returns simple boolean)
 func (r *BansRepository) IsWhitelisted(ctx context.Context, ip string) (bool, error) {
 	query := `
 		SELECT count() > 0
-		FROM ip_whitelist FINAL
-		WHERE ip = ? AND active = true
+		FROM ip_whitelist_v2 FINAL
+		WHERE ip = toIPv4(?)
+		  AND is_active = 1
+		  AND (expires_at = toDateTime(0) OR expires_at > now())
 	`
 
 	var whitelisted bool
@@ -416,13 +418,90 @@ func (r *BansRepository) IsWhitelisted(ctx context.Context, ip string) (bool, er
 	return whitelisted, nil
 }
 
-// GetWhitelist retrieves all whitelisted IPs
+// CheckWhitelistV2 performs a full whitelist check with soft whitelist support (v2.0)
+func (r *BansRepository) CheckWhitelistV2(ctx context.Context, ip string) (*entity.WhitelistCheckResult, error) {
+	query := `
+		SELECT
+			toString(ip) as ip_str,
+			cidr_mask,
+			type,
+			reason,
+			description,
+			score_modifier,
+			alert_only,
+			expires_at,
+			tags,
+			added_by,
+			is_active,
+			created_at
+		FROM ip_whitelist_v2 FINAL
+		WHERE ip = toIPv4(?)
+		  AND is_active = 1
+		  AND (expires_at = toDateTime(0) OR expires_at > now())
+		LIMIT 1
+	`
+
+	row := r.conn.DB().QueryRow(ctx, query, ip)
+
+	var entry entity.WhitelistEntry
+	var expiresAt time.Time
+	var alertOnly uint8
+	var isActive uint8
+
+	err := row.Scan(
+		&entry.IP,
+		&entry.CIDRMask,
+		&entry.Type,
+		&entry.Reason,
+		&entry.Description,
+		&entry.ScoreModifier,
+		&alertOnly,
+		&expiresAt,
+		&entry.Tags,
+		&entry.AddedBy,
+		&isActive,
+		&entry.CreatedAt,
+	)
+
+	if err != nil {
+		// No entry found = not whitelisted
+		return &entity.WhitelistCheckResult{
+			IsWhitelisted: false,
+			EffectiveType: "none",
+			ScoreModifier: 0,
+			AllowAutoBan:  true,
+			AlertRequired: false,
+		}, nil
+	}
+
+	entry.AlertOnly = alertOnly == 1
+	entry.IsActive = isActive == 1
+	if !expiresAt.IsZero() && expiresAt.Year() > 1970 {
+		entry.ExpiresAt = &expiresAt
+	}
+
+	return entry.CheckWhitelist(), nil
+}
+
+// GetWhitelist retrieves all whitelisted IPs (v2.0 with soft whitelist)
 func (r *BansRepository) GetWhitelist(ctx context.Context) ([]entity.WhitelistEntry, error) {
 	query := `
-		SELECT ip, reason, added_by, created_at
-		FROM ip_whitelist FINAL
-		WHERE active = true
-		ORDER BY created_at DESC
+		SELECT
+			toString(ip) as ip_str,
+			cidr_mask,
+			type,
+			reason,
+			description,
+			score_modifier,
+			alert_only,
+			expires_at,
+			tags,
+			added_by,
+			is_active,
+			created_at
+		FROM ip_whitelist_v2 FINAL
+		WHERE is_active = 1
+		ORDER BY type, created_at DESC
 	`
 
 	rows, err := r.conn.DB().Query(ctx, query)
@@ -434,27 +513,148 @@ func (r *BansRepository) GetWhitelist(ctx context.Context) ([]entity.WhitelistEn
 	var entries []entity.WhitelistEntry
 	for rows.Next() {
 		var e entity.WhitelistEntry
-		if err := rows.Scan(&e.IP, &e.Reason, &e.AddedBy, &e.CreatedAt); err != nil {
+		var expiresAt time.Time
+		var alertOnly uint8
+		var isActive uint8
+
+		if err := rows.Scan(
+			&e.IP,
+			&e.CIDRMask,
+			&e.Type,
+			&e.Reason,
+			&e.Description,
+			&e.ScoreModifier,
+			&alertOnly,
+			&expiresAt,
+			&e.Tags,
+			&e.AddedBy,
+			&isActive,
+			&e.CreatedAt,
+		); err != nil {
 			return nil, fmt.Errorf("scan whitelist entry: %w", err)
 		}
+
+		e.AlertOnly = alertOnly == 1
+		e.IsActive = isActive == 1
+		if !expiresAt.IsZero() && expiresAt.Year() > 1970 {
+			e.ExpiresAt = &expiresAt
+		}
+
 		entries = append(entries, e)
 	}
 
 	return entries, nil
 }
 
-// AddToWhitelist adds an IP to the whitelist
-func (r *BansRepository) AddToWhitelist(ctx context.Context, entry *entity.WhitelistEntry) error {
+// GetWhitelistByType retrieves whitelist entries filtered by type (v2.0)
+func (r *BansRepository) GetWhitelistByType(ctx context.Context, whitelistType string) ([]entity.WhitelistEntry, error) {
 	query := `
-		INSERT INTO ip_whitelist (ip, reason, added_by, active, created_at)
-		VALUES (?, ?, ?, true, ?)
+		SELECT
+			toString(ip) as ip_str,
+			cidr_mask,
+			type,
+			reason,
+			description,
+			score_modifier,
+			alert_only,
+			expires_at,
+			tags,
+			added_by,
+			is_active,
+			created_at
+		FROM ip_whitelist_v2 FINAL
+		WHERE is_active = 1 AND type = ?
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.conn.DB().Query(ctx, query, whitelistType)
+	if err != nil {
+		return nil, fmt.Errorf("query whitelist by type: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []entity.WhitelistEntry
+	for rows.Next() {
+		var e entity.WhitelistEntry
+		var expiresAt time.Time
+		var alertOnly uint8
+		var isActive uint8
+
+		if err := rows.Scan(
+			&e.IP,
+			&e.CIDRMask,
+			&e.Type,
+			&e.Reason,
+			&e.Description,
+			&e.ScoreModifier,
+			&alertOnly,
+			&expiresAt,
+			&e.Tags,
+			&e.AddedBy,
+			&isActive,
+			&e.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan whitelist entry: %w", err)
+		}
+
+		e.AlertOnly = alertOnly == 1
+		e.IsActive = isActive == 1
+		if !expiresAt.IsZero() && expiresAt.Year() > 1970 {
+			e.ExpiresAt = &expiresAt
+		}
+
+		entries = append(entries, e)
+	}
+
+	return entries, nil
+}
+
+// AddToWhitelist adds an IP to the whitelist (v2.0 with soft whitelist support)
+func (r *BansRepository) AddToWhitelist(ctx context.Context, entry *entity.WhitelistEntry) error {
+	// Set defaults
+	if entry.Type == "" {
+		entry.Type = entity.WhitelistTypeHard
+	}
+	if entry.ScoreModifier == 0 && entry.Type == entity.WhitelistTypeSoft {
+		entry.ScoreModifier = 50 // Default 50% reduction
+	}
+	if entry.CIDRMask == 0 {
+		entry.CIDRMask = 32 // Single IP
+	}
+
+	var expiresAt time.Time
+	if entry.ExpiresAt != nil {
+		expiresAt = *entry.ExpiresAt
+	}
+
+	alertOnly := uint8(0)
+	if entry.AlertOnly {
+		alertOnly = 1
+	}
+
+	query := `
+		INSERT INTO ip_whitelist_v2 (
+			ip, cidr_mask, type, reason, description,
+			score_modifier, alert_only, expires_at, tags,
+			added_by, is_active, created_at, version
+		) VALUES (
+			toIPv4(?), ?, ?, ?, ?,
+			?, ?, ?, ?,
+			?, 1, now(), toUnixTimestamp(now())
+		)
 	`
 
 	if err := r.conn.DB().Exec(ctx, query,
 		entry.IP,
+		entry.CIDRMask,
+		entry.Type,
 		entry.Reason,
+		entry.Description,
+		entry.ScoreModifier,
+		alertOnly,
+		expiresAt,
+		entry.Tags,
 		entry.AddedBy,
-		time.Now(),
 	); err != nil {
 		return fmt.Errorf("add to whitelist: %w", err)
 	}
@@ -462,13 +662,69 @@ func (r *BansRepository) AddToWhitelist(ctx context.Context, entry *entity.White
 	return nil
 }
 
-// RemoveFromWhitelist removes an IP from the whitelist
-func (r *BansRepository) RemoveFromWhitelist(ctx context.Context, ip string) error {
+// UpdateWhitelistEntry updates an existing whitelist entry (v2.0)
+func (r *BansRepository) UpdateWhitelistEntry(ctx context.Context, entry *entity.WhitelistEntry) error {
+	var expiresAt time.Time
+	if entry.ExpiresAt != nil {
+		expiresAt = *entry.ExpiresAt
+	}
+
+	alertOnly := uint8(0)
+	if entry.AlertOnly {
+		alertOnly = 1
+	}
+
+	isActive := uint8(0)
+	if entry.IsActive {
+		isActive = 1
+	}
+
 	query := `
-		INSERT INTO ip_whitelist (ip, reason, added_by, active, created_at)
-		SELECT ip, reason, added_by, false, now()
-		FROM ip_whitelist FINAL
-		WHERE ip = ?
+		INSERT INTO ip_whitelist_v2 (
+			ip, cidr_mask, type, reason, description,
+			score_modifier, alert_only, expires_at, tags,
+			added_by, is_active, created_at, version
+		) VALUES (
+			toIPv4(?), ?, ?, ?, ?,
+			?, ?, ?, ?,
+			?, ?, now(), toUnixTimestamp(now())
+		)
+	`
+
+	if err := r.conn.DB().Exec(ctx, query,
+		entry.IP,
+		entry.CIDRMask,
+		entry.Type,
+		entry.Reason,
+		entry.Description,
+		entry.ScoreModifier,
+		alertOnly,
+		expiresAt,
+		entry.Tags,
+		entry.AddedBy,
+		isActive,
+	); err != nil {
+		return fmt.Errorf("update whitelist entry: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveFromWhitelist removes an IP from the whitelist (marks as inactive)
+func (r *BansRepository) RemoveFromWhitelist(ctx context.Context, ip string) error {
+	// Insert a new version with is_active = 0
+	query := `
+		INSERT INTO ip_whitelist_v2 (
+			ip, cidr_mask, type, reason, description,
+			score_modifier, alert_only, expires_at, tags,
+			added_by, is_active, created_at, version
+		)
+		SELECT
+			ip, cidr_mask, type, reason, description,
+			score_modifier, alert_only, expires_at, tags,
+			added_by, 0, now(), toUnixTimestamp(now())
+		FROM ip_whitelist_v2 FINAL
+		WHERE ip = toIPv4(?) AND is_active = 1
 	`
 
 	if err := r.conn.DB().Exec(ctx, query, ip); err != nil {
@@ -476,4 +732,98 @@ func (r *BansRepository) RemoveFromWhitelist(ctx context.Context, ip string) err
 	}
 
 	return nil
+}
+
+// GetWhitelistStats returns whitelist statistics by type (v2.0)
+func (r *BansRepository) GetWhitelistStats(ctx context.Context) (map[string]int, error) {
+	query := `
+		SELECT
+			type,
+			count() as cnt
+		FROM ip_whitelist_v2 FINAL
+		WHERE is_active = 1
+		  AND (expires_at = toDateTime(0) OR expires_at > now())
+		GROUP BY type
+	`
+
+	rows, err := r.conn.DB().Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query whitelist stats: %w", err)
+	}
+	defer rows.Close()
+
+	stats := make(map[string]int)
+	for rows.Next() {
+		var whitelistType string
+		var count uint64
+		if err := rows.Scan(&whitelistType, &count); err != nil {
+			return nil, fmt.Errorf("scan whitelist stats: %w", err)
+		}
+		stats[whitelistType] = int(count)
+	}
+
+	return stats, nil
+}
+
+// GetExpiredWhitelistEntries returns whitelist entries that have expired (v2.0)
+func (r *BansRepository) GetExpiredWhitelistEntries(ctx context.Context) ([]entity.WhitelistEntry, error) {
+	query := `
+		SELECT
+			toString(ip) as ip_str,
+			cidr_mask,
+			type,
+			reason,
+			description,
+			score_modifier,
+			alert_only,
+			expires_at,
+			tags,
+			added_by,
+			is_active,
+			created_at
+		FROM ip_whitelist_v2 FINAL
+		WHERE is_active = 1
+		  AND expires_at != toDateTime(0)
+		  AND expires_at < now()
+		ORDER BY expires_at ASC
+	`
+
+	rows, err := r.conn.DB().Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query expired whitelist: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []entity.WhitelistEntry
+	for rows.Next() {
+		var e entity.WhitelistEntry
+		var expiresAt time.Time
+		var alertOnly uint8
+		var isActive uint8
+
+		if err := rows.Scan(
+			&e.IP,
+			&e.CIDRMask,
+			&e.Type,
+			&e.Reason,
+			&e.Description,
+			&e.ScoreModifier,
+			&alertOnly,
+			&expiresAt,
+			&e.Tags,
+			&e.AddedBy,
+			&isActive,
+			&e.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan expired whitelist entry: %w", err)
+		}
+
+		e.AlertOnly = alertOnly == 1
+		e.IsActive = isActive == 1
+		e.ExpiresAt = &expiresAt
+
+		entries = append(entries, e)
+	}
+
+	return entries, nil
 }

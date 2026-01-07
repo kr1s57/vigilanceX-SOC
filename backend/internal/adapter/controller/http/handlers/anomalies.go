@@ -191,9 +191,9 @@ func (h *AnomaliesHandler) GetScenarios(w http.ResponseWriter, r *http.Request) 
 func (h *AnomaliesHandler) GetEngineStatus(w http.ResponseWriter, r *http.Request) {
 	if h.engine == nil {
 		JSONResponse(w, http.StatusOK, map[string]interface{}{
-			"running":         false,
-			"scenario_count":  0,
-			"message":         "Engine not initialized",
+			"running":        false,
+			"scenario_count": 0,
+			"message":        "Engine not initialized",
 		})
 		return
 	}

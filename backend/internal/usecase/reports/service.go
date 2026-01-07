@@ -11,11 +11,11 @@ import (
 
 // ReportConfig defines the configuration for generating a report
 type ReportConfig struct {
-	Type      string    `json:"type"`       // "daily", "weekly", "monthly", "custom"
-	Format    string    `json:"format"`     // "pdf", "xml"
+	Type      string    `json:"type"`   // "daily", "weekly", "monthly", "custom"
+	Format    string    `json:"format"` // "pdf", "xml"
 	StartDate time.Time `json:"start_date"`
 	EndDate   time.Time `json:"end_date"`
-	Modules   []string  `json:"modules"`    // ["waf", "vpn", "threats", "bans"]
+	Modules   []string  `json:"modules"` // ["waf", "vpn", "threats", "bans"]
 }
 
 // ReportData holds all data needed for a report

@@ -17,16 +17,16 @@ type ThreatIntelProvider interface {
 // v1.6: Added GreyNoise, IPSum, CriminalIP, Pulsedive
 type Aggregator struct {
 	// Core providers (API-based)
-	abuseIPDB   *AbuseIPDBClient
-	virusTotal  *VirusTotalClient
-	otx         *OTXClient
+	abuseIPDB  *AbuseIPDBClient
+	virusTotal *VirusTotalClient
+	otx        *OTXClient
 	// New providers v1.6
-	greyNoise   *GreyNoiseClient   // Reduces false positives
-	ipSum       *IPSumClient       // Aggregated blocklists (no API key needed)
-	criminalIP  *CriminalIPClient  // C2/VPN/Proxy detection
-	pulsedive   *PulsediveClient   // IOC correlation
-	cache       *ThreatCache
-	weights     AggregationWeights
+	greyNoise  *GreyNoiseClient  // Reduces false positives
+	ipSum      *IPSumClient      // Aggregated blocklists (no API key needed)
+	criminalIP *CriminalIPClient // C2/VPN/Proxy detection
+	pulsedive  *PulsediveClient  // IOC correlation
+	cache      *ThreatCache
+	weights    AggregationWeights
 }
 
 // AggregationWeights defines the weight of each source in final score
@@ -58,16 +58,16 @@ func DefaultWeights() AggregationWeights {
 // AggregatorConfig holds configuration for the aggregator
 type AggregatorConfig struct {
 	// Core providers
-	AbuseIPDBKey   string
-	VirusTotalKey  string
-	OTXKey         string
+	AbuseIPDBKey  string
+	VirusTotalKey string
+	OTXKey        string
 	// New providers v1.6
-	GreyNoiseKey   string
-	CriminalIPKey  string
-	PulsediveKey   string
+	GreyNoiseKey  string
+	CriminalIPKey string
+	PulsediveKey  string
 	// IPSum doesn't need a key (public GitHub data)
-	CacheTTL       time.Duration
-	Weights        *AggregationWeights
+	CacheTTL time.Duration
+	Weights  *AggregationWeights
 }
 
 // NewAggregator creates a new threat intel aggregator
@@ -113,46 +113,46 @@ func NewAggregator(cfg AggregatorConfig) *Aggregator {
 
 // AggregatedResult contains the combined threat intelligence
 type AggregatedResult struct {
-	IP                string              `json:"ip"`
-	AggregatedScore   int                 `json:"aggregated_score"`   // 0-100 weighted score
-	ThreatLevel       string              `json:"threat_level"`       // none, low, medium, high, critical
-	Confidence        float64             `json:"confidence"`         // 0-1 based on source availability
-	Sources           []SourceResult      `json:"sources"`
+	IP              string         `json:"ip"`
+	AggregatedScore int            `json:"aggregated_score"` // 0-100 weighted score
+	ThreatLevel     string         `json:"threat_level"`     // none, low, medium, high, critical
+	Confidence      float64        `json:"confidence"`       // 0-1 based on source availability
+	Sources         []SourceResult `json:"sources"`
 	// Core provider results
-	AbuseIPDB         *AbuseIPDBResult    `json:"abuseipdb,omitempty"`
-	VirusTotal        *VirusTotalResult   `json:"virustotal,omitempty"`
-	OTX               *OTXResult          `json:"otx,omitempty"`
+	AbuseIPDB  *AbuseIPDBResult  `json:"abuseipdb,omitempty"`
+	VirusTotal *VirusTotalResult `json:"virustotal,omitempty"`
+	OTX        *OTXResult        `json:"otx,omitempty"`
 	// New provider results v1.6
-	GreyNoise         *GreyNoiseResult    `json:"greynoise,omitempty"`
-	IPSum             *IPSumResult        `json:"ipsum,omitempty"`
-	CriminalIP        *CriminalIPResult   `json:"criminalip,omitempty"`
-	Pulsedive         *PulsediveResult    `json:"pulsedive,omitempty"`
+	GreyNoise  *GreyNoiseResult  `json:"greynoise,omitempty"`
+	IPSum      *IPSumResult      `json:"ipsum,omitempty"`
+	CriminalIP *CriminalIPResult `json:"criminalip,omitempty"`
+	Pulsedive  *PulsediveResult  `json:"pulsedive,omitempty"`
 	// Aggregated metadata
-	Country           string              `json:"country"`
-	ASN               string              `json:"asn"`
-	ISP               string              `json:"isp"`
-	Tags              []string            `json:"tags"`
-	MalwareFamilies   []string            `json:"malware_families,omitempty"`
-	Adversaries       []string            `json:"adversaries,omitempty"`
-	Campaigns         []string            `json:"campaigns,omitempty"`
-	IsTor             bool                `json:"is_tor"`
-	IsVPN             bool                `json:"is_vpn"`
-	IsProxy           bool                `json:"is_proxy"`
-	IsBenign          bool                `json:"is_benign"`          // GreyNoise benign flag
-	InBlocklists      int                 `json:"in_blocklists"`      // IPSum count
-	LastChecked       time.Time           `json:"last_checked"`
-	CacheHit          bool                `json:"cache_hit"`
+	Country         string    `json:"country"`
+	ASN             string    `json:"asn"`
+	ISP             string    `json:"isp"`
+	Tags            []string  `json:"tags"`
+	MalwareFamilies []string  `json:"malware_families,omitempty"`
+	Adversaries     []string  `json:"adversaries,omitempty"`
+	Campaigns       []string  `json:"campaigns,omitempty"`
+	IsTor           bool      `json:"is_tor"`
+	IsVPN           bool      `json:"is_vpn"`
+	IsProxy         bool      `json:"is_proxy"`
+	IsBenign        bool      `json:"is_benign"`     // GreyNoise benign flag
+	InBlocklists    int       `json:"in_blocklists"` // IPSum count
+	LastChecked     time.Time `json:"last_checked"`
+	CacheHit        bool      `json:"cache_hit"`
 }
 
 // SourceResult contains result from a single source
 type SourceResult struct {
-	Provider        string  `json:"provider"`
-	Score           int     `json:"score"`
-	Weight          float64 `json:"weight"`
-	WeightedScore   float64 `json:"weighted_score"`
-	Available       bool    `json:"available"`
-	Error           string  `json:"error,omitempty"`
-	IsBenignSource  bool    `json:"is_benign_source,omitempty"` // For GreyNoise
+	Provider       string  `json:"provider"`
+	Score          int     `json:"score"`
+	Weight         float64 `json:"weight"`
+	WeightedScore  float64 `json:"weighted_score"`
+	Available      bool    `json:"available"`
+	Error          string  `json:"error,omitempty"`
+	IsBenignSource bool    `json:"is_benign_source,omitempty"` // For GreyNoise
 }
 
 // CheckIP queries all configured threat intel sources and aggregates results

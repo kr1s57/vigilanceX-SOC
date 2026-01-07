@@ -41,32 +41,32 @@ type Scenario struct {
 
 // Condition defines a trigger condition
 type Condition struct {
-	Field    string `yaml:"field"`    // log_type, severity, action, category, etc.
-	Operator string `yaml:"operator"` // eq, ne, in, contains, gt, lt
+	Field    string      `yaml:"field"`    // log_type, severity, action, category, etc.
+	Operator string      `yaml:"operator"` // eq, ne, in, contains, gt, lt
 	Value    interface{} `yaml:"value"`
 }
 
 // Aggregation defines counting rules
 type Aggregation struct {
-	GroupBy   string `yaml:"group_by"`   // src_ip, dst_ip, hostname
-	Window    string `yaml:"window"`     // e.g., "5m", "1h"
-	Threshold int    `yaml:"threshold"`  // minimum count to trigger
-	Distinct  string `yaml:"distinct"`   // optional: count distinct values
+	GroupBy   string `yaml:"group_by"`  // src_ip, dst_ip, hostname
+	Window    string `yaml:"window"`    // e.g., "5m", "1h"
+	Threshold int    `yaml:"threshold"` // minimum count to trigger
+	Distinct  string `yaml:"distinct"`  // optional: count distinct values
 }
 
 // Action defines what happens when scenario triggers
 type Action struct {
-	Type             string `yaml:"type"`              // ban, alert, log
-	Duration         string `yaml:"duration"`          // for bans: "1h", "4h", "permanent"
-	ValidateThreat   bool   `yaml:"validate_threat"`   // check threat intel first
-	ThreatThreshold  int    `yaml:"threat_threshold"`  // minimum threat score to ban
-	Reason           string `yaml:"reason"`            // ban reason template
+	Type            string `yaml:"type"`             // ban, alert, log
+	Duration        string `yaml:"duration"`         // for bans: "1h", "4h", "permanent"
+	ValidateThreat  bool   `yaml:"validate_threat"`  // check threat intel first
+	ThreatThreshold int    `yaml:"threat_threshold"` // minimum threat score to ban
+	Reason          string `yaml:"reason"`           // ban reason template
 }
 
 // Config holds engine configuration
 type Config struct {
-	ScenariosDir    string
-	CheckInterval   time.Duration
+	ScenariosDir      string
+	CheckInterval     time.Duration
 	EnableThreatCheck bool
 }
 
@@ -397,8 +397,8 @@ func (e *Engine) GetStatus() *EngineStatus {
 	defer e.mu.RUnlock()
 
 	return &EngineStatus{
-		Running:        e.running,
-		ScenarioCount:  len(e.scenarios),
+		Running:         e.running,
+		ScenarioCount:   len(e.scenarios),
 		LoadedScenarios: e.getScenarioNames(),
 	}
 }

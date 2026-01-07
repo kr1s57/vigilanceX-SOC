@@ -63,10 +63,10 @@ func NewIPSumClient(cfg IPSumConfig) *IPSumClient {
 // IPSumResult represents the processed result
 type IPSumResult struct {
 	IP              string   `json:"ip"`
-	InBlocklists    bool     `json:"in_blocklists"`    // Found in aggregated lists
-	BlocklistCount  int      `json:"blocklist_count"`  // Number of lists containing this IP
-	Sources         []string `json:"sources"`          // List names (not available in basic IPSum)
-	LastUpdated     string   `json:"last_updated"`     // When the list was last fetched
+	InBlocklists    bool     `json:"in_blocklists"`   // Found in aggregated lists
+	BlocklistCount  int      `json:"blocklist_count"` // Number of lists containing this IP
+	Sources         []string `json:"sources"`         // List names (not available in basic IPSum)
+	LastUpdated     string   `json:"last_updated"`    // When the list was last fetched
 	RawScore        int      `json:"raw_score"`
 	NormalizedScore int      `json:"normalized_score"` // 0-100 scale
 }

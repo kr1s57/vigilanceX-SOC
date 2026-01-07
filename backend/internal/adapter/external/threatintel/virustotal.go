@@ -50,19 +50,19 @@ type VirusTotalIPData struct {
 
 // VirusTotalIPAttributes contains detailed IP information
 type VirusTotalIPAttributes struct {
-	ASN                int                    `json:"asn"`
-	ASOwner            string                 `json:"as_owner"`
-	Country            string                 `json:"country"`
-	Continent          string                 `json:"continent"`
-	Network            string                 `json:"network"`
-	RegionalInternetRegistry string            `json:"regional_internet_registry"`
-	Reputation         int                    `json:"reputation"`
-	LastAnalysisStats  VirusTotalAnalysisStats `json:"last_analysis_stats"`
-	LastAnalysisResults map[string]VirusTotalEngineResult `json:"last_analysis_results"`
-	Tags               []string               `json:"tags"`
-	TotalVotes         VirusTotalVotes        `json:"total_votes"`
-	LastModificationDate int64                `json:"last_modification_date"`
-	LastAnalysisDate   int64                  `json:"last_analysis_date"`
+	ASN                      int                               `json:"asn"`
+	ASOwner                  string                            `json:"as_owner"`
+	Country                  string                            `json:"country"`
+	Continent                string                            `json:"continent"`
+	Network                  string                            `json:"network"`
+	RegionalInternetRegistry string                            `json:"regional_internet_registry"`
+	Reputation               int                               `json:"reputation"`
+	LastAnalysisStats        VirusTotalAnalysisStats           `json:"last_analysis_stats"`
+	LastAnalysisResults      map[string]VirusTotalEngineResult `json:"last_analysis_results"`
+	Tags                     []string                          `json:"tags"`
+	TotalVotes               VirusTotalVotes                   `json:"total_votes"`
+	LastModificationDate     int64                             `json:"last_modification_date"`
+	LastAnalysisDate         int64                             `json:"last_analysis_date"`
 }
 
 // VirusTotalAnalysisStats contains detection statistics

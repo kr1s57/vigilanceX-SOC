@@ -12,7 +12,6 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
 )
 
-
 // ModSecHandler handles ModSec-related requests
 type ModSecHandler struct {
 	service *modsec.Service

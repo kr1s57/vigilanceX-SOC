@@ -14,6 +14,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/middleware"
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/ws"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/blocklist"
+	"github.com/kr1s57/vigilancex/internal/adapter/external/geoip"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
@@ -22,6 +23,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
 	"github.com/kr1s57/vigilancex/internal/usecase/events"
+	"github.com/kr1s57/vigilancex/internal/usecase/geoblocking"
 	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
 	"github.com/kr1s57/vigilancex/internal/usecase/reports"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
@@ -62,6 +64,7 @@ func main() {
 	modsecRepo := clickhouse.NewModSecRepository(chConn, logger)
 	statsRepo := clickhouse.NewStatsRepository(chConn.Conn(), logger)
 	blocklistRepo := clickhouse.NewBlocklistRepository(chConn)
+	geoblockingRepo := clickhouse.NewGeoblockingRepository(chConn) // v2.0: Geoblocking
 
 	// Initialize threat intelligence aggregator (v1.6: 7 providers)
 	threatAggregator := threatintel.NewAggregator(threatintel.AggregatorConfig{
@@ -74,7 +77,7 @@ func main() {
 		CriminalIPKey: cfg.ThreatIntel.CriminalIPKey,
 		PulsediveKey:  cfg.ThreatIntel.PulsediveKey,
 		// IPSum is auto-configured (no API key needed)
-		CacheTTL:      cfg.ThreatIntel.CacheTTL,
+		CacheTTL: cfg.ThreatIntel.CacheTTL,
 	})
 
 	// Log configured providers
@@ -101,6 +104,14 @@ func main() {
 	// Initialize geolocation service
 	geoService := geolocation.NewService(chConn.Conn(), logger)
 	logger.Info("Geolocation service initialized")
+
+	// Initialize GeoIP client for geoblocking (v2.0)
+	geoIPClient := geoip.NewClient(geoip.Config{
+		CacheTTL:     24 * time.Hour,
+		MaxCacheSize: 10000,
+		Timeout:      10 * time.Second,
+	})
+	logger.Info("GeoIP client initialized for geoblocking v2.0")
 
 	// Initialize Feed Ingester for blocklist synchronization (v1.6)
 	feedIngester := blocklist.NewFeedIngester(blocklistRepo, blocklist.IngesterConfig{
@@ -145,7 +156,8 @@ func main() {
 	threatsService := threats.NewService(threatsRepo, threatAggregator)
 	bansService := bans.NewService(bansRepo, sophosClient)
 	reportsService := reports.NewService(statsRepo, logger)
-	blocklistsService := blocklists.NewService(feedIngester, logger)
+	blocklistsService := blocklists.NewService(feedIngester)
+	geoblockingService := geoblocking.NewService(geoblockingRepo, geoIPClient) // v2.0: Geoblocking
 
 	// Initialize handlers
 	eventsHandler := handlers.NewEventsHandler(eventsService)
@@ -155,6 +167,7 @@ func main() {
 	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
 	reportsHandler := handlers.NewReportsHandler(reportsService)
 	blocklistsHandler := handlers.NewBlocklistsHandler(blocklistsService)
+	geoblockingHandler := handlers.NewGeoblockingHandler(geoblockingService) // v2.0: Geoblocking
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -278,6 +291,26 @@ func main() {
 				r.Post("/feeds/{name}/sync", blocklistsHandler.SyncFeed)
 				r.Get("/check/{ip}", blocklistsHandler.CheckIP)
 				r.Get("/high-risk", blocklistsHandler.GetHighRiskIPs)
+			})
+
+			// Geoblocking (v2.0 - Country/ASN blocking)
+			r.Route("/geoblocking", func(r chi.Router) {
+				// Rules management
+				r.Get("/rules", geoblockingHandler.ListRules)
+				r.Post("/rules", geoblockingHandler.CreateRule)
+				r.Put("/rules/{id}", geoblockingHandler.UpdateRule)
+				r.Delete("/rules/{id}", geoblockingHandler.DeleteRule)
+				// Stats and info
+				r.Get("/stats", geoblockingHandler.GetStats)
+				// IP checks
+				r.Get("/check/{ip}", geoblockingHandler.CheckIP)
+				r.Get("/lookup/{ip}", geoblockingHandler.LookupGeo)
+				// Country lists
+				r.Get("/countries/blocked", geoblockingHandler.GetBlockedCountries)
+				r.Get("/countries/watched", geoblockingHandler.GetWatchedCountries)
+				r.Get("/countries/high-risk", geoblockingHandler.GetHighRiskCountries)
+				// Cache management
+				r.Post("/cache/refresh", geoblockingHandler.RefreshRulesCache)
 			})
 
 			// Anomalies

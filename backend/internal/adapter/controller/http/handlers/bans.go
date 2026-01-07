@@ -203,14 +203,25 @@ func (h *BansHandler) XGSStatus(w http.ResponseWriter, r *http.Request) {
 	JSONResponse(w, http.StatusOK, status)
 }
 
-// Whitelist Handlers
+// Whitelist Handlers (v2.0 with soft whitelist support)
 
 // ListWhitelist returns all whitelisted IPs
 // GET /api/v1/whitelist
+// Query params: ?type=hard|soft|monitor (optional filter)
 func (h *BansHandler) ListWhitelist(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	whitelist, err := h.service.GetWhitelist(ctx)
+	whitelistType := r.URL.Query().Get("type")
+
+	var whitelist []entity.WhitelistEntry
+	var err error
+
+	if whitelistType != "" {
+		whitelist, err = h.service.GetWhitelistByType(ctx, whitelistType)
+	} else {
+		whitelist, err = h.service.GetWhitelist(ctx)
+	}
+
 	if err != nil {
 		ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch whitelist", err)
 		return
@@ -219,17 +230,54 @@ func (h *BansHandler) ListWhitelist(w http.ResponseWriter, r *http.Request) {
 	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": whitelist})
 }
 
-// AddWhitelist adds an IP to the whitelist
+// WhitelistStats returns whitelist statistics by type (v2.0)
+// GET /api/v1/whitelist/stats
+func (h *BansHandler) WhitelistStats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	stats, err := h.service.GetWhitelistStats(ctx)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch whitelist stats", err)
+		return
+	}
+
+	total := 0
+	for _, count := range stats {
+		total += count
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"total":   total,
+		"by_type": stats,
+	})
+}
+
+// CheckWhitelist checks if an IP is whitelisted and returns detailed info (v2.0)
+// GET /api/v1/whitelist/check/{ip}
+func (h *BansHandler) CheckWhitelist(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ip := chi.URLParam(r, "ip")
+
+	if ip == "" {
+		ErrorResponse(w, http.StatusBadRequest, "IP address required", nil)
+		return
+	}
+
+	result, err := h.service.CheckWhitelist(ctx, ip)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to check whitelist", err)
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, result)
+}
+
+// AddWhitelist adds an IP to the whitelist (v2.0 with soft whitelist support)
 // POST /api/v1/whitelist
 func (h *BansHandler) AddWhitelist(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var req struct {
-		IP      string `json:"ip"`
-		Reason  string `json:"reason"`
-		AddedBy string `json:"added_by"`
-	}
-
+	var req entity.WhitelistRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err)
 		return
@@ -240,14 +288,56 @@ func (h *BansHandler) AddWhitelist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.AddToWhitelist(ctx, req.IP, req.Reason, req.AddedBy); err != nil {
+	// Default to hard whitelist if type not specified (backward compatibility)
+	if req.Type == "" {
+		req.Type = entity.WhitelistTypeHard
+	}
+
+	// Validate type
+	validTypes := map[string]bool{
+		entity.WhitelistTypeHard:    true,
+		entity.WhitelistTypeSoft:    true,
+		entity.WhitelistTypeMonitor: true,
+	}
+	if !validTypes[req.Type] {
+		ErrorResponse(w, http.StatusBadRequest, "Invalid whitelist type (must be hard, soft, or monitor)", nil)
+		return
+	}
+
+	if err := h.service.AddToWhitelistV2(ctx, &req); err != nil {
 		ErrorResponse(w, http.StatusInternalServerError, "Failed to add to whitelist", err)
 		return
 	}
 
-	JSONResponse(w, http.StatusCreated, map[string]string{
+	JSONResponse(w, http.StatusCreated, map[string]interface{}{
 		"message": "IP added to whitelist",
 		"ip":      req.IP,
+		"type":    req.Type,
+	})
+}
+
+// UpdateWhitelist updates an existing whitelist entry (v2.0)
+// PUT /api/v1/whitelist/{ip}
+func (h *BansHandler) UpdateWhitelist(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ip := chi.URLParam(r, "ip")
+
+	var req entity.WhitelistEntry
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	req.IP = ip
+
+	if err := h.service.UpdateWhitelistEntry(ctx, &req); err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to update whitelist entry", err)
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"message": "Whitelist entry updated",
+		"ip":      ip,
 	})
 }
 

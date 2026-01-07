@@ -2,7 +2,6 @@ package blocklists
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/kr1s57/vigilancex/internal/adapter/external/blocklist"
@@ -11,14 +10,12 @@ import (
 // Service handles blocklist business logic
 type Service struct {
 	ingester *blocklist.FeedIngester
-	logger   *slog.Logger
 }
 
 // NewService creates a new blocklist service
-func NewService(ingester *blocklist.FeedIngester, logger *slog.Logger) *Service {
+func NewService(ingester *blocklist.FeedIngester) *Service {
 	return &Service{
 		ingester: ingester,
-		logger:   logger,
 	}
 }
 
@@ -134,14 +131,14 @@ func (s *Service) SyncFeed(ctx context.Context, feedName string) (*SyncResultRes
 
 // IPBlocklistInfo represents blocklist info for an IP
 type IPBlocklistInfo struct {
-	IP            string   `json:"ip"`
-	IsBlocked     bool     `json:"is_blocked"`
-	SourceCount   int      `json:"source_count"`
-	Sources       []string `json:"sources"`
-	Categories    []string `json:"categories"`
-	MaxConfidence int      `json:"max_confidence"`
-	FirstSeen     string   `json:"first_seen,omitempty"`
-	LastSeen      string   `json:"last_seen,omitempty"`
+	IP            string     `json:"ip"`
+	IsBlocked     bool       `json:"is_blocked"`
+	SourceCount   int        `json:"source_count"`
+	Sources       []string   `json:"sources"`
+	Categories    []string   `json:"categories"`
+	MaxConfidence int        `json:"max_confidence"`
+	FirstSeen     *time.Time `json:"first_seen,omitempty"`
+	LastSeen      *time.Time `json:"last_seen,omitempty"`
 }
 
 // CheckIP checks if an IP is in any blocklist
@@ -165,8 +162,8 @@ func (s *Service) CheckIP(ctx context.Context, ip string) (*IPBlocklistInfo, err
 		Sources:       summary.Sources,
 		Categories:    summary.Categories,
 		MaxConfidence: summary.MaxConfidence,
-		FirstSeen:     summary.FirstSeen.Format(time.RFC3339),
-		LastSeen:      summary.LastSeen.Format(time.RFC3339),
+		FirstSeen:     &summary.FirstSeen,
+		LastSeen:      &summary.LastSeen,
 	}, nil
 }
 
@@ -179,6 +176,8 @@ func (s *Service) GetHighRiskIPs(ctx context.Context, minLists int) ([]IPBlockli
 
 	result := make([]IPBlocklistInfo, 0, len(summaries))
 	for _, s := range summaries {
+		firstSeen := s.FirstSeen
+		lastSeen := s.LastSeen
 		result = append(result, IPBlocklistInfo{
 			IP:            s.IP,
 			IsBlocked:     s.IsActive,
@@ -186,8 +185,8 @@ func (s *Service) GetHighRiskIPs(ctx context.Context, minLists int) ([]IPBlockli
 			Sources:       s.Sources,
 			Categories:    s.Categories,
 			MaxConfidence: s.MaxConfidence,
-			FirstSeen:     s.FirstSeen.Format(time.RFC3339),
-			LastSeen:      s.LastSeen.Format(time.RFC3339),
+			FirstSeen:     &firstSeen,
+			LastSeen:      &lastSeen,
 		})
 	}
 
@@ -196,8 +195,8 @@ func (s *Service) GetHighRiskIPs(ctx context.Context, minLists int) ([]IPBlockli
 
 // BlocklistStats represents overall blocklist statistics
 type BlocklistStats struct {
-	TotalBlockedIPs int64              `json:"total_blocked_ips"`
-	FeedCount       int                `json:"feed_count"`
+	TotalBlockedIPs int64                `json:"total_blocked_ips"`
+	FeedCount       int                  `json:"feed_count"`
 	FeedStats       []FeedStatusResponse `json:"feed_stats"`
 }
 

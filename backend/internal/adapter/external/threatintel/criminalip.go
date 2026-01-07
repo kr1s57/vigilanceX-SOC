@@ -41,12 +41,12 @@ func NewCriminalIPClient(cfg CriminalIPConfig) *CriminalIPClient {
 // CriminalIPResponse represents the actual API response structure
 // Note: CriminalIP returns data at root level, not wrapped in "data" object
 type CriminalIPResponse struct {
-	IP              string                `json:"ip"`
-	Tags            CriminalIPTags        `json:"tags"`
-	Score           CriminalIPScore       `json:"score"`
-	UserSearchCount int                   `json:"user_search_count"`
-	Issues          CriminalIPIssueData   `json:"issues,omitempty"`
-	CurrentOpenPort CriminalIPPortData    `json:"current_open_port,omitempty"`
+	IP              string              `json:"ip"`
+	Tags            CriminalIPTags      `json:"tags"`
+	Score           CriminalIPScore     `json:"score"`
+	UserSearchCount int                 `json:"user_search_count"`
+	Issues          CriminalIPIssueData `json:"issues,omitempty"`
+	CurrentOpenPort CriminalIPPortData  `json:"current_open_port,omitempty"`
 }
 
 // CriminalIPTags contains boolean flags about the IP
@@ -70,8 +70,8 @@ type CriminalIPScore struct {
 
 // CriminalIPIssueData contains security issues
 type CriminalIPIssueData struct {
-	Count int                 `json:"count"`
-	Data  []CriminalIPIssue   `json:"data"`
+	Count int               `json:"count"`
+	Data  []CriminalIPIssue `json:"data"`
 }
 
 // CriminalIPIssue represents a detected security issue
@@ -84,8 +84,8 @@ type CriminalIPIssue struct {
 
 // CriminalIPPortData contains open port information
 type CriminalIPPortData struct {
-	Count int                `json:"count"`
-	Data  []CriminalIPPort   `json:"data"`
+	Count int              `json:"count"`
+	Data  []CriminalIPPort `json:"data"`
 }
 
 // CriminalIPPort represents an open port
@@ -101,8 +101,8 @@ type CriminalIPPort struct {
 // CriminalIPResult represents the processed result
 type CriminalIPResult struct {
 	IP              string   `json:"ip"`
-	InboundScore    string   `json:"inbound_score"`    // Threat level for incoming attacks
-	OutboundScore   string   `json:"outbound_score"`   // Threat level for outgoing attacks
+	InboundScore    string   `json:"inbound_score"`  // Threat level for incoming attacks
+	OutboundScore   string   `json:"outbound_score"` // Threat level for outgoing attacks
 	IsVPN           bool     `json:"is_vpn"`
 	IsProxy         bool     `json:"is_proxy"`
 	IsTor           bool     `json:"is_tor"`

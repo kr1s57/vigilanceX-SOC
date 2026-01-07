@@ -9,21 +9,21 @@ import (
 )
 
 type Config struct {
-	App        AppConfig
-	ClickHouse ClickHouseConfig
-	Redis      RedisConfig
-	Sophos     SophosConfig
-	SophosSSH  SophosSSHConfig
+	App         AppConfig
+	ClickHouse  ClickHouseConfig
+	Redis       RedisConfig
+	Sophos      SophosConfig
+	SophosSSH   SophosSSHConfig
 	ThreatIntel ThreatIntelConfig
-	JWT        JWTConfig
+	JWT         JWTConfig
 }
 
 type SophosSSHConfig struct {
-	Host       string
-	Port       int
-	User       string
-	KeyPath    string
-	LogPath    string
+	Host         string
+	Port         int
+	User         string
+	KeyPath      string
+	LogPath      string
 	SyncInterval time.Duration
 }
 
@@ -61,13 +61,13 @@ type SophosConfig struct {
 
 type ThreatIntelConfig struct {
 	// Core providers
-	AbuseIPDBKey   string
-	VirusTotalKey  string
-	AlienVaultKey  string
+	AbuseIPDBKey  string
+	VirusTotalKey string
+	AlienVaultKey string
 	// v1.6 providers
-	GreyNoiseKey   string
-	CriminalIPKey  string
-	PulsediveKey   string
+	GreyNoiseKey  string
+	CriminalIPKey string
+	PulsediveKey  string
 	// IPSum doesn't need API key (public GitHub data)
 	CacheTTL       time.Duration
 	RateLimitDelay time.Duration
@@ -132,9 +132,9 @@ func Load() (*Config, error) {
 		},
 		ThreatIntel: ThreatIntelConfig{
 			// Core providers
-			AbuseIPDBKey:   viper.GetString("ABUSEIPDB_API_KEY"),
-			VirusTotalKey:  viper.GetString("VIRUSTOTAL_API_KEY"),
-			AlienVaultKey:  viper.GetString("ALIENVAULT_API_KEY"),
+			AbuseIPDBKey:  viper.GetString("ABUSEIPDB_API_KEY"),
+			VirusTotalKey: viper.GetString("VIRUSTOTAL_API_KEY"),
+			AlienVaultKey: viper.GetString("ALIENVAULT_API_KEY"),
 			// v1.6 providers
 			GreyNoiseKey:   viper.GetString("GREYNOISE_API_KEY"),
 			CriminalIPKey:  viper.GetString("CRIMINALIP_API_KEY"),

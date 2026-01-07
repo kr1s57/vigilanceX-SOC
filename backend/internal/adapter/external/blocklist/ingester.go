@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -16,7 +16,6 @@ type FeedIngester struct {
 	httpClient *http.Client
 	parser     *Parser
 	feeds      []FeedSource
-	logger     *slog.Logger
 	mu         sync.RWMutex
 	running    bool
 	stopCh     chan struct{}
@@ -116,7 +115,6 @@ func NewFeedIngester(repo Repository, cfg IngesterConfig) *FeedIngester {
 		},
 		parser: NewParser(),
 		feeds:  GetEnabledFeeds(),
-		logger: slog.Default(),
 		stopCh: make(chan struct{}),
 	}
 }
@@ -131,7 +129,7 @@ func (fi *FeedIngester) Start(ctx context.Context) {
 	fi.running = true
 	fi.mu.Unlock()
 
-	fi.logger.Info("Feed Ingester started", "feeds", len(fi.feeds))
+	log.Printf("[BLOCKLIST] Feed Ingester started with %d feeds", len(fi.feeds))
 
 	// Initial sync
 	go fi.syncAllFeeds(ctx)
@@ -153,7 +151,7 @@ func (fi *FeedIngester) Stop() {
 
 	close(fi.stopCh)
 	fi.running = false
-	fi.logger.Info("Feed Ingester stopped")
+	log.Printf("[BLOCKLIST] Feed Ingester stopped")
 }
 
 // scheduleFeed schedules periodic sync for a specific feed
@@ -170,18 +168,10 @@ func (fi *FeedIngester) scheduleFeed(ctx context.Context, feed FeedSource) {
 		case <-ticker.C:
 			result := fi.syncFeed(ctx, feed)
 			if result.Error != nil {
-				fi.logger.Error("Feed sync failed",
-					"feed", feed.Name,
-					"error", result.Error,
-				)
+				log.Printf("[BLOCKLIST] Feed sync failed: feed=%s error=%v", feed.Name, result.Error)
 			} else {
-				fi.logger.Info("Feed synced",
-					"feed", feed.Name,
-					"ips", result.IPCount,
-					"added", result.AddedCount,
-					"removed", result.RemovedCount,
-					"duration", result.Duration,
-				)
+				log.Printf("[BLOCKLIST] Feed synced: feed=%s ips=%d added=%d removed=%d duration=%v",
+					feed.Name, result.IPCount, result.AddedCount, result.RemovedCount, result.Duration)
 			}
 		}
 	}
@@ -216,7 +206,7 @@ func (fi *FeedIngester) syncAllFeeds(ctx context.Context) []SyncResult {
 
 	// Refresh IP summaries after all syncs
 	if err := fi.repo.RefreshIPSummaries(ctx); err != nil {
-		fi.logger.Error("Failed to refresh IP summaries", "error", err)
+		log.Printf("[BLOCKLIST] Failed to refresh IP summaries: %v", err)
 	}
 
 	return results
@@ -301,10 +291,7 @@ func (fi *FeedIngester) syncFeed(ctx context.Context, feed FeedSource) SyncResul
 	// This is the key for dynamic sync - IPs removed from source are deactivated
 	removedCount, err := fi.repo.DeactivateIPsNotInList(ctx, feed.Name, activeIPs)
 	if err != nil {
-		fi.logger.Warn("Failed to deactivate removed IPs",
-			"feed", feed.Name,
-			"error", err,
-		)
+		log.Printf("[BLOCKLIST] Failed to deactivate removed IPs: feed=%s error=%v", feed.Name, err)
 	}
 
 	result.RemovedCount = int(removedCount)

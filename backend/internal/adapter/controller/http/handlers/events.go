@@ -266,8 +266,8 @@ func respondError(w http.ResponseWriter, status int, message string, err error) 
 	w.WriteHeader(status)
 
 	response := map[string]interface{}{
-		"error":   message,
-		"status":  status,
+		"error":  message,
+		"status": status,
 	}
 
 	if err != nil {

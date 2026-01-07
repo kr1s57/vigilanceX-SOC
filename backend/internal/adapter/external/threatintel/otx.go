@@ -38,16 +38,16 @@ func NewOTXClient(cfg OTXConfig) *OTXClient {
 
 // OTXGeneralResponse represents the general info response
 type OTXGeneralResponse struct {
-	Indicator      string   `json:"indicator"`
-	Type           string   `json:"type"`
-	TypeTitle      string   `json:"type_title"`
-	PulseInfo      OTXPulseInfo `json:"pulse_info"`
-	BaseIndicator  OTXBaseIndicator `json:"base_indicator"`
-	Reputation     int      `json:"reputation"`
-	Country        string   `json:"country_name"`
-	CountryCode    string   `json:"country_code"`
-	City           string   `json:"city"`
-	ASN            string   `json:"asn"`
+	Indicator     string           `json:"indicator"`
+	Type          string           `json:"type"`
+	TypeTitle     string           `json:"type_title"`
+	PulseInfo     OTXPulseInfo     `json:"pulse_info"`
+	BaseIndicator OTXBaseIndicator `json:"base_indicator"`
+	Reputation    int              `json:"reputation"`
+	Country       string           `json:"country_name"`
+	CountryCode   string           `json:"country_code"`
+	City          string           `json:"city"`
+	ASN           string           `json:"asn"`
 }
 
 // OTXPulseInfo contains pulse (threat feed) information
@@ -59,18 +59,18 @@ type OTXPulseInfo struct {
 
 // OTXPulse represents a single threat feed entry
 type OTXPulse struct {
-	ID             string         `json:"id"`
-	Name           string         `json:"name"`
-	Description    string         `json:"description"`
-	Created        string         `json:"created"`
-	Modified       string         `json:"modified"`
-	Tags           FlexStringList `json:"tags"`
-	TLP            string         `json:"TLP"`
-	Adversary      string         `json:"adversary"`
+	ID                string         `json:"id"`
+	Name              string         `json:"name"`
+	Description       string         `json:"description"`
+	Created           string         `json:"created"`
+	Modified          string         `json:"modified"`
+	Tags              FlexStringList `json:"tags"`
+	TLP               string         `json:"TLP"`
+	Adversary         string         `json:"adversary"`
 	TargetedCountries FlexStringList `json:"targeted_countries"`
-	Industries     FlexStringList `json:"industries"`
-	MalwareFamilies FlexStringList `json:"malware_families"`
-	AttackIDs      []OTXAttackID `json:"attack_ids"`
+	Industries        FlexStringList `json:"industries"`
+	MalwareFamilies   FlexStringList `json:"malware_families"`
+	AttackIDs         []OTXAttackID  `json:"attack_ids"`
 }
 
 // FlexStringList handles OTX API's inconsistent JSON (can be string array or object)
@@ -133,11 +133,11 @@ type OTXReputationResponse struct {
 
 // OTXReputationData contains reputation details
 type OTXReputationData struct {
-	ThreatScore  int      `json:"threat_score"`
-	Counts       OTXCounts `json:"counts"`
-	FirstSeen    string   `json:"first_seen"`
-	LastSeen     string   `json:"last_seen"`
-	Activities   []OTXActivity `json:"activities"`
+	ThreatScore int           `json:"threat_score"`
+	Counts      OTXCounts     `json:"counts"`
+	FirstSeen   string        `json:"first_seen"`
+	LastSeen    string        `json:"last_seen"`
+	Activities  []OTXActivity `json:"activities"`
 }
 
 // OTXCounts contains activity counts

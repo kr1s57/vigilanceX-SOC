@@ -50,9 +50,9 @@ func NewClient(cfg Config) *Client {
 	}
 
 	return &Client{
-		baseURL:  fmt.Sprintf("https://%s:%d/webconsole/APIController", cfg.Host, cfg.Port),
-		username: cfg.Username,
-		password: cfg.Password,
+		baseURL:   fmt.Sprintf("https://%s:%d/webconsole/APIController", cfg.Host, cfg.Port),
+		username:  cfg.Username,
+		password:  cfg.Password,
 		groupName: cfg.GroupName,
 		httpClient: &http.Client{
 			Transport: transport,
@@ -78,8 +78,8 @@ type Login struct {
 
 // Set operation for creating/updating objects
 type Set struct {
-	Operation string    `xml:"operation,attr,omitempty"`
-	IPHost    *IPHost   `xml:"IPHost,omitempty"`
+	Operation   string       `xml:"operation,attr,omitempty"`
+	IPHost      *IPHost      `xml:"IPHost,omitempty"`
 	IPHostGroup *IPHostGroup `xml:"IPHostGroup,omitempty"`
 }
 
@@ -96,19 +96,19 @@ type Remove struct {
 
 // IPHost represents an IP host object
 type IPHost struct {
-	TransactionID string `xml:"transactionid,attr,omitempty"`
-	Name          string `xml:"Name"`
-	IPFamily      string `xml:"IPFamily,omitempty"`
-	HostType      string `xml:"HostType,omitempty"`
-	IPAddress     string `xml:"IPAddress,omitempty"`
+	TransactionID string         `xml:"transactionid,attr,omitempty"`
+	Name          string         `xml:"Name"`
+	IPFamily      string         `xml:"IPFamily,omitempty"`
+	HostType      string         `xml:"HostType,omitempty"`
+	IPAddress     string         `xml:"IPAddress,omitempty"`
 	HostGroupList *HostGroupList `xml:"HostGroupList,omitempty"`
 }
 
 // IPHostGroup represents an IP host group
 type IPHostGroup struct {
-	TransactionID string `xml:"transactionid,attr,omitempty"`
-	Name          string `xml:"Name"`
-	Description   string `xml:"Description,omitempty"`
+	TransactionID string    `xml:"transactionid,attr,omitempty"`
+	Name          string    `xml:"Name"`
+	Description   string    `xml:"Description,omitempty"`
 	HostList      *HostList `xml:"HostList,omitempty"`
 }
 
@@ -134,11 +134,11 @@ type IPHostGroupFilter struct {
 
 // APIResponse represents the root XML response structure
 type APIResponse struct {
-	XMLName xml.Name `xml:"Response"`
-	Status  *Status  `xml:"Status,omitempty"`
-	IPHost  []IPHostResponse `xml:"IPHost,omitempty"`
+	XMLName     xml.Name              `xml:"Response"`
+	Status      *Status               `xml:"Status,omitempty"`
+	IPHost      []IPHostResponse      `xml:"IPHost,omitempty"`
 	IPHostGroup []IPHostGroupResponse `xml:"IPHostGroup,omitempty"`
-	Login   *LoginResponse `xml:"Login,omitempty"`
+	Login       *LoginResponse        `xml:"Login,omitempty"`
 }
 
 // Status contains operation status
@@ -382,11 +382,11 @@ func (c *Client) TestConnection() error {
 
 // SyncStatus represents the sync state between VIGILANCE X and Sophos XGS
 type SyncStatus struct {
-	Connected      bool   `json:"connected"`
-	GroupExists    bool   `json:"group_exists"`
-	TotalInGroup   int    `json:"total_in_group"`
-	LastSyncError  string `json:"last_sync_error,omitempty"`
-	Host           string `json:"host,omitempty"`
+	Connected     bool   `json:"connected"`
+	GroupExists   bool   `json:"group_exists"`
+	TotalInGroup  int    `json:"total_in_group"`
+	LastSyncError string `json:"last_sync_error,omitempty"`
+	Host          string `json:"host,omitempty"`
 }
 
 // GetSyncStatus returns the current sync status with Sophos XGS

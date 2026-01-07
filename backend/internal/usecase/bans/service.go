@@ -48,17 +48,35 @@ func (s *Service) GetHistory(ctx context.Context, ip string, limit int) ([]entit
 }
 
 // BanIP bans an IP address with progressive duration based on recidivism
+// v2.0: Supports soft whitelist - soft whitelisted IPs generate alerts but may still be banned
 func (s *Service) BanIP(ctx context.Context, req *entity.BanRequest) (*entity.BanStatus, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check whitelist
-	whitelisted, err := s.repo.IsWhitelisted(ctx, req.IP)
+	// Check whitelist (v2.0 with soft whitelist support)
+	whitelistResult, err := s.repo.CheckWhitelistV2(ctx, req.IP)
 	if err != nil {
 		return nil, fmt.Errorf("check whitelist: %w", err)
 	}
-	if whitelisted {
-		return nil, fmt.Errorf("IP %s is whitelisted and cannot be banned", req.IP)
+
+	// Handle whitelist based on type
+	if whitelistResult.IsWhitelisted {
+		switch whitelistResult.EffectiveType {
+		case entity.WhitelistTypeHard:
+			// Hard whitelist: never ban
+			return nil, fmt.Errorf("IP %s is hard-whitelisted and cannot be banned", req.IP)
+		case entity.WhitelistTypeSoft:
+			// Soft whitelist: alert required, check if auto-ban is allowed
+			if !whitelistResult.AllowAutoBan {
+				log.Printf("[WHITELIST] Soft-whitelisted IP %s triggered ban attempt (alert-only mode)", req.IP)
+				return nil, fmt.Errorf("IP %s is soft-whitelisted (alert-only): %s", req.IP, whitelistResult.Entry.Reason)
+			}
+			// Allow ban but log warning
+			log.Printf("[WHITELIST] Soft-whitelisted IP %s being banned (alert generated)", req.IP)
+		case entity.WhitelistTypeMonitor:
+			// Monitor only: allow ban but log for tracking
+			log.Printf("[WHITELIST] Monitor-only IP %s being banned (logged for tracking)", req.IP)
+		}
 	}
 
 	// Get existing ban status (if any)
@@ -473,38 +491,153 @@ func (s *Service) ProcessExpiredBans(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-// Whitelist management
+// Whitelist management (v2.0 with soft whitelist support)
 
 // GetWhitelist returns all whitelisted IPs
 func (s *Service) GetWhitelist(ctx context.Context) ([]entity.WhitelistEntry, error) {
 	return s.repo.GetWhitelist(ctx)
 }
 
-// AddToWhitelist adds an IP to the whitelist
+// GetWhitelistByType returns whitelisted IPs filtered by type (v2.0)
+func (s *Service) GetWhitelistByType(ctx context.Context, whitelistType string) ([]entity.WhitelistEntry, error) {
+	return s.repo.GetWhitelistByType(ctx, whitelistType)
+}
+
+// GetWhitelistStats returns whitelist statistics by type (v2.0)
+func (s *Service) GetWhitelistStats(ctx context.Context) (map[string]int, error) {
+	return s.repo.GetWhitelistStats(ctx)
+}
+
+// CheckWhitelist performs a full whitelist check with soft whitelist support (v2.0)
+func (s *Service) CheckWhitelist(ctx context.Context, ip string) (*entity.WhitelistCheckResult, error) {
+	return s.repo.CheckWhitelistV2(ctx, ip)
+}
+
+// AddToWhitelist adds an IP to the whitelist (legacy - defaults to hard whitelist)
 func (s *Service) AddToWhitelist(ctx context.Context, ip, reason, addedBy string) error {
-	// If currently banned, unban first
-	ban, err := s.repo.GetBanByIP(ctx, ip)
-	if err == nil && (ban.Status == entity.BanStatusActive || ban.Status == entity.BanStatusPermanent) {
-		if err := s.UnbanIP(ctx, &entity.UnbanRequest{
-			IP:          ip,
-			Reason:      "Added to whitelist",
-			PerformedBy: addedBy,
-		}); err != nil {
-			log.Printf("[WARN] Failed to unban %s when adding to whitelist: %v", ip, err)
+	req := &entity.WhitelistRequest{
+		IP:      ip,
+		Type:    entity.WhitelistTypeHard,
+		Reason:  reason,
+		AddedBy: addedBy,
+	}
+	return s.AddToWhitelistV2(ctx, req)
+}
+
+// AddToWhitelistV2 adds an IP to the whitelist with full v2.0 support
+func (s *Service) AddToWhitelistV2(ctx context.Context, req *entity.WhitelistRequest) error {
+	// Validate whitelist type
+	validTypes := map[string]bool{
+		entity.WhitelistTypeHard:    true,
+		entity.WhitelistTypeSoft:    true,
+		entity.WhitelistTypeMonitor: true,
+	}
+	if !validTypes[req.Type] {
+		return fmt.Errorf("invalid whitelist type: %s (must be hard, soft, or monitor)", req.Type)
+	}
+
+	// For hard whitelist, unban if currently banned
+	if req.Type == entity.WhitelistTypeHard {
+		ban, err := s.repo.GetBanByIP(ctx, req.IP)
+		if err == nil && (ban.Status == entity.BanStatusActive || ban.Status == entity.BanStatusPermanent) {
+			if err := s.UnbanIP(ctx, &entity.UnbanRequest{
+				IP:          req.IP,
+				Reason:      "Added to hard whitelist",
+				PerformedBy: req.AddedBy,
+			}); err != nil {
+				log.Printf("[WARN] Failed to unban %s when adding to whitelist: %v", req.IP, err)
+			}
 		}
 	}
 
+	// Build whitelist entry
 	entry := &entity.WhitelistEntry{
-		IP:        ip,
-		Reason:    reason,
-		AddedBy:   addedBy,
-		CreatedAt: time.Now(),
+		IP:            req.IP,
+		CIDRMask:      req.CIDRMask,
+		Type:          req.Type,
+		Reason:        req.Reason,
+		Description:   req.Description,
+		ScoreModifier: req.ScoreModifier,
+		AlertOnly:     req.AlertOnly,
+		Tags:          req.Tags,
+		AddedBy:       req.AddedBy,
+		IsActive:      true,
+		CreatedAt:     time.Now(),
 	}
 
+	// Set defaults based on type
+	if entry.Type == entity.WhitelistTypeSoft {
+		if entry.ScoreModifier == 0 {
+			entry.ScoreModifier = 50 // Default 50% reduction
+		}
+		if !entry.AlertOnly {
+			entry.AlertOnly = true // Default to alert-only for soft whitelist
+		}
+	}
+
+	// Set expiration if duration specified
+	if req.DurationDays != nil && *req.DurationDays > 0 {
+		expires := time.Now().Add(time.Duration(*req.DurationDays) * 24 * time.Hour)
+		entry.ExpiresAt = &expires
+	}
+
+	log.Printf("[WHITELIST] Adding %s whitelist entry for IP %s (reason: %s)", req.Type, req.IP, req.Reason)
 	return s.repo.AddToWhitelist(ctx, entry)
+}
+
+// UpdateWhitelistEntry updates an existing whitelist entry (v2.0)
+func (s *Service) UpdateWhitelistEntry(ctx context.Context, entry *entity.WhitelistEntry) error {
+	return s.repo.UpdateWhitelistEntry(ctx, entry)
 }
 
 // RemoveFromWhitelist removes an IP from the whitelist
 func (s *Service) RemoveFromWhitelist(ctx context.Context, ip string) error {
+	log.Printf("[WHITELIST] Removing IP %s from whitelist", ip)
 	return s.repo.RemoveFromWhitelist(ctx, ip)
+}
+
+// ProcessExpiredWhitelist checks for expired whitelist entries and deactivates them (v2.0)
+func (s *Service) ProcessExpiredWhitelist(ctx context.Context) (int, error) {
+	expired, err := s.repo.GetExpiredWhitelistEntries(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get expired whitelist: %w", err)
+	}
+
+	count := 0
+	for _, entry := range expired {
+		entry.IsActive = false
+		if err := s.repo.UpdateWhitelistEntry(ctx, &entry); err != nil {
+			log.Printf("[ERROR] Failed to expire whitelist entry %s: %v", entry.IP, err)
+			continue
+		}
+		log.Printf("[WHITELIST] Expired whitelist entry for IP %s (type: %s)", entry.IP, entry.Type)
+		count++
+	}
+
+	return count, nil
+}
+
+// ApplyWhitelistScoreModifier applies whitelist score modifier to a threat score (v2.0)
+// Returns the modified score and whether the IP is whitelisted
+func (s *Service) ApplyWhitelistScoreModifier(ctx context.Context, ip string, originalScore int) (int, *entity.WhitelistCheckResult, error) {
+	result, err := s.repo.CheckWhitelistV2(ctx, ip)
+	if err != nil {
+		return originalScore, nil, err
+	}
+
+	if !result.IsWhitelisted || result.ScoreModifier == 0 {
+		return originalScore, result, nil
+	}
+
+	// Apply score reduction
+	reduction := float64(originalScore) * float64(result.ScoreModifier) / 100.0
+	modifiedScore := originalScore - int(reduction)
+	if modifiedScore < 0 {
+		modifiedScore = 0
+	}
+
+	log.Printf("[WHITELIST] Score modified for IP %s: %d -> %d (-%d%% %s whitelist)",
+		ip, originalScore, modifiedScore, result.ScoreModifier, result.EffectiveType)
+
+	return modifiedScore, result, nil
 }

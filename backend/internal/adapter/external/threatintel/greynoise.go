@@ -41,25 +41,25 @@ func NewGreyNoiseClient(cfg GreyNoiseConfig) *GreyNoiseClient {
 // GreyNoiseResponse represents the Community API response
 type GreyNoiseResponse struct {
 	IP             string `json:"ip"`
-	Noise          bool   `json:"noise"`           // Is the IP scanning the internet?
-	Riot           bool   `json:"riot"`            // Is it a known benign service (RIOT dataset)?
-	Classification string `json:"classification"`  // "benign", "malicious", "unknown"
-	Name           string `json:"name"`            // Name of benign service (if riot=true)
-	Link           string `json:"link"`            // Link to GreyNoise visualizer
-	LastSeen       string `json:"last_seen"`       // Last seen timestamp
-	Message        string `json:"message"`         // Human readable message
+	Noise          bool   `json:"noise"`          // Is the IP scanning the internet?
+	Riot           bool   `json:"riot"`           // Is it a known benign service (RIOT dataset)?
+	Classification string `json:"classification"` // "benign", "malicious", "unknown"
+	Name           string `json:"name"`           // Name of benign service (if riot=true)
+	Link           string `json:"link"`           // Link to GreyNoise visualizer
+	LastSeen       string `json:"last_seen"`      // Last seen timestamp
+	Message        string `json:"message"`        // Human readable message
 }
 
 // GreyNoiseResult represents the processed result
 type GreyNoiseResult struct {
 	IP              string `json:"ip"`
-	Noise           bool   `json:"noise"`            // Scanning the internet
-	Riot            bool   `json:"riot"`             // Known benign service
-	Classification  string `json:"classification"`   // benign, malicious, unknown
-	Name            string `json:"name"`             // Service name if benign
+	Noise           bool   `json:"noise"`          // Scanning the internet
+	Riot            bool   `json:"riot"`           // Known benign service
+	Classification  string `json:"classification"` // benign, malicious, unknown
+	Name            string `json:"name"`           // Service name if benign
 	LastSeen        string `json:"last_seen"`
 	Message         string `json:"message"`
-	IsBenign        bool   `json:"is_benign"`        // Computed: should reduce threat score
+	IsBenign        bool   `json:"is_benign"` // Computed: should reduce threat score
 	RawScore        int    `json:"raw_score"`
 	NormalizedScore int    `json:"normalized_score"` // 0-100 scale (can be negative modifier)
 }

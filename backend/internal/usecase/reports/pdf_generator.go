@@ -18,14 +18,14 @@ func NewPDFGenerator() *PDFGenerator {
 
 // Color definitions
 var (
-	colorPrimary    = []int{37, 99, 235}   // Blue
-	colorDanger     = []int{239, 68, 68}   // Red
-	colorWarning    = []int{245, 158, 11}  // Amber
-	colorSuccess    = []int{34, 197, 94}   // Green
-	colorMuted      = []int{107, 114, 128} // Gray
-	colorDark       = []int{31, 41, 55}    // Dark gray
-	colorLight      = []int{243, 244, 246} // Light gray
-	colorWhite      = []int{255, 255, 255}
+	colorPrimary = []int{37, 99, 235}   // Blue
+	colorDanger  = []int{239, 68, 68}   // Red
+	colorWarning = []int{245, 158, 11}  // Amber
+	colorSuccess = []int{34, 197, 94}   // Green
+	colorMuted   = []int{107, 114, 128} // Gray
+	colorDark    = []int{31, 41, 55}    // Dark gray
+	colorLight   = []int{243, 244, 246} // Light gray
+	colorWhite   = []int{255, 255, 255}
 )
 
 // Generate creates a PDF report from the report data

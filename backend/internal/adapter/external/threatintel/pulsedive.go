@@ -41,17 +41,17 @@ func NewPulsediveClient(cfg PulsediveConfig) *PulsediveClient {
 
 // PulsediveResponse represents the API response for indicator info
 type PulsediveResponse struct {
-	IID         int64               `json:"iid"`         // Indicator ID
-	Indicator   string              `json:"indicator"`   // The IP address
-	Type        string              `json:"type"`        // "ip"
-	Risk        string              `json:"risk"`        // "none", "low", "medium", "high", "critical", "unknown"
-	RiskFactors []PulsediveRisk     `json:"riskfactors"` // Why it's risky
-	Threats     []PulsediveThreat   `json:"threats"`     // Associated threats
-	Feeds       []PulsediveFeed     `json:"feeds"`       // Threat feeds containing this IP
-	Attributes  PulsediveAttrs      `json:"attributes"`  // Technical attributes
-	Summary     PulsediveSummary    `json:"summary"`     // Summary stats
-	Stamp       string              `json:"stamp_seen"`  // Last seen timestamp
-	StampAdded  string              `json:"stamp_added"` // When added to Pulsedive
+	IID         int64             `json:"iid"`         // Indicator ID
+	Indicator   string            `json:"indicator"`   // The IP address
+	Type        string            `json:"type"`        // "ip"
+	Risk        string            `json:"risk"`        // "none", "low", "medium", "high", "critical", "unknown"
+	RiskFactors []PulsediveRisk   `json:"riskfactors"` // Why it's risky
+	Threats     []PulsediveThreat `json:"threats"`     // Associated threats
+	Feeds       []PulsediveFeed   `json:"feeds"`       // Threat feeds containing this IP
+	Attributes  PulsediveAttrs    `json:"attributes"`  // Technical attributes
+	Summary     PulsediveSummary  `json:"summary"`     // Summary stats
+	Stamp       string            `json:"stamp_seen"`  // Last seen timestamp
+	StampAdded  string            `json:"stamp_added"` // When added to Pulsedive
 }
 
 // PulsediveRisk represents a risk factor
@@ -72,9 +72,9 @@ type PulsediveThreat struct {
 
 // PulsediveFeed represents a threat feed
 type PulsediveFeed struct {
-	FID         int    `json:"fid"`
-	Name        string `json:"name"`
-	Category    string `json:"category"`
+	FID          int    `json:"fid"`
+	Name         string `json:"name"`
+	Category     string `json:"category"`
 	Organization string `json:"organization"`
 }
 
@@ -105,26 +105,26 @@ type PulsediveSummary struct {
 
 // PulsediveProperties contains property counts
 type PulsediveProperties struct {
-	Geo       map[string]interface{} `json:"geo"`
-	Whois     map[string]interface{} `json:"whois"`
+	Geo   map[string]interface{} `json:"geo"`
+	Whois map[string]interface{} `json:"whois"`
 }
 
 // PulsediveResult represents the processed result
 type PulsediveResult struct {
 	IP              string   `json:"ip"`
-	Risk            string   `json:"risk"`              // none, low, medium, high, critical
-	RiskFactors     []string `json:"risk_factors"`      // List of risk factor descriptions
-	ThreatCount     int      `json:"threat_count"`      // Number of associated threats
-	ThreatNames     []string `json:"threat_names"`      // Names of associated threats
-	ThreatActors    []string `json:"threat_actors"`     // Associated threat actors
-	Campaigns       []string `json:"campaigns"`         // Associated campaigns
-	MalwareFamilies []string `json:"malware_families"`  // Associated malware
-	FeedCount       int      `json:"feed_count"`        // Number of feeds containing this IP
-	FeedNames       []string `json:"feed_names"`        // Feed names
+	Risk            string   `json:"risk"`             // none, low, medium, high, critical
+	RiskFactors     []string `json:"risk_factors"`     // List of risk factor descriptions
+	ThreatCount     int      `json:"threat_count"`     // Number of associated threats
+	ThreatNames     []string `json:"threat_names"`     // Names of associated threats
+	ThreatActors    []string `json:"threat_actors"`    // Associated threat actors
+	Campaigns       []string `json:"campaigns"`        // Associated campaigns
+	MalwareFamilies []string `json:"malware_families"` // Associated malware
+	FeedCount       int      `json:"feed_count"`       // Number of feeds containing this IP
+	FeedNames       []string `json:"feed_names"`       // Feed names
 	LastSeen        string   `json:"last_seen"`
-	Technologies    []string `json:"technologies"`      // Detected technologies
+	Technologies    []string `json:"technologies"` // Detected technologies
 	RawScore        int      `json:"raw_score"`
-	NormalizedScore int      `json:"normalized_score"`  // 0-100 scale
+	NormalizedScore int      `json:"normalized_score"` // 0-100 scale
 }
 
 // CheckIP queries Pulsedive for IP information

@@ -8,8 +8,8 @@ import (
 
 // Event represents a security event from Sophos XGS
 type Event struct {
-	EventID     uuid.UUID `json:"event_id" ch:"event_id"`
-	Timestamp   time.Time `json:"timestamp" ch:"timestamp"`
+	EventID   uuid.UUID `json:"event_id" ch:"event_id"`
+	Timestamp time.Time `json:"timestamp" ch:"timestamp"`
 
 	// Classification
 	LogType     string `json:"log_type" ch:"log_type"`
@@ -78,14 +78,14 @@ type EventFilters struct {
 
 // EventStats represents aggregated event statistics
 type EventStats struct {
-	TotalEvents      uint64  `json:"total_events"`
-	BlockedEvents    uint64  `json:"blocked_events"`
-	BlockRate        float64 `json:"block_rate"`
-	UniqueIPs        uint64  `json:"unique_ips"`
-	CriticalEvents   uint64  `json:"critical_events"`
-	HighEvents       uint64  `json:"high_events"`
-	MediumEvents     uint64  `json:"medium_events"`
-	LowEvents        uint64  `json:"low_events"`
+	TotalEvents    uint64  `json:"total_events"`
+	BlockedEvents  uint64  `json:"blocked_events"`
+	BlockRate      float64 `json:"block_rate"`
+	UniqueIPs      uint64  `json:"unique_ips"`
+	CriticalEvents uint64  `json:"critical_events"`
+	HighEvents     uint64  `json:"high_events"`
+	MediumEvents   uint64  `json:"medium_events"`
+	LowEvents      uint64  `json:"low_events"`
 }
 
 // TimelinePoint represents a point in the event timeline

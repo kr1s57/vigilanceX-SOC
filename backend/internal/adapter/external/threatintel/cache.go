@@ -7,11 +7,11 @@ import (
 
 // ThreatCache provides in-memory caching for threat intel results
 type ThreatCache struct {
-	data    map[string]*cacheEntry
-	ttl     time.Duration
-	mu      sync.RWMutex
-	hits    int64
-	misses  int64
+	data   map[string]*cacheEntry
+	ttl    time.Duration
+	mu     sync.RWMutex
+	hits   int64
+	misses int64
 }
 
 type cacheEntry struct {
@@ -21,11 +21,11 @@ type cacheEntry struct {
 
 // CacheStats contains cache statistics
 type CacheStats struct {
-	Size   int     `json:"size"`
-	Hits   int64   `json:"hits"`
-	Misses int64   `json:"misses"`
+	Size    int     `json:"size"`
+	Hits    int64   `json:"hits"`
+	Misses  int64   `json:"misses"`
 	HitRate float64 `json:"hit_rate"`
-	TTL    string  `json:"ttl"`
+	TTL     string  `json:"ttl"`
 }
 
 // NewThreatCache creates a new threat cache

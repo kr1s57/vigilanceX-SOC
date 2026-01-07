@@ -11,12 +11,12 @@ import (
 
 // DBStats represents database statistics
 type DBStats struct {
-	DatabaseSize   string             `json:"database_size"`
-	TotalEvents    uint64             `json:"total_events"`
-	EventsByType   map[string]uint64  `json:"events_by_type"`
-	DateRangeStart time.Time          `json:"date_range_start"`
-	DateRangeEnd   time.Time          `json:"date_range_end"`
-	TableStats     []TableStat        `json:"table_stats"`
+	DatabaseSize   string            `json:"database_size"`
+	TotalEvents    uint64            `json:"total_events"`
+	EventsByType   map[string]uint64 `json:"events_by_type"`
+	DateRangeStart time.Time         `json:"date_range_start"`
+	DateRangeEnd   time.Time         `json:"date_range_end"`
+	TableStats     []TableStat       `json:"table_stats"`
 }
 
 // TableStat represents statistics for a single table
