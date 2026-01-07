@@ -6,6 +6,7 @@ import { AttacksAnalyzer } from '@/pages/AttacksAnalyzer'
 import { AdvancedThreat } from '@/pages/AdvancedThreat'
 import { VpnNetwork } from '@/pages/VpnNetwork'
 import { ActiveBans } from '@/pages/ActiveBans'
+import { Geoblocking } from '@/pages/Geoblocking'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 
@@ -19,6 +20,7 @@ function App() {
         <Route path="/threats" element={<AdvancedThreat />} />
         <Route path="/vpn" element={<VpnNetwork />} />
         <Route path="/bans" element={<ActiveBans />} />
+        <Route path="/geoblocking" element={<Geoblocking />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>

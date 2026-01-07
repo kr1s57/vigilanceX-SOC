@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Network,
   Ban,
+  Globe,
   FileText,
   Settings,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ const navigation = [
   { name: 'Advanced Threat', href: '/threats', icon: AlertTriangle },
   { name: 'VPN & Network', href: '/vpn', icon: Network },
   { name: 'Active Bans', href: '/bans', icon: Ban },
+  { name: 'Geoblocking', href: '/geoblocking', icon: Globe },
   { name: 'Reports', href: '/reports', icon: FileText },
 ]
 

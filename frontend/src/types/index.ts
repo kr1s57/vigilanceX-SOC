@@ -468,3 +468,71 @@ export interface CriticalAlert {
   action: string
   country: string
 }
+
+// Geoblocking types (v2.0)
+export interface GeoBlockRule {
+  id: string
+  rule_type: 'country_block' | 'country_watch' | 'asn_block' | 'asn_watch'
+  target: string
+  action: 'block' | 'watch' | 'boost'
+  score_modifier: number
+  reason: string
+  is_active: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface GeoBlockRuleRequest {
+  rule_type: string
+  target: string
+  action: string
+  score_modifier: number
+  reason: string
+  created_by?: string
+}
+
+export interface GeoLocation {
+  ip: string
+  country_code: string
+  country_name: string
+  city: string
+  region: string
+  asn: number
+  as_org: string
+  is_vpn: boolean
+  is_proxy: boolean
+  is_tor: boolean
+  is_datacenter: boolean
+  latitude: number
+  longitude: number
+  last_updated: string
+}
+
+export interface GeoCheckResult {
+  ip: string
+  geo_location: GeoLocation | null
+  matched_rules: GeoBlockRule[]
+  total_score_boost: number
+  should_block: boolean
+  block_reason?: string
+  risk_factors: string[]
+}
+
+export interface GeoBlockStats {
+  total_rules: number
+  active_rules: number
+  rules_by_type: Record<string, number>
+  rules_by_action: Record<string, number>
+  blocked_countries: string[] | null
+  watched_countries: string[] | null
+  blocked_asns: number[] | null
+}
+
+export interface HighRiskCountry {
+  country_code: string
+  country_name: string
+  risk_level: 'low' | 'medium' | 'high' | 'critical'
+  base_score: number
+  reason: string
+}

@@ -22,7 +22,13 @@ import type {
   ReportConfig,
   ReportPreview,
   SyslogStatus,
-  CriticalAlert
+  CriticalAlert,
+  GeoBlockRule,
+  GeoBlockRuleRequest,
+  GeoLocation,
+  GeoCheckResult,
+  GeoBlockStats,
+  HighRiskCountry
 } from '@/types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -405,6 +411,70 @@ export const alertsApi = {
     const response = await api.get<{ data: CriticalAlert[]; count: number }>('/alerts/critical', {
       params: { limit }
     })
+    return response.data
+  },
+}
+
+// Geoblocking API (v2.0)
+export const geoblockingApi = {
+  // Rules management
+  listRules: async (type?: string) => {
+    const params = type ? { type } : {}
+    const response = await api.get<{ data: GeoBlockRule[]; count: number }>('/geoblocking/rules', { params })
+    return response.data
+  },
+
+  createRule: async (rule: GeoBlockRuleRequest) => {
+    const response = await api.post<{ data: GeoBlockRule; message: string }>('/geoblocking/rules', rule)
+    return response.data
+  },
+
+  updateRule: async (id: string, rule: Partial<GeoBlockRule>) => {
+    const response = await api.put<{ data: GeoBlockRule; message: string }>(`/geoblocking/rules/${id}`, rule)
+    return response.data
+  },
+
+  deleteRule: async (id: string) => {
+    const response = await api.delete<{ message: string; id: string }>(`/geoblocking/rules/${id}`)
+    return response.data
+  },
+
+  // Stats
+  getStats: async () => {
+    const response = await api.get<GeoBlockStats>('/geoblocking/stats')
+    return response.data
+  },
+
+  // IP checks
+  checkIP: async (ip: string) => {
+    const response = await api.get<GeoCheckResult>(`/geoblocking/check/${ip}`)
+    return response.data
+  },
+
+  lookupIP: async (ip: string) => {
+    const response = await api.get<GeoLocation>(`/geoblocking/lookup/${ip}`)
+    return response.data
+  },
+
+  // Country lists
+  getBlockedCountries: async () => {
+    const response = await api.get<{ blocked_countries: string[]; count: number }>('/geoblocking/countries/blocked')
+    return response.data
+  },
+
+  getWatchedCountries: async () => {
+    const response = await api.get<{ watched_countries: string[]; count: number }>('/geoblocking/countries/watched')
+    return response.data
+  },
+
+  getHighRiskCountries: async () => {
+    const response = await api.get<{ high_risk_countries: HighRiskCountry[]; count: number }>('/geoblocking/countries/high-risk')
+    return response.data
+  },
+
+  // Cache
+  refreshCache: async () => {
+    const response = await api.post<{ message: string }>('/geoblocking/cache/refresh')
     return response.data
   },
 }
