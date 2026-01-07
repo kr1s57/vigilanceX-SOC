@@ -33,6 +33,7 @@ import {
   Palette,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { threatsApi, bansApi, modsecApi, statusApi, configApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -132,6 +133,7 @@ const defaultPluginConfigs: PluginConfig[] = [
 
 export function Settings() {
   const { settings, updateSettings, resetSettings } = useSettings()
+  const { isAdmin } = useAuth()
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
   const [loadingIntegrations, setLoadingIntegrations] = useState(true)
   const [saved, setSaved] = useState(false)
@@ -553,8 +555,9 @@ export function Settings() {
       {/* Integrations Status */}
       <SettingsSection
         title="Integrations"
-        description="Status and configuration of external services"
+        description={isAdmin ? "Status and configuration of external services" : "Admin access required to modify integrations"}
         icon={<Plug className="w-5 h-5" />}
+        disabled={!isAdmin}
       >
         {loadingIntegrations ? (
           <div className="flex items-center justify-center py-8">
@@ -586,7 +589,7 @@ export function Settings() {
               }
               connected={integrations?.sophosSsh.connected || false}
               icon={<RefreshCw className="w-4 h-4" />}
-              onEdit={() => handleEditPlugin('sophos_ssh')}
+              onEdit={isAdmin ? () => handleEditPlugin('sophos_ssh') : undefined}
             />
 
             {/* Sophos XGS API */}
@@ -599,7 +602,7 @@ export function Settings() {
               }
               connected={integrations?.sophosApi.connected || false}
               icon={<Plug className="w-4 h-4" />}
-              onEdit={() => handleEditPlugin('sophos_api')}
+              onEdit={isAdmin ? () => handleEditPlugin('sophos_api') : undefined}
             />
 
             {/* Threat Intel Providers */}
@@ -612,7 +615,7 @@ export function Settings() {
                   description={provider.description}
                   connected={provider.configured}
                   icon={<Shield className="w-4 h-4" />}
-                  onEdit={pluginId ? () => handleEditPlugin(pluginId) : undefined}
+                  onEdit={isAdmin && pluginId ? () => handleEditPlugin(pluginId) : undefined}
                 />
               )
             })}
@@ -727,7 +730,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v2.5.0</p>
+        <p>VIGILANCE X v2.6.0</p>
         <p className="mt-1">Security Operations Center - Enhanced OSINT Stack</p>
       </div>
     </div>
@@ -741,22 +744,29 @@ function SettingsSection({
   description,
   icon,
   children,
+  disabled = false,
 }: {
   title: string
   description: string
   icon: React.ReactNode
   children: React.ReactNode
+  disabled?: boolean
 }) {
   return (
-    <div className="bg-card rounded-xl border">
+    <div className={cn("bg-card rounded-xl border relative", disabled && "opacity-60")}>
       <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
-        <div className="p-2 bg-primary/10 text-primary rounded-lg">{icon}</div>
+        <div className={cn("p-2 rounded-lg", disabled ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary")}>
+          {icon}
+        </div>
         <div>
-          <h2 className="font-semibold">{title}</h2>
+          <h2 className="font-semibold flex items-center gap-2">
+            {title}
+            {disabled && <Lock className="w-4 h-4 text-muted-foreground" />}
+          </h2>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
       </div>
-      <div className="divide-y divide-border">{children}</div>
+      <div className={cn("divide-y divide-border", disabled && "pointer-events-none")}>{children}</div>
     </div>
   )
 }

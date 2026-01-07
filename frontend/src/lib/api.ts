@@ -543,6 +543,98 @@ export const configApi = {
   },
 }
 
+// Auth types (v2.6)
+export interface UserInfo {
+  id: string
+  username: string
+  role: 'admin' | 'audit'
+}
+
+export interface LoginResponse {
+  token: string
+  expires_at: number
+  user: UserInfo
+}
+
+export interface User {
+  id: string
+  username: string
+  email?: string
+  role: 'admin' | 'audit'
+  is_active: boolean
+  last_login?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateUserRequest {
+  username: string
+  password: string
+  email?: string
+  role: 'admin' | 'audit'
+}
+
+export interface UpdateUserRequest {
+  email?: string
+  role?: 'admin' | 'audit'
+  is_active?: boolean
+}
+
+// Auth API (v2.6)
+export const authApi = {
+  login: async (username: string, password: string): Promise<LoginResponse> => {
+    const response = await api.post<LoginResponse>('/auth/login', { username, password })
+    return response.data
+  },
+
+  logout: async (): Promise<void> => {
+    await api.post('/auth/logout')
+  },
+
+  me: async (): Promise<{ user: UserInfo }> => {
+    const response = await api.get<{ user: UserInfo }>('/auth/me')
+    return response.data
+  },
+
+  changePassword: async (oldPassword: string, newPassword: string): Promise<void> => {
+    await api.post('/auth/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword
+    })
+  },
+}
+
+// Users API (v2.6 - Admin only)
+export const usersApi = {
+  list: async (): Promise<{ users: User[]; count: number }> => {
+    const response = await api.get<{ users: User[]; count: number }>('/users')
+    return response.data
+  },
+
+  get: async (id: string): Promise<User> => {
+    const response = await api.get<User>(`/users/${id}`)
+    return response.data
+  },
+
+  create: async (request: CreateUserRequest): Promise<User> => {
+    const response = await api.post<User>('/users', request)
+    return response.data
+  },
+
+  update: async (id: string, request: UpdateUserRequest): Promise<User> => {
+    const response = await api.put<User>(`/users/${id}`, request)
+    return response.data
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/users/${id}`)
+  },
+
+  resetPassword: async (id: string, newPassword: string): Promise<void> => {
+    await api.post(`/users/${id}/reset-password`, { new_password: newPassword })
+  },
+}
+
 // Soft Whitelist API (v2.0)
 export const softWhitelistApi = {
   // List all whitelisted IPs (optional filter by type)

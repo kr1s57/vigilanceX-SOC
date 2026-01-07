@@ -110,16 +110,11 @@ export function Header() {
             : 'bg-red-500/10 text-red-500'
         )}>
           {isConnected ? (
-            <>
-              <Wifi className="w-4 h-4" />
-              <span>WSocket</span>
-            </>
+            <Wifi className="w-4 h-4" />
           ) : (
-            <>
-              <WifiOff className="w-4 h-4" />
-              <span>Disconnected</span>
-            </>
+            <WifiOff className="w-4 h-4" />
           )}
+          <span>WSocket</span>
         </div>
 
         {/* Syslog status */}

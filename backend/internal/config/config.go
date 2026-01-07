@@ -16,6 +16,7 @@ type Config struct {
 	SophosSSH   SophosSSHConfig
 	ThreatIntel ThreatIntelConfig
 	JWT         JWTConfig
+	Admin       AdminConfig
 }
 
 type SophosSSHConfig struct {
@@ -76,6 +77,11 @@ type ThreatIntelConfig struct {
 type JWTConfig struct {
 	Secret string
 	Expiry time.Duration
+}
+
+type AdminConfig struct {
+	Username string
+	Password string
 }
 
 func Load() (*Config, error) {
@@ -146,6 +152,10 @@ func Load() (*Config, error) {
 			Secret: viper.GetString("JWT_SECRET"),
 			Expiry: viper.GetDuration("JWT_EXPIRY"),
 		},
+		Admin: AdminConfig{
+			Username: viper.GetString("ADMIN_USERNAME"),
+			Password: viper.GetString("ADMIN_PASSWORD"),
+		},
 		SophosSSH: SophosSSHConfig{
 			Host:         viper.GetString("SOPHOS_SSH_HOST"),
 			Port:         viper.GetInt("SOPHOS_SSH_PORT"),
@@ -203,6 +213,10 @@ func bindEnvVars() {
 	viper.BindEnv("JWT_SECRET")
 	viper.BindEnv("JWT_EXPIRY")
 
+	// Admin
+	viper.BindEnv("ADMIN_USERNAME")
+	viper.BindEnv("ADMIN_PASSWORD")
+
 	// Sophos SSH
 	viper.BindEnv("SOPHOS_SSH_HOST")
 	viper.BindEnv("SOPHOS_SSH_PORT")
@@ -242,6 +256,11 @@ func setDefaults() {
 
 	// JWT defaults
 	viper.SetDefault("JWT_EXPIRY", 24*time.Hour)
+	viper.SetDefault("JWT_SECRET", "vigilancex-default-jwt-secret-change-me")
+
+	// Admin defaults
+	viper.SetDefault("ADMIN_USERNAME", "admin")
+	viper.SetDefault("ADMIN_PASSWORD", "VigilanceX2024!")
 
 	// Sophos SSH defaults
 	viper.SetDefault("SOPHOS_SSH_PORT", 22)

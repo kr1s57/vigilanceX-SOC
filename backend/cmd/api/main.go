@@ -20,6 +20,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
+	"github.com/kr1s57/vigilancex/internal/usecase/auth"
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
 	"github.com/kr1s57/vigilancex/internal/usecase/events"
@@ -65,6 +66,7 @@ func main() {
 	statsRepo := clickhouse.NewStatsRepository(chConn.Conn(), logger)
 	blocklistRepo := clickhouse.NewBlocklistRepository(chConn)
 	geoblockingRepo := clickhouse.NewGeoblockingRepository(chConn) // v2.0: Geoblocking
+	usersRepo := clickhouse.NewUsersRepository(chConn)             // v2.6: Authentication
 
 	// Initialize threat intelligence aggregator (v1.6: 7 providers)
 	threatAggregator := threatintel.NewAggregator(threatintel.AggregatorConfig{
@@ -158,6 +160,13 @@ func main() {
 	reportsService := reports.NewService(statsRepo, logger)
 	blocklistsService := blocklists.NewService(feedIngester)
 	geoblockingService := geoblocking.NewService(geoblockingRepo, geoIPClient) // v2.0: Geoblocking
+	authService := auth.NewService(usersRepo, cfg, logger)                     // v2.6: Authentication
+
+	// Ensure default admin user exists (v2.6)
+	if err := authService.EnsureDefaultAdmin(context.Background()); err != nil {
+		logger.Error("Failed to ensure default admin user", "error", err)
+		os.Exit(1)
+	}
 
 	// Initialize handlers
 	eventsHandler := handlers.NewEventsHandler(eventsService)
@@ -168,6 +177,8 @@ func main() {
 	reportsHandler := handlers.NewReportsHandler(reportsService)
 	blocklistsHandler := handlers.NewBlocklistsHandler(blocklistsService)
 	geoblockingHandler := handlers.NewGeoblockingHandler(geoblockingService) // v2.0: Geoblocking
+	authHandler := handlers.NewAuthHandler(authService, logger)              // v2.6: Authentication
+	usersHandler := handlers.NewUsersHandler(authService, logger)            // v2.6: User management
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -206,15 +217,33 @@ func main() {
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
-		// Public routes
+		// Public routes (no auth required)
 		r.Group(func(r chi.Router) {
-			r.Post("/auth/login", handlers.NotImplemented)
-			r.Post("/auth/logout", handlers.NotImplemented)
-			r.Post("/auth/refresh", handlers.NotImplemented)
+			r.Post("/auth/login", authHandler.Login)
 		})
 
-		// Protected routes (TODO: add JWT middleware)
+		// Protected routes (require valid JWT - v2.6)
 		r.Group(func(r chi.Router) {
+			r.Use(middleware.JWTAuth(authService))
+
+			// Auth endpoints (authenticated users)
+			r.Post("/auth/logout", authHandler.Logout)
+			r.Get("/auth/me", authHandler.Me)
+			r.Post("/auth/change-password", authHandler.ChangePassword)
+
+			// Admin-only routes (v2.6)
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireAdmin())
+				r.Route("/users", func(r chi.Router) {
+					r.Get("/", usersHandler.List)
+					r.Post("/", usersHandler.Create)
+					r.Get("/{id}", usersHandler.Get)
+					r.Put("/{id}", usersHandler.Update)
+					r.Delete("/{id}", usersHandler.Delete)
+					r.Post("/{id}/reset-password", usersHandler.ResetPassword)
+				})
+			})
+
 			// Events
 			r.Route("/events", func(r chi.Router) {
 				r.Get("/", eventsHandler.ListEvents)

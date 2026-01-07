@@ -23,6 +23,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -o /build/vigilancex-api \
     ./cmd/api
 
+# Build the password reset tool (v2.6)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o /build/reset-password \
+    ./cmd/reset-password
+
 # Final stage
 FROM alpine:3.19
 
@@ -35,8 +41,9 @@ RUN adduser -D -g '' vigilance
 # Set working directory
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binaries from builder
 COPY --from=builder /build/vigilancex-api /app/vigilancex-api
+COPY --from=builder /build/reset-password /app/reset-password
 
 # Copy scenarios directory (for Detect2Ban)
 COPY --from=builder /build/scenarios /app/scenarios

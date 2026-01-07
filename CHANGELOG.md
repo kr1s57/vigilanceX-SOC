@@ -4,6 +4,163 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.6.0] - 2026-01-07
+
+### Authentication System & Role-Based Access Control
+
+Version majeure ajoutant un système d'authentification complet avec gestion des rôles.
+
+---
+
+### 🔐 Authentication Portal
+
+Nouveau portail de connexion sécurisé avec gestion JWT.
+
+#### Fonctionnalités
+| Feature | Description |
+|---------|-------------|
+| **Login Page** | Portail de connexion avec branding VigilanceX |
+| **JWT Tokens** | Authentification par tokens JWT (validité 24h) |
+| **Auto-redirect** | Redirection automatique vers /login si non authentifié |
+| **Session persistence** | Token stocké dans localStorage |
+
+#### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/auth/login` | POST | Authentification utilisateur |
+| `/api/v1/auth/logout` | POST | Déconnexion (client-side) |
+| `/api/v1/auth/me` | GET | Informations utilisateur courant |
+| `/api/v1/auth/change-password` | POST | Changement de mot de passe |
+
+---
+
+### 👥 Role-Based Access Control (RBAC)
+
+Deux rôles avec permissions différenciées.
+
+#### Rôles
+| Role | Description | Permissions |
+|------|-------------|-------------|
+| **admin** | Administrateur | Accès complet + Gestion utilisateurs + Settings/Integrations |
+| **audit** | Audit/Lecture seule | Visualisation uniquement, pas de ban/unban |
+
+#### Restrictions Audit
+| Page | Restriction |
+|------|-------------|
+| **Active Bans** | Actions ban/unban masquées |
+| **Reports** | Page non accessible |
+| **Users** | Page non accessible |
+| **Settings** | Page non accessible (utilise les paramètres admin) |
+
+---
+
+### 👤 User Management (Admin)
+
+Nouvelle page de gestion des utilisateurs pour les administrateurs.
+
+#### Fonctionnalités
+| Feature | Description |
+|---------|-------------|
+| **Liste utilisateurs** | Tableau avec username, rôle, status, dernière connexion |
+| **Création** | Modal de création avec username, password, email, rôle |
+| **Modification** | Édition email, rôle, status actif/inactif |
+| **Suppression** | Suppression avec confirmation |
+| **Reset password** | Réinitialisation du mot de passe par l'admin |
+
+#### API Endpoints (Admin Only)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/users` | GET | Liste des utilisateurs |
+| `/api/v1/users` | POST | Création utilisateur |
+| `/api/v1/users/{id}` | GET | Détails utilisateur |
+| `/api/v1/users/{id}` | PUT | Modification utilisateur |
+| `/api/v1/users/{id}` | DELETE | Suppression utilisateur |
+| `/api/v1/users/{id}/reset-password` | POST | Reset password |
+
+---
+
+### 🔑 Default Admin & Password Reset
+
+Gestion de l'utilisateur admin par défaut et outil de récupération.
+
+#### Admin par défaut
+Au premier démarrage, si aucun utilisateur n'existe :
+- Username: `admin` (configurable via `ADMIN_USERNAME`)
+- Password: `VigilanceX2024!` (configurable via `ADMIN_PASSWORD`)
+
+#### Recovery Tool
+En cas de perte du mot de passe admin :
+```bash
+# Depuis l'hôte Docker
+docker exec vigilance_backend /app/reset-password admin NouveauMotDePasse123!
+
+# Ou depuis l'intérieur du container
+/app/reset-password <username> <new_password>
+```
+
+---
+
+### 🛡️ Security Features
+
+| Feature | Description |
+|---------|-------------|
+| **Password hashing** | bcrypt avec coût 12 |
+| **JWT validation** | Vérification signature + expiration |
+| **Route protection** | Middleware sur toutes les routes API |
+| **Audit logging** | Logs des connexions/déconnexions |
+
+---
+
+### 📁 New Files
+
+**Backend:**
+- `internal/entity/user.go` - Modèle utilisateur
+- `internal/adapter/repository/clickhouse/users_repo.go` - Repository
+- `internal/usecase/auth/service.go` - Service authentification
+- `internal/adapter/controller/http/middleware/jwt.go` - Middleware JWT
+- `internal/adapter/controller/http/handlers/auth.go` - Handlers auth
+- `internal/adapter/controller/http/handlers/users.go` - Handlers users
+- `cmd/reset-password/main.go` - Outil CLI de reset password
+
+**Frontend:**
+- `src/contexts/AuthContext.tsx` - Context d'authentification
+- `src/pages/Login.tsx` - Page de connexion
+- `src/pages/UserManagement.tsx` - Gestion utilisateurs
+- `src/components/ProtectedRoute.tsx` - Protection routes authentification
+- `src/components/AdminRoute.tsx` - Protection routes admin-only
+
+---
+
+### 🔧 Environment Variables
+
+Nouvelles variables d'environnement :
+```bash
+# JWT Configuration
+JWT_SECRET=your-secure-jwt-secret-min-32-chars
+JWT_EXPIRY=24h
+
+# Default Admin (first startup only)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=VigilanceX2024!
+```
+
+---
+
+### 🐛 Bug Fixes
+
+| Fix | Description |
+|-----|-------------|
+| **WebSocket Badge** | Le badge affiche maintenant toujours "WSocket" avec changement de couleur vert/rouge |
+| **Settings Access** | Page Settings entièrement réservée aux administrateurs |
+| **WebSocket Auth** | Authentification WebSocket via query parameter pour les connexions temps réel |
+
+#### WebSocket Authentication
+- Token JWT passé via query parameter `?token=<jwt>` pour les connexions WebSocket
+- Middleware JWT backend accepte le token depuis header OU query parameter
+- Reset automatique du WebSocket lors du login/logout
+
+---
+
 ## [2.5.0] - 2026-01-07
 
 ### System IPs & Icon Style Customization

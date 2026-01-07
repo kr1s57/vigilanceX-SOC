@@ -1,5 +1,8 @@
 import { Routes, Route } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
+import ProtectedRoute from '@/components/ProtectedRoute'
+import AdminRoute from '@/components/AdminRoute'
+import Login from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
 import { WafExplorer } from '@/pages/WafExplorer'
 import { AttacksAnalyzer } from '@/pages/AttacksAnalyzer'
@@ -11,24 +14,42 @@ import { SoftWhitelist } from '@/pages/SoftWhitelist'
 import { RiskScoring } from '@/pages/RiskScoring'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
+import UserManagement from '@/pages/UserManagement'
 
 function App() {
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/waf" element={<WafExplorer />} />
-        <Route path="/attacks" element={<AttacksAnalyzer />} />
-        <Route path="/threats" element={<AdvancedThreat />} />
-        <Route path="/vpn" element={<VpnNetwork />} />
-        <Route path="/bans" element={<ActiveBans />} />
-        <Route path="/geoblocking" element={<Geoblocking />} />
-        <Route path="/whitelist" element={<SoftWhitelist />} />
-        <Route path="/scoring" element={<RiskScoring />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/settings" element={<Settings />} />
-      </Routes>
-    </Layout>
+    <Routes>
+      {/* Public routes */}
+      <Route path="/login" element={<Login />} />
+
+      {/* Protected routes - All authenticated users */}
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute
+            element={
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/waf" element={<WafExplorer />} />
+                  <Route path="/attacks" element={<AttacksAnalyzer />} />
+                  <Route path="/threats" element={<AdvancedThreat />} />
+                  <Route path="/vpn" element={<VpnNetwork />} />
+                  <Route path="/bans" element={<ActiveBans />} />
+                  <Route path="/geoblocking" element={<Geoblocking />} />
+                  <Route path="/whitelist" element={<SoftWhitelist />} />
+                  <Route path="/scoring" element={<RiskScoring />} />
+                  {/* Admin-only routes */}
+                  <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+                  <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
+                  <Route path="/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+                </Routes>
+              </Layout>
+            }
+          />
+        }
+      />
+    </Routes>
   )
 }
 

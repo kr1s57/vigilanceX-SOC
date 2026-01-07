@@ -166,18 +166,33 @@ class WebSocketManager {
 // Singleton instance
 let wsManager: WebSocketManager | null = null
 
+function getWebSocketUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}`
+  const token = localStorage.getItem('auth_token')
+
+  // Include token as query param for authentication
+  const baseUrl = `${host}/api/v1/ws`
+  return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl
+}
+
 export function getWebSocketManager(): WebSocketManager {
   if (!wsManager) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}`
-
     wsManager = new WebSocketManager({
-      url: `${host}/api/v1/ws`,
+      url: getWebSocketUrl(),
       reconnectInterval: 3000,
       maxReconnectAttempts: 10,
     })
   }
   return wsManager
+}
+
+// Reset manager when auth changes (for logout/login)
+export function resetWebSocketManager(): void {
+  if (wsManager) {
+    wsManager.disconnect()
+    wsManager = null
+  }
 }
 
 export function connectWebSocket(): void {
