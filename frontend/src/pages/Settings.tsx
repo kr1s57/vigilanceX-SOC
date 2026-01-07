@@ -29,17 +29,18 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
-import { threatsApi, bansApi, modsecApi } from '@/lib/api'
+import { threatsApi, bansApi, modsecApi, statusApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface IntegrationStatus {
-  sophos: { connected: boolean; host: string }
+  sophosApi: { connected: boolean; host: string; groupCount: number }
+  sophosSsh: { connected: boolean; lastSync: string | null; message: string }
+  sophosSyslog: { connected: boolean; lastEvent: string | null; eventsPerMinute: number }
   threatIntel: {
     abuseipdb: boolean
     virustotal: boolean
     alienvault: boolean
   }
-  modsec: { connected: boolean; lastSync: string | null }
 }
 
 export function Settings() {
@@ -53,29 +54,41 @@ export function Settings() {
     async function fetchIntegrations() {
       setLoadingIntegrations(true)
       try {
-        const [providers, xgsStatus, modsecStats] = await Promise.all([
+        const [providers, xgsStatus, modsecStats, sshTest, syslogStatus] = await Promise.all([
           threatsApi.providers(),
           bansApi.xgsStatus().catch(() => ({ connected: false, host: '' })),
-          modsecApi.getStats().catch(() => ({ last_sync: null })),
+          modsecApi.getStats().catch(() => ({ last_sync: null, is_configured: false })),
+          modsecApi.testConnection().catch(() => ({ status: 'error', message: 'Connection failed' })),
+          statusApi.syslog().catch(() => ({ is_receiving: false, last_event_time: '', events_last_hour: 0, seconds_since_last: 0 })),
         ])
 
         // providers is ThreatProvider[] - check if provider name exists and is configured
         const isProviderActive = (name: string) =>
           providers.some(p => p.name === name && p.configured)
 
+        // Calculate events per minute from events_last_hour
+        const eventsPerMin = Math.round((syslogStatus.events_last_hour || 0) / 60)
+
         setIntegrations({
-          sophos: {
+          sophosApi: {
             connected: xgsStatus.connected || false,
             host: xgsStatus.host || 'Non configure',
+            groupCount: 0, // Will be fetched from separate endpoint if needed
+          },
+          sophosSsh: {
+            connected: sshTest.status === 'ok',
+            lastSync: modsecStats.last_sync || null,
+            message: sshTest.message || '',
+          },
+          sophosSyslog: {
+            connected: syslogStatus.is_receiving || false,
+            lastEvent: syslogStatus.last_event_time || null,
+            eventsPerMinute: eventsPerMin,
           },
           threatIntel: {
             abuseipdb: isProviderActive('AbuseIPDB'),
             virustotal: isProviderActive('VirusTotal'),
             alienvault: isProviderActive('AlienVault OTX'),
-          },
-          modsec: {
-            connected: !!modsecStats.last_sync,
-            lastSync: modsecStats.last_sync,
           },
         })
       } catch (err) {
@@ -365,12 +378,42 @@ export function Settings() {
           </div>
         ) : (
           <>
-            {/* Sophos XGS */}
+            {/* Sophos XGS Syslog */}
             <IntegrationRow
-              name="Sophos XGS Firewall"
-              description={integrations?.sophos.host || 'Not configured'}
-              connected={integrations?.sophos.connected || false}
+              name="Sophos XGS - Syslog"
+              description={
+                integrations?.sophosSyslog.connected
+                  ? `Receiving logs (~${integrations.sophosSyslog.eventsPerMinute}/min)`
+                  : 'Not receiving logs'
+              }
+              connected={integrations?.sophosSyslog.connected || false}
               icon={<Server className="w-4 h-4" />}
+            />
+
+            {/* Sophos XGS SSH */}
+            <IntegrationRow
+              name="Sophos XGS - SSH"
+              description={
+                integrations?.sophosSsh.connected
+                  ? integrations.sophosSsh.lastSync
+                    ? `ModSec sync: ${new Date(integrations.sophosSsh.lastSync).toLocaleString()}`
+                    : 'SSH connected - Never synced'
+                  : integrations?.sophosSsh.message || 'SSH not configured'
+              }
+              connected={integrations?.sophosSsh.connected || false}
+              icon={<RefreshCw className="w-4 h-4" />}
+            />
+
+            {/* Sophos XGS API */}
+            <IntegrationRow
+              name="Sophos XGS - API"
+              description={
+                integrations?.sophosApi.connected
+                  ? `${integrations.sophosApi.host} (${integrations.sophosApi.groupCount} bans in group)`
+                  : 'API not configured'
+              }
+              connected={integrations?.sophosApi.connected || false}
+              icon={<Plug className="w-4 h-4" />}
             />
 
             {/* AbuseIPDB */}
@@ -396,25 +439,13 @@ export function Settings() {
               connected={integrations?.threatIntel.alienvault || false}
               icon={<Shield className="w-4 h-4" />}
             />
-
-            {/* ModSec Sync */}
-            <IntegrationRow
-              name="ModSecurity Sync"
-              description={
-                integrations?.modsec.lastSync
-                  ? `Last sync: ${new Date(integrations.modsec.lastSync).toLocaleString()}`
-                  : 'Never synced'
-              }
-              connected={integrations?.modsec.connected || false}
-              icon={<RefreshCw className="w-4 h-4" />}
-            />
           </>
         )}
       </SettingsSection>
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v1.0.0</p>
+        <p>VIGILANCE X v1.5.0</p>
         <p className="mt-1">Security Operations Center</p>
       </div>
     </div>
