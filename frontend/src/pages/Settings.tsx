@@ -32,15 +32,17 @@ import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { threatsApi, bansApi, modsecApi, statusApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
+interface ThreatProvider {
+  name: string
+  configured: boolean
+  description: string
+}
+
 interface IntegrationStatus {
   sophosApi: { connected: boolean; host: string; groupCount: number }
   sophosSsh: { connected: boolean; lastSync: string | null; message: string }
   sophosSyslog: { connected: boolean; lastEvent: string | null; eventsPerMinute: number }
-  threatIntel: {
-    abuseipdb: boolean
-    virustotal: boolean
-    alienvault: boolean
-  }
+  threatProviders: ThreatProvider[]
 }
 
 export function Settings() {
@@ -62,10 +64,6 @@ export function Settings() {
           statusApi.syslog().catch(() => ({ is_receiving: false, last_event_time: '', events_last_hour: 0, seconds_since_last: 0 })),
         ])
 
-        // providers is ThreatProvider[] - check if provider name exists and is configured
-        const isProviderActive = (name: string) =>
-          providers.some(p => p.name === name && p.configured)
-
         // Calculate events per minute from events_last_hour
         const eventsPerMin = Math.round((syslogStatus.events_last_hour || 0) / 60)
 
@@ -85,11 +83,12 @@ export function Settings() {
             lastEvent: syslogStatus.last_event_time || null,
             eventsPerMinute: eventsPerMin,
           },
-          threatIntel: {
-            abuseipdb: isProviderActive('AbuseIPDB'),
-            virustotal: isProviderActive('VirusTotal'),
-            alienvault: isProviderActive('AlienVault OTX'),
-          },
+          // v1.6: Store all 7 threat intel providers dynamically
+          threatProviders: providers.map(p => ({
+            name: p.name,
+            configured: p.configured,
+            description: p.description || '',
+          })),
         })
       } catch (err) {
         console.error('Failed to fetch integrations:', err)
@@ -416,37 +415,24 @@ export function Settings() {
               icon={<Plug className="w-4 h-4" />}
             />
 
-            {/* AbuseIPDB */}
-            <IntegrationRow
-              name="AbuseIPDB"
-              description="IP reputation database"
-              connected={integrations?.threatIntel.abuseipdb || false}
-              icon={<Shield className="w-4 h-4" />}
-            />
-
-            {/* VirusTotal */}
-            <IntegrationRow
-              name="VirusTotal"
-              description="Malware analysis platform"
-              connected={integrations?.threatIntel.virustotal || false}
-              icon={<Shield className="w-4 h-4" />}
-            />
-
-            {/* AlienVault OTX */}
-            <IntegrationRow
-              name="AlienVault OTX"
-              description="Open threat exchange"
-              connected={integrations?.threatIntel.alienvault || false}
-              icon={<Shield className="w-4 h-4" />}
-            />
+            {/* v1.6: Dynamic Threat Intel Providers (7 total) */}
+            {integrations?.threatProviders.map((provider) => (
+              <IntegrationRow
+                key={provider.name}
+                name={provider.name}
+                description={provider.description}
+                connected={provider.configured}
+                icon={<Shield className="w-4 h-4" />}
+              />
+            ))}
           </>
         )}
       </SettingsSection>
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v1.5.0</p>
-        <p className="mt-1">Security Operations Center</p>
+        <p>VIGILANCE X v1.6.0</p>
+        <p className="mt-1">Security Operations Center - Enhanced OSINT Stack</p>
       </div>
     </div>
   )

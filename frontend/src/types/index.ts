@@ -160,6 +160,7 @@ export interface ThreatProvider {
   name: string
   configured: boolean
   available: boolean
+  description?: string  // v1.6: Provider description
 }
 
 export interface IPGeolocation {
