@@ -4,6 +4,73 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.3.0] - 2026-01-07
+
+### Frontend Integration - Risk Scoring UI
+
+Intégration complète de l'interface utilisateur pour le système de scoring combiné avec freshness.
+
+---
+
+### 📊 Risk Scoring Dashboard
+
+Nouvelle page dédiée à l'évaluation des risques IP avec scoring multi-facteurs.
+
+#### Scoring Weights
+| Composant | Poids | Description |
+|-----------|-------|-------------|
+| **Threat Intel** | 40% | Score agrégé des 7 providers OSINT |
+| **Blocklist** | 30% | Présence dans les listes de blocage |
+| **Freshness** | 20% | Fraîcheur des données (decay temporel) |
+| **Geolocation** | 10% | Score de risque géographique |
+
+#### Freshness Algorithm
+| Paramètre | Valeur | Effet |
+|-----------|--------|-------|
+| Recent window | ≤ 3 jours | +25% boost |
+| Normal window | ≤ 30 jours | 100% (pas de modification) |
+| Stale threshold | > 30 jours | Decay exponentiel |
+| Decay factor | 7 jours | Half-life du score |
+| Floor | 10% | Score minimum après decay |
+
+#### Fonctionnalités UI
+| Section | Description |
+|---------|-------------|
+| **Scoring Weights** | Visualisation graphique des poids |
+| **Freshness Algorithm** | Explication du decay temporel |
+| **IP Risk Assessment** | Formulaire d'évaluation avec résultats détaillés |
+| **Score Components** | Barres de progression par composant |
+| **Freshness Status** | État recent/normal/stale avec multiplicateur |
+| **Ban Recommendation** | Suggestion avec niveau de confiance |
+| **Formula** | Explication mathématique du calcul |
+
+#### Risk Levels
+| Niveau | Score | Couleur |
+|--------|-------|---------|
+| Critical | ≥ 80 | Rouge |
+| High | ≥ 60 | Orange |
+| Medium | ≥ 40 | Jaune |
+| Low | ≥ 20 | Bleu |
+| None | < 20 | Vert |
+
+#### Navigation
+- Nouvelle entrée "Risk Scoring" dans la sidebar avec icône Activity
+- Route `/scoring` accessible
+
+#### API Endpoint
+- `GET /api/v1/threats/risk/{ip}` - Évaluation combinée avec freshness
+
+#### Fichiers Ajoutés/Modifiés
+| Fichier | Changement |
+|---------|------------|
+| `frontend/src/types/index.ts` | Types RiskAssessment, ScoreComponents, FreshnessInfo |
+| `frontend/src/lib/api.ts` | Méthode `threatsApi.riskAssessment()` |
+| `frontend/src/pages/RiskScoring.tsx` | Page complète |
+| `frontend/src/App.tsx` | Route `/scoring` |
+| `frontend/src/components/layout/Sidebar.tsx` | Navigation |
+
+---
+
 ## [2.2.0] - 2026-01-07
 
 ### Frontend Integration - Soft Whitelist UI
