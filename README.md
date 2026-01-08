@@ -206,7 +206,7 @@ nano deploy/.env
 
 ## Support
 
-- **Email** : support@vigilancex.io
+- **Email** : support@it-secure.lu
 - **Documentation** : wiki/
 - **Licence** : Settings → License dans le dashboard
 
