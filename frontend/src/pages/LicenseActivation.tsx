@@ -1,16 +1,33 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield, Key, Loader2, AlertCircle, CheckCircle, Mail } from 'lucide-react'
+import { Shield, Key, Loader2, AlertCircle, CheckCircle, Mail, RefreshCw } from 'lucide-react'
 import { useLicense } from '@/contexts/LicenseContext'
 import { cn } from '@/lib/utils'
 
 export default function LicenseActivation() {
   const navigate = useNavigate()
-  const { status, activate, isLoading, error } = useLicense()
+  const { status, activate, isLoading, error, syncWithServer } = useLicense()
 
   const [licenseKey, setLicenseKey] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncSuccess, setSyncSuccess] = useState(false)
+
+  const handleSyncLicense = async () => {
+    setIsSyncing(true)
+    setLocalError(null)
+    setSyncSuccess(false)
+    try {
+      await syncWithServer()
+      setSyncSuccess(true)
+      setTimeout(() => setSyncSuccess(false), 3000)
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : 'Failed to sync license')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -99,6 +116,41 @@ export default function LicenseActivation() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* Sync License Button - always show to allow manual license check */}
+          <button
+            type="button"
+            onClick={handleSyncLicense}
+            disabled={isSyncing || isLoading}
+            className={cn(
+              "w-full mb-4 py-2.5 px-4 rounded-lg font-medium flex items-center justify-center gap-2",
+              "transition-all duration-200",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+              syncSuccess
+                ? "bg-green-500/20 border border-green-500/50 text-green-400"
+                : "bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-600"
+            )}
+          >
+            {syncSuccess ? (
+              <>
+                <CheckCircle className="w-4 h-4" />
+                License Synced Successfully
+              </>
+            ) : (
+              <>
+                <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+                {isSyncing ? 'Syncing with Server...' : 'Sync License Status'}
+              </>
+            )}
+          </button>
+          {syncSuccess && status && (
+            <p className="text-center text-xs text-zinc-500 mb-4">
+              {status.licensed
+                ? `Valid until ${status.expires_at ? new Date(status.expires_at).toLocaleDateString('fr-FR') : 'N/A'} (${status.days_remaining} days)`
+                : `Status: ${status.status}`
+              }
+            </p>
           )}
 
           {/* Success message */}

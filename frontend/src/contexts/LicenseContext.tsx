@@ -8,6 +8,7 @@ interface LicenseContextType {
   error: string | null
   activate: (licenseKey: string) => Promise<void>
   refresh: () => Promise<void>
+  syncWithServer: () => Promise<void>
 }
 
 const LicenseContext = createContext<LicenseContextType | undefined>(undefined)
@@ -55,6 +56,32 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Force sync with license server - validates license and updates status
+  const syncWithServer = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const result = await licenseApi.forceValidate()
+      if (result.license) {
+        setStatus(result.license)
+      } else if (!result.success) {
+        // License validation failed (revoked, expired, etc.)
+        setStatus({
+          licensed: false,
+          status: result.message || 'invalid',
+          grace_mode: false,
+          features: []
+        })
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sync with license server')
+      // Refresh local status
+      await refresh()
+    } finally {
+      setIsLoading(false)
+    }
+  }, [refresh])
+
   // Initial load
   useEffect(() => {
     refresh()
@@ -75,7 +102,8 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       isLoading,
       error,
       activate,
-      refresh
+      refresh,
+      syncWithServer
     }}>
       {children}
     </LicenseContext.Provider>
