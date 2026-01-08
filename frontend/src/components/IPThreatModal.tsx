@@ -9,6 +9,9 @@ import {
   Loader2,
   X,
   Search,
+  Activity,
+  Target,
+  Radio,
 } from 'lucide-react'
 import { threatsApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, cn } from '@/lib/utils'
@@ -188,6 +191,112 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                 </div>
               </div>
 
+              {/* CrowdSec Section (v2.9.6) */}
+              {score.crowdsec?.found && (
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Radio className="w-4 h-4 text-blue-500" />
+                      <span className="font-medium">CrowdSec CTI</span>
+                    </div>
+                    <span className={cn(
+                      'px-2 py-0.5 text-xs rounded-full font-medium',
+                      score.crowdsec.reputation === 'malicious' ? 'bg-red-500/10 text-red-500' :
+                      score.crowdsec.reputation === 'suspicious' ? 'bg-orange-500/10 text-orange-500' :
+                      'bg-gray-500/10 text-gray-500'
+                    )}>
+                      {score.crowdsec.reputation || 'unknown'}
+                    </span>
+                  </div>
+
+                  {/* CrowdSec Scores */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Score</p>
+                      <p className={cn(
+                        'text-xl font-bold',
+                        (score.crowdsec.normalized_score || 0) >= 70 ? 'text-red-500' :
+                        (score.crowdsec.normalized_score || 0) >= 40 ? 'text-orange-500' : 'text-green-500'
+                      )}>
+                        {score.crowdsec.normalized_score || 0}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Background Noise</p>
+                      <p className={cn(
+                        'text-xl font-bold',
+                        (score.crowdsec.background_noise_score || 0) >= 7 ? 'text-red-500' :
+                        (score.crowdsec.background_noise_score || 0) >= 4 ? 'text-orange-500' : 'text-green-500'
+                      )}>
+                        {score.crowdsec.background_noise_score || 0}/10
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Subnet /24</p>
+                      <p className={cn(
+                        'text-xl font-bold',
+                        (score.crowdsec.ip_range_score || 0) >= 4 ? 'text-red-500' :
+                        (score.crowdsec.ip_range_score || 0) >= 2 ? 'text-orange-500' : 'text-green-500'
+                      )}>
+                        {score.crowdsec.ip_range_score || 0}/5
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Behaviors */}
+                  {score.crowdsec.behaviors && score.crowdsec.behaviors.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                        <Activity className="w-3 h-3" /> Behaviors
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {score.crowdsec.behaviors.map((b, i) => (
+                          <span key={i} className="px-2 py-0.5 text-xs bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded">
+                            {b}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* MITRE ATT&CK */}
+                  {score.crowdsec.mitre_techniques && score.crowdsec.mitre_techniques.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                        <Target className="w-3 h-3" /> MITRE ATT&CK
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {score.crowdsec.mitre_techniques.map((t, i) => (
+                          <a
+                            key={i}
+                            href={`https://attack.mitre.org/techniques/${t}/`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-0.5 text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded hover:bg-purple-500/20"
+                          >
+                            {t}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Classifications */}
+                  {score.crowdsec.classifications && score.crowdsec.classifications.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Classifications</p>
+                      <div className="flex flex-wrap gap-1">
+                        {score.crowdsec.classifications.map((c, i) => (
+                          <span key={i} className="px-2 py-0.5 text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded">
+                            {c.replace('connection-type:', '').replace('crowdsec:', '').replace('proxy:', '')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Details */}
               <div className="space-y-3">
                 {/* Badges */}
@@ -257,12 +366,12 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
               </div>
 
               {/* External Links */}
-              <div className="flex gap-2 pt-2 border-t">
+              <div className="flex flex-wrap gap-2 pt-2 border-t">
                 <a
                   href={`https://www.abuseipdb.com/check/${ip}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 text-center py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                  className="flex-1 min-w-[100px] text-center py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
                 >
                   AbuseIPDB <ExternalLink className="inline w-3 h-3 ml-1" />
                 </a>
@@ -270,7 +379,7 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                   href={`https://www.virustotal.com/gui/ip-address/${ip}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 text-center py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                  className="flex-1 min-w-[100px] text-center py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
                 >
                   VirusTotal <ExternalLink className="inline w-3 h-3 ml-1" />
                 </a>
@@ -278,9 +387,17 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                   href={`https://otx.alienvault.com/indicator/ip/${ip}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 text-center py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                  className="flex-1 min-w-[100px] text-center py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
                 >
                   AlienVault <ExternalLink className="inline w-3 h-3 ml-1" />
+                </a>
+                <a
+                  href={`https://app.crowdsec.net/cti/${ip}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 min-w-[100px] text-center py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                >
+                  CrowdSec <ExternalLink className="inline w-3 h-3 ml-1" />
                 </a>
               </div>
             </>

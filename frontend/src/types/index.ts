@@ -122,6 +122,10 @@ export interface ThreatScore {
   asn: string
   isp: string
   is_tor: boolean
+  is_vpn?: boolean
+  is_proxy?: boolean
+  is_benign?: boolean
+  is_c2?: boolean
   abuseipdb_score: number
   abuseipdb_reports: number
   abuseipdb_is_tor: boolean
@@ -136,6 +140,27 @@ export interface ThreatScore {
   last_seen: string
   last_checked: string
   total_attacks: number
+  // v2.9.5: New providers
+  in_blocklists?: number
+  open_ports?: number[]
+  vulnerabilities?: string[]
+  // v2.9.6: CrowdSec
+  crowdsec?: {
+    found: boolean
+    reputation?: string
+    confidence?: string
+    background_noise_score?: number
+    ip_range_score?: number
+    behaviors?: string[]
+    classifications?: string[]
+    mitre_techniques?: string[]
+    normalized_score?: number
+  }
+  background_noise?: number
+  subnet_score?: number
+  mitre_techniques?: string[]
+  behaviors?: string[]
+  tiers_queried?: number[]
 }
 
 export interface ThreatStats {
