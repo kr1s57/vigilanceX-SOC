@@ -1,12 +1,14 @@
-# vigilanceKey - Serveur de Licence
+# vigilanceKey - Serveur de Licence v1.2
 
 ## Vue d'ensemble
 
 **vigilanceKey** est le serveur centralisé de gestion des licences pour VIGILANCE X. Il gère :
 - L'activation et la validation des licences
-- Le heartbeat périodique des clients
+- Le heartbeat périodique des clients (toutes les 12h)
 - Le proxy OSINT centralisé (protection des clés API)
-- Le dashboard d'administration
+- Le portail d'administration avec authentification JWT
+- La gestion des utilisateurs (admin, operator, viewer)
+- La gestion complète du cycle de vie des licences (revoke, reactivate, renew, extend)
 
 ---
 
@@ -323,7 +325,7 @@ services:
 | POST | `/api/v1/license/activate` | Activer une licence |
 | POST | `/api/v1/license/validate` | Valider/Heartbeat |
 
-### Endpoints Admin (Authorization: Bearer ADMIN_API_KEY)
+### Endpoints Admin (Authorization: Bearer JWT_TOKEN)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -332,6 +334,21 @@ services:
 | GET | `/api/v1/admin/licenses/{id}` | Détails d'une licence |
 | PUT | `/api/v1/admin/licenses/{id}` | Modifier une licence |
 | DELETE | `/api/v1/admin/licenses/{id}` | Supprimer une licence |
+| POST | `/api/v1/admin/licenses/{id}/revoke` | Révoquer une licence |
+| POST | `/api/v1/admin/licenses/{id}/reactivate` | Réactiver une licence |
+| POST | `/api/v1/admin/licenses/{id}/renew` | Renouveler une licence (365 jours) |
+| POST | `/api/v1/admin/licenses/{id}/extend` | Prolonger une licence (durée personnalisée) |
+
+### Endpoints Authentification
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/login` | Connexion utilisateur |
+| POST | `/api/v1/auth/logout` | Déconnexion |
+| GET | `/api/v1/auth/me` | Profil utilisateur actuel |
+| POST | `/api/v1/admin/users` | Créer un utilisateur (admin only) |
+| GET | `/api/v1/admin/users` | Lister les utilisateurs (admin only) |
+| DELETE | `/api/v1/admin/users/{id}` | Supprimer un utilisateur (admin only) |
 
 ### Endpoint OSINT Proxy
 
@@ -407,17 +424,118 @@ Le serveur vigilanceKey inclut un dashboard web pour la gestion visuelle des lic
 ### Accès
 
 - **URL** : `http://localhost/` ou `https://vigilancexkey.cloudcomputing.lu/`
-- **Authentification** : Via ADMIN_API_KEY
+- **Authentification** : Via JWT (login/password)
+- **Rôles** : admin, operator, viewer
 
 ### Fonctionnalités
 
 | Feature | Description |
 |---------|-------------|
-| **Liste des licences** | Vue tableau avec statut, expiration, client |
+| **Liste des licences** | Vue tableau avec statut, expiration, jours restants, client |
 | **Créer licence** | Formulaire de création avec tous les champs |
 | **Modifier licence** | Édition des paramètres (expiration, features, etc.) |
-| **Supprimer licence** | Révocation avec confirmation |
-| **Statistiques** | Nombre de licences actives, expirées, etc. |
+| **Révoquer licence** | Désactiver immédiatement une licence |
+| **Réactiver licence** | Réactiver une licence révoquée |
+| **Renouveler licence** | Prolonger de 365 jours |
+| **Prolonger licence** | Étendre avec durée personnalisée (30-730 jours) |
+| **Supprimer licence** | Suppression définitive avec confirmation |
+| **Statistiques** | Nombre de licences actives, expirées, révoquées |
+| **Gestion utilisateurs** | Créer/supprimer des utilisateurs (admin only) |
+
+### Rôles Utilisateurs
+
+| Rôle | Permissions |
+|------|-------------|
+| **admin** | Toutes les opérations, gestion utilisateurs |
+| **operator** | CRUD licences, pas de gestion utilisateurs |
+| **viewer** | Lecture seule des licences |
+
+---
+
+## Gestion du Cycle de Vie des Licences
+
+### États possibles
+
+| Status | Description |
+|--------|-------------|
+| `active` | Licence valide et fonctionnelle |
+| `expired` | Licence expirée (date dépassée) |
+| `revoked` | Licence révoquée par l'administrateur |
+| `suspended` | Licence temporairement suspendue |
+
+### Révoquer une licence
+
+```bash
+curl -X POST "http://localhost/api/v1/admin/licenses/{id}/revoke" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Effet côté client** : Le client VIGILANCE X perdra l'accès aux fonctionnalités lors du prochain heartbeat ou sync manuel.
+
+### Réactiver une licence
+
+```bash
+curl -X POST "http://localhost/api/v1/admin/licenses/{id}/reactivate" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Renouveler une licence (365 jours)
+
+```bash
+curl -X POST "http://localhost/api/v1/admin/licenses/{id}/renew" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Prolonger une licence (durée personnalisée)
+
+```bash
+curl -X POST "http://localhost/api/v1/admin/licenses/{id}/extend" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"days": 180}'
+```
+
+---
+
+## Synchronisation Client (VIGILANCE X)
+
+### Heartbeat Automatique
+
+Le client VIGILANCE X effectue un heartbeat automatique toutes les **12 heures** pour :
+- Valider que la licence est toujours active
+- Mettre à jour les jours restants
+- Vérifier si la licence a été révoquée
+
+### Sync Manuel
+
+Le client peut forcer une synchronisation via le bouton "Sync License Status" dans la page de licence :
+
+```typescript
+// Appel API côté client
+POST /api/v1/license/force-validate
+
+// Réponse
+{
+  "success": true,
+  "license": {
+    "licensed": true,
+    "status": "active",
+    "customer_name": "Client ABC",
+    "expires_at": "2027-01-08T00:00:00Z",
+    "days_remaining": 365,
+    "features": ["osint", "reports"]
+  }
+}
+```
+
+### Grace Mode
+
+Si le serveur de licence est injoignable, le client entre en "Grace Mode" :
+- Durée : 72 heures maximum
+- Fonctionnalités : Accès complet maintenu
+- Indicateur : Badge "Grace Mode" dans la sidebar
+
+Après expiration du grace mode, l'accès est bloqué jusqu'à reconnexion avec le serveur.
 
 ---
 
@@ -660,4 +778,4 @@ systemctl restart nginx
 
 ---
 
-*Documentation vigilanceKey v1.0.0 - Janvier 2026*
+*Documentation vigilanceKey v1.2 - Janvier 2026*
