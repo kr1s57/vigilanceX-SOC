@@ -12,15 +12,54 @@ import (
 	"github.com/kr1s57/vigilancex/internal/entity"
 )
 
+// BansRepository interface for ban data access (enables unit testing)
+type BansRepository interface {
+	GetActiveBans(ctx context.Context) ([]entity.BanStatus, error)
+	GetBanByIP(ctx context.Context, ip string) (*entity.BanStatus, error)
+	UpsertBan(ctx context.Context, ban *entity.BanStatus) error
+	UpdateSyncStatus(ctx context.Context, ip string, synced bool) error
+	RecordBanHistory(ctx context.Context, history *entity.BanHistory) error
+	GetBanHistory(ctx context.Context, ip string, limit int) ([]entity.BanHistory, error)
+	GetBanStats(ctx context.Context) (*entity.BanStats, error)
+	GetExpiredBans(ctx context.Context) ([]entity.BanStatus, error)
+	GetUnsyncedBans(ctx context.Context) ([]entity.BanStatus, error)
+	IsWhitelisted(ctx context.Context, ip string) (bool, error)
+	CheckWhitelistV2(ctx context.Context, ip string) (*entity.WhitelistCheckResult, error)
+	GetWhitelist(ctx context.Context) ([]entity.WhitelistEntry, error)
+	GetWhitelistByType(ctx context.Context, whitelistType string) ([]entity.WhitelistEntry, error)
+	GetWhitelistStats(ctx context.Context) (map[string]int, error)
+	AddToWhitelist(ctx context.Context, entry *entity.WhitelistEntry) error
+	UpdateWhitelistEntry(ctx context.Context, entry *entity.WhitelistEntry) error
+	RemoveFromWhitelist(ctx context.Context, ip string) error
+	GetExpiredWhitelistEntries(ctx context.Context) ([]entity.WhitelistEntry, error)
+}
+
+// SophosClient interface for Sophos XGS operations (enables unit testing)
+type SophosClient interface {
+	EnsureBlocklistGroupExists() error
+	AddIPToBlocklist(ip, reason string) error
+	GetBlocklistIPs() ([]string, error)
+	RemoveIPFromBlocklist(ip string) error
+	GetSyncStatus() (*sophos.SyncStatus, error)
+}
+
 // Service handles ban business logic with recidivism and XGS sync
 type Service struct {
-	repo   *clickhouse.BansRepository
-	sophos *sophos.Client
+	repo   BansRepository
+	sophos SophosClient
 	mu     sync.Mutex
 }
 
 // NewService creates a new bans service
 func NewService(repo *clickhouse.BansRepository, sophosClient *sophos.Client) *Service {
+	return &Service{
+		repo:   repo,
+		sophos: sophosClient,
+	}
+}
+
+// NewServiceWithInterfaces creates a new bans service with interface dependencies (for testing)
+func NewServiceWithInterfaces(repo BansRepository, sophosClient SophosClient) *Service {
 	return &Service{
 		repo:   repo,
 		sophos: sophosClient,
