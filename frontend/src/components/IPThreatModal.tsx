@@ -152,8 +152,8 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
               </div>
 
               {/* Provider Scores */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-muted/50 rounded-lg p-4 text-center">
+              <div className="grid grid-cols-4 gap-3">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
                   <p className="text-xs text-muted-foreground mb-1">AbuseIPDB</p>
                   <p className={cn(
                     'text-2xl font-bold',
@@ -165,7 +165,7 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                     {score.abuseipdb_reports} reports
                   </p>
                 </div>
-                <div className="bg-muted/50 rounded-lg p-4 text-center">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
                   <p className="text-xs text-muted-foreground mb-1">VirusTotal</p>
                   <p className={cn(
                     'text-2xl font-bold',
@@ -177,7 +177,7 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                     {score.virustotal_positives}/{score.virustotal_total} engines
                   </p>
                 </div>
-                <div className="bg-muted/50 rounded-lg p-4 text-center">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
                   <p className="text-xs text-muted-foreground mb-1">AlienVault OTX</p>
                   <p className={cn(
                     'text-2xl font-bold',
@@ -188,6 +188,34 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                   <p className="text-xs text-muted-foreground">
                     {score.alienvault_pulses} pulses
                   </p>
+                </div>
+                <div className={cn(
+                  'rounded-lg p-3 text-center',
+                  score.crowdsec?.found ? 'bg-muted/50' : 'bg-muted/30'
+                )}>
+                  <p className="text-xs text-muted-foreground mb-1">CrowdSec</p>
+                  {score.crowdsec?.found ? (
+                    <>
+                      <p className={cn(
+                        'text-2xl font-bold',
+                        (score.crowdsec.normalized_score || 0) >= 50 ? 'text-red-500' : 'text-green-500'
+                      )}>
+                        {score.crowdsec.normalized_score || 0}
+                      </p>
+                      <p className={cn(
+                        'text-xs',
+                        score.crowdsec.reputation === 'malicious' ? 'text-red-500' :
+                        score.crowdsec.reputation === 'suspicious' ? 'text-orange-500' : 'text-muted-foreground'
+                      )}>
+                        {score.crowdsec.reputation || 'unknown'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-bold text-muted-foreground">-</p>
+                      <p className="text-xs text-muted-foreground">not queried</p>
+                    </>
+                  )}
                 </div>
               </div>
 

@@ -96,6 +96,27 @@ CROWDSEC_API_KEY=your_api_key_here
 
 ---
 
+### 🖥️ Frontend - IP Threat Modal
+
+Le modal de détail IP affiche maintenant les données CrowdSec :
+
+#### Pastille Score CrowdSec
+- **Score normalisé** (0-100) avec code couleur
+- **Réputation** (malicious, suspicious, unknown, safe)
+- Grille 4 colonnes : AbuseIPDB, VirusTotal, OTX, **CrowdSec**
+
+#### Section Détaillée CrowdSec (si données disponibles)
+- **Background Noise** : Score 0-10 du bruit internet
+- **Subnet /24** : Score 0-5 de réputation du sous-réseau
+- **Behaviors** : Tags des comportements détectés (bruteforce, scan, exploit...)
+- **MITRE ATT&CK** : Techniques avec liens cliquables vers attack.mitre.org
+- **Classifications** : Type d'IP (tor, vpn, datacenter, community-blocklist)
+
+#### Liens Externes
+- Lien CrowdSec CTI ajouté (https://app.crowdsec.net/cti/{ip})
+
+---
+
 ### 🔧 Fichiers Modifiés
 
 | Fichier | Modification |
@@ -105,7 +126,10 @@ CROWDSEC_API_KEY=your_api_key_here
 | `backend/internal/config/config.go` | CrowdSecKey config |
 | `backend/cmd/api/main.go` | Passage CrowdSecKey |
 | `frontend/src/pages/Settings.tsx` | Plugin config CrowdSec |
+| `frontend/src/components/IPThreatModal.tsx` | Pastille + section CrowdSec |
+| `frontend/src/types/index.ts` | Type ThreatScore avec champs CrowdSec |
 | `docker/.env` | CROWDSEC_API_KEY |
+| `docker/docker-compose.yml` | Variable env CROWDSEC_API_KEY |
 
 ---
 
