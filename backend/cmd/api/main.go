@@ -126,18 +126,25 @@ func main() {
 		threatAggregator = threatintel.NewAggregatorWithProxy(proxyClient, cfg.ThreatIntel.CacheTTL)
 		logger.Info("OSINT Proxy mode enabled", "server", cfg.OSINTProxy.ServerURL)
 	} else {
-		// Local providers mode (v1.6: 7 providers)
+		// Local providers mode (v2.9.5: 10 providers with cascade tiers)
 		threatAggregator = threatintel.NewAggregator(threatintel.AggregatorConfig{
-			// Core providers
-			AbuseIPDBKey:  cfg.ThreatIntel.AbuseIPDBKey,
+			// Tier 2 providers (moderate limits)
+			AbuseIPDBKey: cfg.ThreatIntel.AbuseIPDBKey,
+			GreyNoiseKey: cfg.ThreatIntel.GreyNoiseKey,
+			// Tier 3 providers (limited)
 			VirusTotalKey: cfg.ThreatIntel.VirusTotalKey,
-			OTXKey:        cfg.ThreatIntel.AlienVaultKey,
-			// v1.6 providers
-			GreyNoiseKey:  cfg.ThreatIntel.GreyNoiseKey,
 			CriminalIPKey: cfg.ThreatIntel.CriminalIPKey,
 			PulsediveKey:  cfg.ThreatIntel.PulsediveKey,
-			// IPSum is auto-configured (no API key needed)
+			// Tier 1: OTX needs key, others (IPSum, ThreatFox, URLhaus, ShodanIDB) are free
+			OTXKey: cfg.ThreatIntel.AlienVaultKey,
+			// Cache settings
 			CacheTTL: cfg.ThreatIntel.CacheTTL,
+			// v2.9.5: Cascade configuration
+			CascadeConfig: &threatintel.CascadeConfig{
+				EnableCascade:  cfg.ThreatIntel.CascadeEnabled,
+				Tier2Threshold: cfg.ThreatIntel.Tier2Threshold,
+				Tier3Threshold: cfg.ThreatIntel.Tier3Threshold,
+			},
 		})
 	}
 
@@ -145,7 +152,11 @@ func main() {
 	providers := threatAggregator.GetConfiguredProviders()
 	logger.Info("Threat Intelligence providers configured",
 		"providers", providers,
-		"proxy_mode", threatAggregator.IsProxyMode())
+		"count", len(providers),
+		"proxy_mode", threatAggregator.IsProxyMode(),
+		"cascade_enabled", cfg.ThreatIntel.CascadeEnabled,
+		"tier2_threshold", cfg.ThreatIntel.Tier2Threshold,
+		"tier3_threshold", cfg.ThreatIntel.Tier3Threshold)
 
 	// Initialize Sophos XGS client
 	var sophosClient *sophos.Client

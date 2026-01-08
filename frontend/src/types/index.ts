@@ -161,6 +161,8 @@ export interface ThreatProvider {
   configured: boolean
   available?: boolean  // Optional - not always returned by backend
   description?: string  // v1.6: Provider description
+  tier?: number         // v2.9.5: Provider tier (1=unlimited, 2=moderate, 3=limited)
+  requires_key?: boolean // v2.9.5: Whether API key is required
 }
 
 export interface IPGeolocation {

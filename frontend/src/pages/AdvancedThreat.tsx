@@ -16,6 +16,10 @@ import {
   List,
   Fingerprint,
   Activity,
+  Skull,
+  Link2,
+  Scan,
+  Key,
 } from 'lucide-react'
 import { threatsApi } from '@/lib/api'
 import { StatCard } from '@/components/dashboard/StatCard'
@@ -34,18 +38,34 @@ const threatLevelColors: Record<string, { bg: string; text: string; border: stri
   none: { bg: 'bg-gray-500/10', text: 'text-gray-500', border: 'border-gray-500/30' },
 }
 
-// Provider icons and colors
+// Provider icons and colors (v2.9.5: 10 providers with tiers)
 const getProviderStyle = (name: string): { icon: React.ReactNode; color: string; bg: string } => {
   const styles: Record<string, { icon: React.ReactNode; color: string; bg: string }> = {
-    'AbuseIPDB': { icon: <ShieldAlert className="w-4 h-4" />, color: 'text-red-400', bg: 'bg-red-500/10' },
-    'VirusTotal': { icon: <Bug className="w-4 h-4" />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-    'AlienVault OTX': { icon: <Radar className="w-4 h-4" />, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-    'GreyNoise': { icon: <Radio className="w-4 h-4" />, color: 'text-gray-400', bg: 'bg-gray-500/10' },
+    // Tier 1: Unlimited (always queried)
     'IPSum': { icon: <List className="w-4 h-4" />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+    'AlienVault OTX': { icon: <Radar className="w-4 h-4" />, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+    'ThreatFox': { icon: <Skull className="w-4 h-4" />, color: 'text-rose-400', bg: 'bg-rose-500/10' },
+    'URLhaus': { icon: <Link2 className="w-4 h-4" />, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+    'Shodan InternetDB': { icon: <Scan className="w-4 h-4" />, color: 'text-teal-400', bg: 'bg-teal-500/10' },
+    // Tier 2: Moderate limits (queried on suspicion)
+    'AbuseIPDB': { icon: <ShieldAlert className="w-4 h-4" />, color: 'text-red-400', bg: 'bg-red-500/10' },
+    'GreyNoise': { icon: <Radio className="w-4 h-4" />, color: 'text-gray-400', bg: 'bg-gray-500/10' },
+    // Tier 3: Limited (queried on high suspicion)
+    'VirusTotal': { icon: <Bug className="w-4 h-4" />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
     'CriminalIP': { icon: <Fingerprint className="w-4 h-4" />, color: 'text-orange-400', bg: 'bg-orange-500/10' },
     'Pulsedive': { icon: <Activity className="w-4 h-4" />, color: 'text-green-400', bg: 'bg-green-500/10' },
   }
   return styles[name] || { icon: <Shield className="w-4 h-4" />, color: 'text-gray-400', bg: 'bg-gray-500/10' }
+}
+
+// Tier badge colors
+const getTierBadge = (tier: number | undefined): { label: string; color: string } => {
+  switch (tier) {
+    case 1: return { label: 'T1', color: 'bg-green-500/20 text-green-400' }
+    case 2: return { label: 'T2', color: 'bg-yellow-500/20 text-yellow-400' }
+    case 3: return { label: 'T3', color: 'bg-red-500/20 text-red-400' }
+    default: return { label: '', color: '' }
+  }
 }
 
 export function AdvancedThreat() {
@@ -213,27 +233,54 @@ export function AdvancedThreat() {
         </div>
       )}
 
-      {/* Providers Status */}
+      {/* Providers Status (v2.9.5: 10 providers with cascade tiers) */}
       <div className="bg-card rounded-xl border p-4">
-        <h3 className="text-sm font-medium text-muted-foreground mb-3">Threat Intelligence Providers</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Threat Intelligence Providers</h3>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-green-500"></span> T1: Unlimited
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-yellow-500"></span> T2: Moderate
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-red-500"></span> T3: Limited
+            </span>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-3">
           {providers.map((provider) => {
             const style = getProviderStyle(provider.name)
+            const tierBadge = getTierBadge(provider.tier)
             const isActive = provider.configured
             return (
               <div
                 key={provider.name}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors',
+                  'flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors group relative',
                   isActive
                     ? `${style.bg} ${style.color} border-current/20`
                     : 'bg-muted/50 text-muted-foreground border-transparent opacity-50'
                 )}
+                title={provider.description || provider.name}
               >
+                {/* Tier Badge */}
+                {tierBadge.label && (
+                  <span className={cn('text-[10px] font-bold px-1 rounded', tierBadge.color)}>
+                    {tierBadge.label}
+                  </span>
+                )}
                 <span className={isActive ? style.color : 'text-muted-foreground'}>
                   {style.icon}
                 </span>
                 <span className="text-sm font-medium">{provider.name}</span>
+                {/* API Key indicator */}
+                {provider.requires_key && !isActive && (
+                  <span title="Requires API key">
+                    <Key className="w-3 h-3 text-amber-500" />
+                  </span>
+                )}
                 {isActive ? (
                   <CheckCircle className="w-3 h-3 text-green-500" />
                 ) : (
@@ -242,13 +289,17 @@ export function AdvancedThreat() {
               </div>
             )
           })}
-          {stats?.cache_stats && (
-            <div className="ml-auto flex items-center text-xs text-muted-foreground">
+        </div>
+        {/* Cache stats */}
+        {stats?.cache_stats && (
+          <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
+            <span>Cascade mode: Tier 1 → Tier 2 (score≥30) → Tier 3 (score≥60)</span>
+            <span>
               Cache: {stats.cache_stats.size} entries |
               Hit rate: {(stats.cache_stats.hit_rate * 100).toFixed(1)}%
-            </div>
-          )}
-        </div>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Level Filter */}

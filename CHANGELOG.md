@@ -4,6 +4,160 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.9.5] - 2026-01-08
+
+### API External Extension
+
+Extension majeure des sources de threat intelligence avec 3 nouveaux providers et un système de cascade intelligent pour économiser les quotas API.
+
+---
+
+### 🔌 Nouveaux Providers (Tier 1 - Unlimited)
+
+3 nouveaux providers gratuits et sans limite ajoutés au système d'agrégation :
+
+| Provider | Source | Description |
+|----------|--------|-------------|
+| **ThreatFox** | abuse.ch | Détection C2/malware IOCs |
+| **URLhaus** | abuse.ch | Base de données URLs malveillantes |
+| **Shodan InternetDB** | Shodan | Reconnaissance passive (ports, vulns, tags) |
+
+#### ThreatFox (abuse.ch)
+- Détection d'Indicators of Compromise (IOCs)
+- Identification des serveurs C2 (Command & Control)
+- Association avec familles de malware connues
+- Tags et références aux rapports de menace
+
+#### URLhaus (abuse.ch)
+- Vérification des hosts hébergeant des URLs malveillantes
+- Détection de malware downloads et phishing
+- Statut blacklists Spamhaus/SURBL
+- Comptage URLs actives vs totales
+
+#### Shodan InternetDB
+- Ports ouverts et services exposés
+- Vulnérabilités connues (CVEs)
+- Tags de classification (VPN, Proxy, Tor, Honeypot)
+- CPEs (Common Platform Enumeration)
+- Score basé sur ports suspects et vulnérabilités critiques
+
+---
+
+### 🔄 Système de Cascade (Tiered API Querying)
+
+Nouveau système intelligent de cascade pour économiser les quotas API tout en maintenant une détection efficace.
+
+#### Architecture des Tiers
+
+| Tier | Providers | Limite | Quand Interrogé |
+|------|-----------|--------|-----------------|
+| **Tier 1** | IPSum, OTX, ThreatFox, URLhaus, Shodan IDB | Unlimited | Toujours |
+| **Tier 2** | AbuseIPDB, GreyNoise | ~1000/jour | Score T1 ≥ 30 ou indicateurs critiques |
+| **Tier 3** | VirusTotal, CriminalIP, Pulsedive | ~500/jour | Score T2 ≥ 60 ou indicateurs haute-risque |
+
+#### Déclencheurs de Cascade
+
+**Tier 1 → Tier 2** (au moins un):
+- Score intermédiaire ≥ 30
+- IOC trouvé dans ThreatFox (C2/malware)
+- URLs malveillantes actives dans URLhaus
+- Présence dans 5+ blocklists
+- Vulnérabilités critiques détectées (Log4Shell, ProxyLogon, etc.)
+
+**Tier 2 → Tier 3** (au moins un):
+- Score intermédiaire ≥ 60
+- Classification "malicious" par GreyNoise
+- Score AbuseIPDB ≥ 50
+- C2 confirmé avec présence blocklists ≥ 3
+
+#### Configuration
+
+```bash
+# Cascade settings (defaults)
+CASCADE_ENABLED=true
+CASCADE_TIER2_THRESHOLD=30
+CASCADE_TIER3_THRESHOLD=60
+```
+
+#### Économies de Quota Estimées
+| Scénario | Sans Cascade | Avec Cascade | Économie |
+|----------|--------------|--------------|----------|
+| IP bénigne | 10 requêtes | 5 requêtes | 50% |
+| IP suspecte | 10 requêtes | 7 requêtes | 30% |
+| IP malveillante | 10 requêtes | 10 requêtes | 0% |
+| **Trafic moyen** | 100% | ~30% | **~70%** |
+
+---
+
+### 🖼️ Favicon
+
+Ajout d'un favicon SVG avec design géométrique représentant un œil stylisé (thème sécurité/surveillance).
+
+---
+
+### 🎨 UI Updates
+
+#### Providers Display
+- Affichage par tiers avec badges colorés (T1=vert, T2=jaune, T3=rouge)
+- Légende des tiers dans l'en-tête
+- Indicateur de clé API requise (icône cadenas)
+- Tooltip avec description du provider
+- Info cascade mode dans le footer
+
+#### Nouveaux Icons Providers
+| Provider | Icône |
+|----------|-------|
+| ThreatFox | 💀 Skull |
+| URLhaus | 🔗 Link |
+| Shodan InternetDB | 📡 Scan |
+
+---
+
+### 📊 Providers (Total: 10)
+
+| Provider | Tier | API Key | Description |
+|----------|------|---------|-------------|
+| IPSum | 1 | ❌ | Blocklists agrégées (30+ sources) |
+| AlienVault OTX | 1 | ✅ | Threat context & IOCs |
+| ThreatFox | 1 | ❌ | abuse.ch C2/malware IOCs |
+| URLhaus | 1 | ❌ | abuse.ch malicious URLs |
+| Shodan InternetDB | 1 | ❌ | Passive reconnaissance |
+| AbuseIPDB | 2 | ✅ | IP abuse reports & confidence |
+| GreyNoise | 2 | ✅ | Benign scanner detection (FP) |
+| VirusTotal | 3 | ✅ | Multi-AV consensus |
+| CriminalIP | 3 | ✅ | C2/VPN/Proxy detection |
+| Pulsedive | 3 | ✅ | IOC correlation |
+
+---
+
+### 🔧 Backend Changes
+
+#### New Files
+- `backend/internal/adapter/external/threatintel/threatfox.go` - ThreatFox client
+- `backend/internal/adapter/external/threatintel/urlhaus.go` - URLhaus client
+- `backend/internal/adapter/external/threatintel/shodan_internetdb.go` - Shodan IDB client
+- `frontend/public/favicon.svg` - Eye logo favicon
+
+#### Modified Files
+- `backend/internal/adapter/external/threatintel/aggregator.go` - Cascade system
+- `backend/internal/config/config.go` - Cascade config
+- `backend/cmd/api/main.go` - Provider initialization
+- `frontend/src/pages/AdvancedThreat.tsx` - Provider display with tiers
+- `frontend/src/types/index.ts` - ThreatProvider type
+
+---
+
+### ⚙️ New Environment Variables
+
+```bash
+# Cascade Configuration (v2.9.5)
+CASCADE_ENABLED=true           # Enable tiered cascade (default: true)
+CASCADE_TIER2_THRESHOLD=30     # Score to trigger Tier 2 (default: 30)
+CASCADE_TIER3_THRESHOLD=60     # Score to trigger Tier 3 (default: 60)
+```
+
+---
+
 ## [2.9.0] - 2026-01-07
 
 ### Licensing System & OSINT Proxy (Kill Switch)

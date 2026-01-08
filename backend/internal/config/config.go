@@ -81,17 +81,24 @@ type SophosConfig struct {
 }
 
 type ThreatIntelConfig struct {
-	// Core providers
-	AbuseIPDBKey  string
+	// Tier 2 providers (moderate limits)
+	AbuseIPDBKey string
+	GreyNoiseKey string
+	// Tier 3 providers (limited)
 	VirusTotalKey string
-	AlienVaultKey string
-	// v1.6 providers
-	GreyNoiseKey  string
 	CriminalIPKey string
 	PulsediveKey  string
-	// IPSum doesn't need API key (public GitHub data)
+	// Tier 1: OTX needs key, others (IPSum, ThreatFox, URLhaus, ShodanIDB) don't
+	AlienVaultKey string
+
+	// Cache settings
 	CacheTTL       time.Duration
 	RateLimitDelay time.Duration
+
+	// v2.9.5: Cascade configuration
+	CascadeEnabled    bool // Enable tiered cascade (saves API quota)
+	Tier2Threshold    int  // Score threshold to query Tier 2 (default: 30)
+	Tier3Threshold    int  // Score threshold to query Tier 3 (default: 60)
 }
 
 type JWTConfig struct {
@@ -157,16 +164,22 @@ func Load() (*Config, error) {
 			Timeout:        viper.GetDuration("SOPHOS_TIMEOUT"),
 		},
 		ThreatIntel: ThreatIntelConfig{
-			// Core providers
-			AbuseIPDBKey:  viper.GetString("ABUSEIPDB_API_KEY"),
+			// Tier 2 providers (moderate limits)
+			AbuseIPDBKey: viper.GetString("ABUSEIPDB_API_KEY"),
+			GreyNoiseKey: viper.GetString("GREYNOISE_API_KEY"),
+			// Tier 3 providers (limited)
 			VirusTotalKey: viper.GetString("VIRUSTOTAL_API_KEY"),
+			CriminalIPKey: viper.GetString("CRIMINALIP_API_KEY"),
+			PulsediveKey:  viper.GetString("PULSEDIVE_API_KEY"),
+			// Tier 1: only OTX needs key
 			AlienVaultKey: viper.GetString("ALIENVAULT_API_KEY"),
-			// v1.6 providers
-			GreyNoiseKey:   viper.GetString("GREYNOISE_API_KEY"),
-			CriminalIPKey:  viper.GetString("CRIMINALIP_API_KEY"),
-			PulsediveKey:   viper.GetString("PULSEDIVE_API_KEY"),
+			// Cache settings
 			CacheTTL:       viper.GetDuration("THREAT_INTEL_CACHE_TTL"),
 			RateLimitDelay: viper.GetDuration("THREAT_INTEL_RATE_LIMIT"),
+			// v2.9.5: Cascade configuration
+			CascadeEnabled: viper.GetBool("CASCADE_ENABLED"),
+			Tier2Threshold: viper.GetInt("CASCADE_TIER2_THRESHOLD"),
+			Tier3Threshold: viper.GetInt("CASCADE_TIER3_THRESHOLD"),
 		},
 		JWT: JWTConfig{
 			Secret: viper.GetString("JWT_SECRET"),
@@ -232,16 +245,22 @@ func bindEnvVars() {
 	viper.BindEnv("SOPHOS_PERMANENT_GROUP")
 	viper.BindEnv("SOPHOS_TIMEOUT")
 
-	// Threat Intel - Core providers
+	// Threat Intel - Tier 2 providers (moderate limits)
 	viper.BindEnv("ABUSEIPDB_API_KEY")
-	viper.BindEnv("VIRUSTOTAL_API_KEY")
-	viper.BindEnv("ALIENVAULT_API_KEY")
-	// Threat Intel - v1.6 providers
 	viper.BindEnv("GREYNOISE_API_KEY")
+	// Threat Intel - Tier 3 providers (limited)
+	viper.BindEnv("VIRUSTOTAL_API_KEY")
 	viper.BindEnv("CRIMINALIP_API_KEY")
 	viper.BindEnv("PULSEDIVE_API_KEY")
+	// Threat Intel - Tier 1 (only OTX needs key)
+	viper.BindEnv("ALIENVAULT_API_KEY")
+	// Threat Intel - Cache settings
 	viper.BindEnv("THREAT_INTEL_CACHE_TTL")
 	viper.BindEnv("THREAT_INTEL_RATE_LIMIT")
+	// Threat Intel - v2.9.5 Cascade configuration
+	viper.BindEnv("CASCADE_ENABLED")
+	viper.BindEnv("CASCADE_TIER2_THRESHOLD")
+	viper.BindEnv("CASCADE_TIER3_THRESHOLD")
 
 	// JWT
 	viper.BindEnv("JWT_SECRET")
@@ -301,6 +320,10 @@ func setDefaults() {
 	// Threat Intel defaults
 	viper.SetDefault("THREAT_INTEL_CACHE_TTL", 24*time.Hour)
 	viper.SetDefault("THREAT_INTEL_RATE_LIMIT", 200*time.Millisecond)
+	// v2.9.5: Cascade defaults (enabled by default to save API quota)
+	viper.SetDefault("CASCADE_ENABLED", true)
+	viper.SetDefault("CASCADE_TIER2_THRESHOLD", 30)  // Query Tier 2 if score >= 30
+	viper.SetDefault("CASCADE_TIER3_THRESHOLD", 60)  // Query Tier 3 if score >= 60
 
 	// JWT defaults
 	viper.SetDefault("JWT_EXPIRY", 24*time.Hour)
