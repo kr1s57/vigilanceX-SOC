@@ -117,6 +117,14 @@ const defaultPluginConfigs: PluginConfig[] = [
     ],
   },
   {
+    id: 'crowdsec',
+    name: 'CrowdSec',
+    type: 'threat_intel',
+    fields: [
+      { key: 'CROWDSEC_API_KEY', label: 'CTI API Key', type: 'password', value: '', placeholder: 'Enter CrowdSec CTI API key...' },
+    ],
+  },
+  {
     id: 'criminalip',
     name: 'Criminal IP',
     type: 'threat_intel',
@@ -302,9 +310,13 @@ export function Settings() {
       'VirusTotal': 'virustotal',
       'AlienVault OTX': 'alienvault',
       'GreyNoise': 'greynoise',
+      'CrowdSec': 'crowdsec', // v2.9.6
       'Criminal IP': 'criminalip',
       'Pulsedive': 'pulsedive',
       'IPSum': null as unknown as string, // No API key needed
+      'ThreatFox': null as unknown as string, // No API key needed
+      'URLhaus': null as unknown as string, // No API key needed
+      'Shodan InternetDB': null as unknown as string, // No API key needed
     }
     return nameMap[name] || null
   }
@@ -944,7 +956,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v2.9.0</p>
+        <p>VIGILANCE X v2.9.6</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

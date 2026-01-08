@@ -4,6 +4,111 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.9.6] - 2026-01-08
+
+### CrowdSec CTI Integration
+
+Ajout de CrowdSec CTI comme 11ème provider de threat intelligence.
+
+---
+
+### 🔌 Nouveau Provider (Tier 2)
+
+| Provider | Source | Limite | Description |
+|----------|--------|--------|-------------|
+| **CrowdSec CTI** | CrowdSec | 50 req/jour | Community-sourced CTI, subnet reputation, MITRE ATT&CK |
+
+#### CrowdSec - Fonctionnalités Uniques
+
+- **Réputation Subnet /24** : Évalue la réputation du sous-réseau entier
+- **Background Noise Score** : Score 0-10 quantifiant le bruit de fond internet
+- **Multi-Timeframe Scoring** : Scores last_day, last_week, last_month, overall
+- **MITRE ATT&CK Mapping** : Association des techniques d'attaque
+- **Behaviors** : Classification des comportements observés
+- **False Positive Classification** : Identification CDN, VPN, services connus
+
+#### Score Normalisé (0-100)
+
+Le score CrowdSec est calculé en fonction de:
+- Réputation de base (malicious=70, suspicious=50, known=30, unknown=10, safe=0)
+- Background Noise Score ≥7 (+15pts), ≥4 (+10pts)
+- IP Range /24 Reputation (malicious +10, suspicious +5)
+- IP Range Score ≥4 (+10), ≥2 (+5)
+- Nombre de behaviors (+3 pts/behavior, max 15)
+- Bonus pour behaviors agressifs (exploit +10, bruteforce +8, scan +3)
+- MITRE Techniques (+2 pts/technique, max 10)
+- CVEs associés (+3 pts/CVE, max 10)
+- Ajustement confiance (high=100%, medium=90%, low=70%)
+- Réduction false positives (x0.6 si FP identifié)
+
+#### Nouveaux Champs de Réponse API
+
+```json
+{
+  "crowdsec": {
+    "found": true,
+    "reputation": "malicious",
+    "background_noise_score": 8,
+    "ip_range_score": 4,
+    "behaviors": ["ssh:bruteforce", "http:scan"],
+    "mitre_techniques": ["T1110", "T1046"],
+    "normalized_score": 85
+  },
+  "background_noise": 8,
+  "subnet_score": 4,
+  "mitre_techniques": ["T1110", "T1046"],
+  "behaviors": ["ssh:bruteforce", "http:scan"]
+}
+```
+
+---
+
+### 📊 Rebalancement des Poids (11 Providers)
+
+```
+Tier 1 (Unlimited):
+  IPSum:         0.11  (blocklists aggregation)
+  OTX:           0.09  (threat context)
+  ThreatFox:     0.11  (C2/malware IOCs)
+  URLhaus:       0.09  (malicious URLs)
+  ShodanIDB:     0.07  (passive recon)
+
+Tier 2 (Moderate - Score≥30):
+  AbuseIPDB:     0.14  (behavioral reports)
+  GreyNoise:     0.11  (FP reduction)
+  CrowdSec:      0.10  (community CTI) [NEW]
+
+Tier 3 (Limited - Score≥60):
+  VirusTotal:    0.09  (multi-AV consensus)
+  CriminalIP:    0.05  (infrastructure detection)
+  Pulsedive:     0.04  (IOC correlation)
+```
+
+---
+
+### ⚙️ Configuration
+
+```bash
+# .env - CrowdSec CTI API Key
+# Obtenir sur https://app.crowdsec.net/cti
+CROWDSEC_API_KEY=your_api_key_here
+```
+
+---
+
+### 🔧 Fichiers Modifiés
+
+| Fichier | Modification |
+|---------|--------------|
+| `backend/internal/adapter/external/threatintel/crowdsec.go` | Nouveau client CrowdSec |
+| `backend/internal/adapter/external/threatintel/aggregator.go` | Intégration Tier 2, poids, queryTier2 |
+| `backend/internal/config/config.go` | CrowdSecKey config |
+| `backend/cmd/api/main.go` | Passage CrowdSecKey |
+| `frontend/src/pages/Settings.tsx` | Plugin config CrowdSec |
+| `docker/.env` | CROWDSEC_API_KEY |
+
+---
+
 ## [2.9.5] - 2026-01-08
 
 ### API External Extension

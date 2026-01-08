@@ -17,6 +17,7 @@ type ThreatIntelProvider interface {
 // v1.6: Added GreyNoise, IPSum, CriminalIP, Pulsedive
 // v2.9: Added proxy mode support
 // v2.9.5: Added cascade tiers, ThreatFox, URLhaus, Shodan InternetDB
+// v2.9.6: Added CrowdSec CTI
 type Aggregator struct {
 	// Tier 1 providers (unlimited - always query)
 	ipSum      *IPSumClient            // Aggregated blocklists (no API key)
@@ -26,8 +27,9 @@ type Aggregator struct {
 	shodanIDB  *ShodanInternetDBClient // Shodan passive data (no API key)
 
 	// Tier 2 providers (moderate limits - query if Tier1 score >= threshold)
-	abuseIPDB *AbuseIPDBClient // ~1000/day
-	greyNoise *GreyNoiseClient // ~500/day, reduces false positives
+	abuseIPDB *AbuseIPDBClient  // ~1000/day
+	greyNoise *GreyNoiseClient  // ~500/day, reduces false positives
+	crowdSec  *CrowdSecClient   // v2.9.6: ~50/day, community-sourced, subnet reputation
 
 	// Tier 3 providers (limited - query only if high suspicion)
 	virusTotal *VirusTotalClient // ~500/day
@@ -53,7 +55,7 @@ type CascadeConfig struct {
 }
 
 // AggregationWeights defines the weight of each source in final score
-// v2.9.5: Rebalanced weights for 10 providers with cascade tiers
+// v2.9.6: Rebalanced weights for 11 providers with cascade tiers
 type AggregationWeights struct {
 	// Tier 1 (unlimited)
 	IPSum     float64 // Blocklist aggregation
@@ -64,6 +66,7 @@ type AggregationWeights struct {
 	// Tier 2 (moderate)
 	AbuseIPDB float64 // Behavior-based reputation
 	GreyNoise float64 // False positive reduction
+	CrowdSec  float64 // v2.9.6: Community-sourced, subnet reputation
 	// Tier 3 (limited)
 	VirusTotal float64 // Multi-AV consensus
 	CriminalIP float64 // Infrastructure detection
@@ -71,22 +74,23 @@ type AggregationWeights struct {
 }
 
 // DefaultWeights returns the default aggregation weights
-// v2.9.5: 10 providers, weights sum to ~1.0
+// v2.9.6: 11 providers, weights rebalanced
 func DefaultWeights() AggregationWeights {
 	return AggregationWeights{
 		// Tier 1 - Always queried, moderate weight each
-		IPSum:     0.12,
-		OTX:       0.10,
-		ThreatFox: 0.12, // High value for C2/malware detection
-		URLhaus:   0.10,
-		ShodanIDB: 0.08, // Contextual data
+		IPSum:     0.11,
+		OTX:       0.09,
+		ThreatFox: 0.11, // High value for C2/malware detection
+		URLhaus:   0.09,
+		ShodanIDB: 0.07, // Contextual data
 		// Tier 2 - Queried on suspicion
-		AbuseIPDB: 0.15, // Strong behavioral signal
-		GreyNoise: 0.12, // Important for FP reduction
+		AbuseIPDB: 0.14, // Strong behavioral signal
+		GreyNoise: 0.11, // Important for FP reduction
+		CrowdSec:  0.10, // v2.9.6: Community data, subnet reputation (unique)
 		// Tier 3 - Queried on high suspicion
-		VirusTotal: 0.10,
-		CriminalIP: 0.06,
-		Pulsedive:  0.05,
+		VirusTotal: 0.09,
+		CriminalIP: 0.05,
+		Pulsedive:  0.04,
 	}
 }
 
@@ -100,11 +104,12 @@ func DefaultCascadeConfig() CascadeConfig {
 }
 
 // AggregatorConfig holds configuration for the aggregator
-// v2.9.5: Added cascade configuration and new providers
+// v2.9.6: Added CrowdSec
 type AggregatorConfig struct {
 	// Tier 2 providers (need API keys)
-	AbuseIPDBKey  string
-	GreyNoiseKey  string
+	AbuseIPDBKey string
+	GreyNoiseKey string
+	CrowdSecKey  string // v2.9.6: CrowdSec CTI API key
 	// Tier 3 providers (need API keys)
 	VirusTotalKey string
 	CriminalIPKey string
@@ -119,7 +124,7 @@ type AggregatorConfig struct {
 }
 
 // NewAggregator creates a new threat intel aggregator
-// v2.9.5: With cascade tier support
+// v2.9.6: With cascade tier support and CrowdSec
 func NewAggregator(cfg AggregatorConfig) *Aggregator {
 	weights := DefaultWeights()
 	if cfg.Weights != nil {
@@ -155,6 +160,9 @@ func NewAggregator(cfg AggregatorConfig) *Aggregator {
 		greyNoise: NewGreyNoiseClient(GreyNoiseConfig{
 			APIKey: cfg.GreyNoiseKey,
 		}),
+		crowdSec: NewCrowdSecClient(CrowdSecConfig{
+			APIKey: cfg.CrowdSecKey,
+		}),
 
 		// Tier 3 providers (limited)
 		virusTotal: NewVirusTotalClient(VirusTotalConfig{
@@ -189,7 +197,7 @@ func NewAggregatorWithProxy(proxyClient *OSINTProxyClient, cacheTTL time.Duratio
 }
 
 // AggregatedResult contains the combined threat intelligence
-// v2.9.5: Added ThreatFox, URLhaus, ShodanIDB results and cascade info
+// v2.9.6: Added CrowdSec results and unique fields
 type AggregatedResult struct {
 	IP              string         `json:"ip"`
 	AggregatedScore int            `json:"aggregated_score"` // 0-100 weighted score
@@ -208,6 +216,7 @@ type AggregatedResult struct {
 	// Tier 2 provider results (queried on suspicion)
 	AbuseIPDB *AbuseIPDBResult `json:"abuseipdb,omitempty"`
 	GreyNoise *GreyNoiseResult `json:"greynoise,omitempty"`
+	CrowdSec  *CrowdSecResult  `json:"crowdsec,omitempty"` // v2.9.6: CrowdSec CTI
 
 	// Tier 3 provider results (queried on high suspicion)
 	VirusTotal *VirusTotalResult `json:"virustotal,omitempty"`
@@ -224,12 +233,16 @@ type AggregatedResult struct {
 	Campaigns       []string `json:"campaigns,omitempty"`
 	Vulnerabilities []string `json:"vulnerabilities,omitempty"` // v2.9.5: From ShodanIDB
 	OpenPorts       []int    `json:"open_ports,omitempty"`      // v2.9.5: From ShodanIDB
+	MitreTechniques []string `json:"mitre_techniques,omitempty"` // v2.9.6: From CrowdSec
+	Behaviors       []string `json:"behaviors,omitempty"`        // v2.9.6: From CrowdSec
 	IsTor           bool     `json:"is_tor"`
 	IsVPN           bool     `json:"is_vpn"`
 	IsProxy         bool     `json:"is_proxy"`
-	IsBenign        bool     `json:"is_benign"`      // GreyNoise benign flag
-	IsC2            bool     `json:"is_c2"`          // v2.9.5: From ThreatFox
-	InBlocklists    int      `json:"in_blocklists"`  // IPSum count
+	IsBenign        bool     `json:"is_benign"`                 // GreyNoise benign flag
+	IsC2            bool     `json:"is_c2"`                     // v2.9.5: From ThreatFox
+	InBlocklists    int      `json:"in_blocklists"`             // IPSum count
+	BackgroundNoise int      `json:"background_noise,omitempty"` // v2.9.6: From CrowdSec (0-10)
+	SubnetScore     int      `json:"subnet_score,omitempty"`     // v2.9.6: From CrowdSec IP range score
 	LastChecked     time.Time `json:"last_checked"`
 	CacheHit        bool     `json:"cache_hit"`
 }
@@ -547,6 +560,55 @@ func (a *Aggregator) queryTier2(ctx context.Context, ip string, result *Aggregat
 		}()
 	}
 
+	// CrowdSec CTI (v2.9.6)
+	if a.crowdSec != nil && a.crowdSec.IsConfigured() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			csResult, err := a.crowdSec.CheckIP(ctx, ip)
+			mu.Lock()
+			defer mu.Unlock()
+			source := SourceResult{Provider: "CrowdSec", Weight: a.weights.CrowdSec, Available: err == nil, Tier: 2}
+			if err != nil {
+				source.Error = err.Error()
+			} else {
+				result.CrowdSec = csResult
+				source.Score = csResult.NormalizedScore
+				source.WeightedScore = float64(csResult.NormalizedScore) * a.weights.CrowdSec
+				if csResult.Found {
+					// Unique CrowdSec data
+					result.BackgroundNoise = csResult.BackgroundNoiseScore
+					result.SubnetScore = csResult.IPRangeScore
+					result.MitreTechniques = append(result.MitreTechniques, csResult.MitreTechniques...)
+					result.Behaviors = append(result.Behaviors, csResult.Behaviors...)
+					// Country from CrowdSec if not already set
+					if result.Country == "" && csResult.Country != "" {
+						result.Country = csResult.Country
+					}
+					// ASN from CrowdSec if not already set
+					if result.ASN == "" && csResult.ASName != "" {
+						result.ASN = csResult.ASName
+					}
+					// Tags based on reputation
+					if csResult.Reputation == "malicious" {
+						result.Tags = append(result.Tags, "crowdsec_malicious")
+					} else if csResult.Reputation == "suspicious" {
+						result.Tags = append(result.Tags, "crowdsec_suspicious")
+					}
+					// High background noise is notable
+					if csResult.BackgroundNoiseScore >= 7 {
+						result.Tags = append(result.Tags, "high_background_noise")
+					}
+					// Add behaviors as tags
+					for _, b := range csResult.Behaviors {
+						result.Tags = append(result.Tags, "behavior:"+b)
+					}
+				}
+			}
+			result.Sources = append(result.Sources, source)
+		}()
+	}
+
 	wg.Wait()
 }
 
@@ -782,6 +844,9 @@ func (a *Aggregator) GetConfiguredProviders() []string {
 	if a.greyNoise != nil && a.greyNoise.IsConfigured() {
 		providers = append(providers, "GreyNoise")
 	}
+	if a.crowdSec != nil && a.crowdSec.IsConfigured() {
+		providers = append(providers, "CrowdSec")
+	}
 
 	// Tier 3 providers (limited)
 	if a.virusTotal != nil && a.virusTotal.IsConfigured() {
@@ -818,6 +883,7 @@ func (a *Aggregator) GetProviderStatus() []ProviderStatus {
 		// Tier 2: Moderate limits (queried on suspicion)
 		{Name: "AbuseIPDB", Configured: a.abuseIPDB != nil && a.abuseIPDB.IsConfigured(), Description: "IP abuse reports & confidence scoring", Tier: 2, RequiresKey: true},
 		{Name: "GreyNoise", Configured: a.greyNoise != nil && a.greyNoise.IsConfigured(), Description: "Benign scanner identification (FP reduction)", Tier: 2, RequiresKey: true},
+		{Name: "CrowdSec", Configured: a.crowdSec != nil && a.crowdSec.IsConfigured(), Description: "Community-sourced CTI, subnet reputation, MITRE ATT&CK", Tier: 2, RequiresKey: true},
 
 		// Tier 3: Limited providers (queried on high suspicion)
 		{Name: "VirusTotal", Configured: a.virusTotal != nil && a.virusTotal.IsConfigured(), Description: "Multi-AV consensus & reputation", Tier: 3, RequiresKey: true},

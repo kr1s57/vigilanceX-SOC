@@ -126,11 +126,12 @@ func main() {
 		threatAggregator = threatintel.NewAggregatorWithProxy(proxyClient, cfg.ThreatIntel.CacheTTL)
 		logger.Info("OSINT Proxy mode enabled", "server", cfg.OSINTProxy.ServerURL)
 	} else {
-		// Local providers mode (v2.9.5: 10 providers with cascade tiers)
+		// Local providers mode (v2.9.6: 11 providers with cascade tiers)
 		threatAggregator = threatintel.NewAggregator(threatintel.AggregatorConfig{
 			// Tier 2 providers (moderate limits)
 			AbuseIPDBKey: cfg.ThreatIntel.AbuseIPDBKey,
 			GreyNoiseKey: cfg.ThreatIntel.GreyNoiseKey,
+			CrowdSecKey:  cfg.ThreatIntel.CrowdSecKey, // v2.9.6: CrowdSec CTI (50/day)
 			// Tier 3 providers (limited)
 			VirusTotalKey: cfg.ThreatIntel.VirusTotalKey,
 			CriminalIPKey: cfg.ThreatIntel.CriminalIPKey,

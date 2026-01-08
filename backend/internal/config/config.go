@@ -84,6 +84,7 @@ type ThreatIntelConfig struct {
 	// Tier 2 providers (moderate limits)
 	AbuseIPDBKey string
 	GreyNoiseKey string
+	CrowdSecKey  string // v2.9.6: CrowdSec CTI API (50/day)
 	// Tier 3 providers (limited)
 	VirusTotalKey string
 	CriminalIPKey string
@@ -167,6 +168,7 @@ func Load() (*Config, error) {
 			// Tier 2 providers (moderate limits)
 			AbuseIPDBKey: viper.GetString("ABUSEIPDB_API_KEY"),
 			GreyNoiseKey: viper.GetString("GREYNOISE_API_KEY"),
+			CrowdSecKey:  viper.GetString("CROWDSEC_API_KEY"), // v2.9.6
 			// Tier 3 providers (limited)
 			VirusTotalKey: viper.GetString("VIRUSTOTAL_API_KEY"),
 			CriminalIPKey: viper.GetString("CRIMINALIP_API_KEY"),
@@ -248,6 +250,7 @@ func bindEnvVars() {
 	// Threat Intel - Tier 2 providers (moderate limits)
 	viper.BindEnv("ABUSEIPDB_API_KEY")
 	viper.BindEnv("GREYNOISE_API_KEY")
+	viper.BindEnv("CROWDSEC_API_KEY") // v2.9.6
 	// Threat Intel - Tier 3 providers (limited)
 	viper.BindEnv("VIRUSTOTAL_API_KEY")
 	viper.BindEnv("CRIMINALIP_API_KEY")
