@@ -281,7 +281,7 @@ export function Geoblocking() {
                 No rules configured. Click "Add Rule" to create one.
               </div>
             ) : (
-              rules.map((rule) => (
+              [...rules].sort((a, b) => b.score_modifier - a.score_modifier).map((rule) => (
                 <div key={rule.id} className="p-4 hover:bg-gray-750 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">

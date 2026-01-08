@@ -14,10 +14,13 @@ import {
   Users,
   LogOut,
   LucideIcon,
+  Key,
+  AlertCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLicense } from '@/contexts/LicenseContext'
 
 interface NavItem {
   name: string
@@ -45,6 +48,7 @@ export function Sidebar() {
   const navigate = useNavigate()
   const { settings } = useSettings()
   const { user, isAdmin, logout } = useAuth()
+  const { status: licenseStatus, isLicensed } = useLicense()
   const useColorIcons = settings.iconStyle === 'color'
 
   // Filter navigation based on user role
@@ -63,7 +67,23 @@ export function Sidebar() {
       <div className="h-16 flex items-center px-6 border-b border-border">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <Shield className="w-5 h-5 text-primary-foreground" />
+            {/* Geometric Eye - Abstract Iris */}
+            <svg
+              viewBox="0 0 24 24"
+              className="w-5 h-5 text-primary-foreground"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {/* Outer eye shape */}
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+              {/* Inner iris - geometric hexagon */}
+              <polygon points="12,8 15,10 15,14 12,16 9,14 9,10" />
+              {/* Center pupil */}
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+            </svg>
           </div>
           <div>
             <h1 className="font-bold text-lg">VIGILANCE X</h1>
@@ -102,8 +122,52 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Settings & User section */}
+      {/* License Status & Settings */}
       <div className="px-3 py-4 border-t border-border space-y-1">
+        {/* License Status Indicator */}
+        <div className={cn(
+          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm",
+          isLicensed
+            ? "bg-green-500/10 text-green-400"
+            : licenseStatus?.grace_mode
+              ? "bg-amber-500/10 text-amber-400"
+              : "bg-red-500/10 text-red-400"
+        )}>
+          {isLicensed ? (
+            <Key className="w-4 h-4" />
+          ) : (
+            <AlertCircle className="w-4 h-4" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-medium truncate">
+              {isLicensed
+                ? 'Licensed'
+                : licenseStatus?.grace_mode
+                  ? 'Grace Mode'
+                  : 'Unlicensed'}
+            </p>
+            {isLicensed && licenseStatus?.days_remaining !== undefined && (
+              <p className="text-xs opacity-75">
+                {licenseStatus.days_remaining} days remaining
+              </p>
+            )}
+            {licenseStatus?.grace_mode && (
+              <p className="text-xs opacity-75">
+                Server unreachable
+              </p>
+            )}
+          </div>
+          {isAdmin && (
+            <NavLink
+              to="/license"
+              className="p-1 hover:bg-white/10 rounded transition-colors"
+              title="Manage License"
+            >
+              <Settings className="w-3 h-3" />
+            </NavLink>
+          )}
+        </div>
+
         {/* Settings - Admin only */}
         {isAdmin && (
           <NavLink

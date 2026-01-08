@@ -3,6 +3,7 @@ import { Layout } from '@/components/layout/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import AdminRoute from '@/components/AdminRoute'
 import Login from '@/pages/Login'
+import LicenseActivation from '@/pages/LicenseActivation'
 import { Dashboard } from '@/pages/Dashboard'
 import { WafExplorer } from '@/pages/WafExplorer'
 import { AttacksAnalyzer } from '@/pages/AttacksAnalyzer'
@@ -21,6 +22,7 @@ function App() {
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<Login />} />
+      <Route path="/license" element={<LicenseActivation />} />
 
       {/* Protected routes - All authenticated users */}
       <Route

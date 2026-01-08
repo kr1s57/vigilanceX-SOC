@@ -368,7 +368,7 @@ func (c *Client) TestConnection(ctx context.Context) error {
 			ssh.PublicKeys(signer),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
+		Timeout:         3 * time.Second, // Fast timeout for connection test
 	}
 
 	addr := fmt.Sprintf("%s:%d", c.host, c.port)

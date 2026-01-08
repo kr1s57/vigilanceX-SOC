@@ -633,6 +633,54 @@ export const usersApi = {
   },
 }
 
+// License Types (v2.9)
+export interface LicenseStatus {
+  licensed: boolean
+  status: string
+  customer_name?: string
+  expires_at?: string
+  days_remaining?: number
+  grace_mode: boolean
+  features: string[]
+  hardware_id?: string
+}
+
+export interface LicenseActivateResponse {
+  success: boolean
+  message?: string
+  license?: LicenseStatus
+}
+
+export interface LicenseInfo extends LicenseStatus {
+  license_key?: string
+  max_firewalls?: number
+}
+
+// License API (v2.9)
+export const licenseApi = {
+  getStatus: async (): Promise<LicenseStatus> => {
+    const response = await api.get<LicenseStatus>('/license/status')
+    return response.data
+  },
+
+  activate: async (licenseKey: string): Promise<LicenseActivateResponse> => {
+    const response = await api.post<LicenseActivateResponse>('/license/activate', {
+      license_key: licenseKey
+    })
+    return response.data
+  },
+
+  getInfo: async (): Promise<LicenseInfo> => {
+    const response = await api.get<LicenseInfo>('/license/info')
+    return response.data
+  },
+
+  forceValidate: async (): Promise<LicenseActivateResponse> => {
+    const response = await api.post<LicenseActivateResponse>('/license/validate')
+    return response.data
+  },
+}
+
 // Soft Whitelist API (v2.0)
 export const softWhitelistApi = {
   // List all whitelisted IPs (optional filter by type)

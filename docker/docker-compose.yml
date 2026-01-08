@@ -90,6 +90,8 @@ services:
     volumes:
       - ../backend/scenarios:/app/scenarios:ro
       - ./ssh/id_rsa_xgs:/app/.ssh/id_rsa_xgs:ro
+      - backend_data:/app/data
+      - /etc/machine-id:/etc/machine-id:ro
     environment:
       APP_ENV: ${APP_ENV:-production}
       APP_PORT: 8080
@@ -134,6 +136,20 @@ services:
       # JWT
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: 24h
+
+      # v2.9: License System
+      LICENSE_ENABLED: ${LICENSE_ENABLED:-true}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL}
+      LICENSE_KEY: ${LICENSE_KEY:-}
+      LICENSE_HEARTBEAT_INTERVAL: ${LICENSE_HEARTBEAT_INTERVAL:-12h}
+      LICENSE_GRACE_PERIOD: ${LICENSE_GRACE_PERIOD:-72h}
+      LICENSE_STORE_PATH: /app/data/license.json
+
+      # v2.9: OSINT Proxy
+      OSINT_PROXY_ENABLED: ${OSINT_PROXY_ENABLED:-false}
+      OSINT_PROXY_URL: ${OSINT_PROXY_URL:-}
+      OSINT_PROXY_TIMEOUT: ${OSINT_PROXY_TIMEOUT:-30s}
+      OSINT_PROXY_RATE_LIMIT: ${OSINT_PROXY_RATE_LIMIT:-60}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -233,3 +249,4 @@ volumes:
   clickhouse_logs:
   redis_data:
   vector_data:
+  backend_data:

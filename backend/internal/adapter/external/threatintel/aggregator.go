@@ -15,6 +15,7 @@ type ThreatIntelProvider interface {
 
 // Aggregator combines multiple threat intelligence sources
 // v1.6: Added GreyNoise, IPSum, CriminalIP, Pulsedive
+// v2.9: Added proxy mode support
 type Aggregator struct {
 	// Core providers (API-based)
 	abuseIPDB  *AbuseIPDBClient
@@ -25,8 +26,11 @@ type Aggregator struct {
 	ipSum      *IPSumClient      // Aggregated blocklists (no API key needed)
 	criminalIP *CriminalIPClient // C2/VPN/Proxy detection
 	pulsedive  *PulsediveClient  // IOC correlation
-	cache      *ThreatCache
-	weights    AggregationWeights
+	// v2.9: Proxy support
+	proxyClient *OSINTProxyClient
+	useProxy    bool
+	cache       *ThreatCache
+	weights     AggregationWeights
 }
 
 // AggregationWeights defines the weight of each source in final score
@@ -106,8 +110,23 @@ func NewAggregator(cfg AggregatorConfig) *Aggregator {
 		pulsedive: NewPulsediveClient(PulsediveConfig{
 			APIKey: cfg.PulsediveKey,
 		}),
-		cache:   NewThreatCache(cacheTTL),
-		weights: weights,
+		cache:    NewThreatCache(cacheTTL),
+		weights:  weights,
+		useProxy: false,
+	}
+}
+
+// NewAggregatorWithProxy creates a new aggregator that routes queries through a proxy
+func NewAggregatorWithProxy(proxyClient *OSINTProxyClient, cacheTTL time.Duration) *Aggregator {
+	if cacheTTL == 0 {
+		cacheTTL = 24 * time.Hour
+	}
+
+	return &Aggregator{
+		proxyClient: proxyClient,
+		useProxy:    true,
+		cache:       NewThreatCache(cacheTTL),
+		weights:     DefaultWeights(),
 	}
 }
 
@@ -163,6 +182,31 @@ func (a *Aggregator) CheckIP(ctx context.Context, ip string) (*AggregatedResult,
 		return cached, nil
 	}
 
+	var result *AggregatedResult
+	var err error
+
+	// v2.9: Use proxy mode if enabled
+	if a.useProxy && a.proxyClient != nil {
+		result, err = a.proxyClient.CheckIP(ctx, ip)
+		if err != nil {
+			return nil, err
+		}
+		// Cache the result
+		a.cache.Set(ip, result)
+		return result, nil
+	}
+
+	// Local providers mode
+	result = a.checkIPLocally(ctx, ip)
+
+	// Cache the result
+	a.cache.Set(ip, result)
+
+	return result, nil
+}
+
+// checkIPLocally queries all local threat intel providers
+func (a *Aggregator) checkIPLocally(ctx context.Context, ip string) *AggregatedResult {
 	result := &AggregatedResult{
 		IP:          ip,
 		LastChecked: time.Now(),
@@ -470,10 +514,7 @@ func (a *Aggregator) CheckIP(ctx context.Context, ip string) (*AggregatedResult,
 	// Calculate aggregated score
 	a.calculateAggregatedScore(result)
 
-	// Cache the result
-	a.cache.Set(ip, result)
-
-	return result, nil
+	return result
 }
 
 // calculateAggregatedScore computes the weighted average score
@@ -530,26 +571,34 @@ func GetThreatLevel(score int) string {
 func (a *Aggregator) GetConfiguredProviders() []string {
 	var providers []string
 
-	if a.abuseIPDB.IsConfigured() {
+	// v2.9: Handle proxy mode
+	if a.useProxy {
+		if a.proxyClient != nil && a.proxyClient.IsConfigured() {
+			providers = append(providers, "OSINT Proxy")
+		}
+		return providers
+	}
+
+	if a.abuseIPDB != nil && a.abuseIPDB.IsConfigured() {
 		providers = append(providers, "AbuseIPDB")
 	}
-	if a.virusTotal.IsConfigured() {
+	if a.virusTotal != nil && a.virusTotal.IsConfigured() {
 		providers = append(providers, "VirusTotal")
 	}
-	if a.otx.IsConfigured() {
+	if a.otx != nil && a.otx.IsConfigured() {
 		providers = append(providers, "AlienVault OTX")
 	}
 	// v1.6 providers
-	if a.greyNoise.IsConfigured() {
+	if a.greyNoise != nil && a.greyNoise.IsConfigured() {
 		providers = append(providers, "GreyNoise")
 	}
-	if a.ipSum.IsConfigured() {
+	if a.ipSum != nil && a.ipSum.IsConfigured() {
 		providers = append(providers, "IPSum")
 	}
-	if a.criminalIP.IsConfigured() {
+	if a.criminalIP != nil && a.criminalIP.IsConfigured() {
 		providers = append(providers, "CriminalIP")
 	}
-	if a.pulsedive.IsConfigured() {
+	if a.pulsedive != nil && a.pulsedive.IsConfigured() {
 		providers = append(providers, "Pulsedive")
 	}
 
@@ -558,15 +607,27 @@ func (a *Aggregator) GetConfiguredProviders() []string {
 
 // GetProviderStatus returns detailed status of all providers
 func (a *Aggregator) GetProviderStatus() []ProviderStatus {
-	return []ProviderStatus{
-		{Name: "AbuseIPDB", Configured: a.abuseIPDB.IsConfigured(), Description: "IP abuse reports & confidence scoring"},
-		{Name: "VirusTotal", Configured: a.virusTotal.IsConfigured(), Description: "Multi-AV consensus & reputation"},
-		{Name: "AlienVault OTX", Configured: a.otx.IsConfigured(), Description: "Threat context & IOCs"},
-		{Name: "GreyNoise", Configured: a.greyNoise.IsConfigured(), Description: "Benign scanner identification (FP reduction)"},
-		{Name: "IPSum", Configured: a.ipSum.IsConfigured(), Description: "Aggregated blocklists (30+ sources)"},
-		{Name: "CriminalIP", Configured: a.criminalIP.IsConfigured(), Description: "C2/VPN/Proxy infrastructure detection"},
-		{Name: "Pulsedive", Configured: a.pulsedive.IsConfigured(), Description: "IOC correlation & threat actors"},
+	// v2.9: Handle proxy mode
+	if a.useProxy {
+		return []ProviderStatus{
+			{Name: "OSINT Proxy", Configured: a.proxyClient != nil && a.proxyClient.IsConfigured(), Description: "Centralized OSINT queries via license server"},
+		}
 	}
+
+	return []ProviderStatus{
+		{Name: "AbuseIPDB", Configured: a.abuseIPDB != nil && a.abuseIPDB.IsConfigured(), Description: "IP abuse reports & confidence scoring"},
+		{Name: "VirusTotal", Configured: a.virusTotal != nil && a.virusTotal.IsConfigured(), Description: "Multi-AV consensus & reputation"},
+		{Name: "AlienVault OTX", Configured: a.otx != nil && a.otx.IsConfigured(), Description: "Threat context & IOCs"},
+		{Name: "GreyNoise", Configured: a.greyNoise != nil && a.greyNoise.IsConfigured(), Description: "Benign scanner identification (FP reduction)"},
+		{Name: "IPSum", Configured: a.ipSum != nil && a.ipSum.IsConfigured(), Description: "Aggregated blocklists (30+ sources)"},
+		{Name: "CriminalIP", Configured: a.criminalIP != nil && a.criminalIP.IsConfigured(), Description: "C2/VPN/Proxy infrastructure detection"},
+		{Name: "Pulsedive", Configured: a.pulsedive != nil && a.pulsedive.IsConfigured(), Description: "IOC correlation & threat actors"},
+	}
+}
+
+// IsProxyMode returns true if the aggregator is using proxy mode
+func (a *Aggregator) IsProxyMode() bool {
+	return a.useProxy
 }
 
 // ProviderStatus represents the status of a provider

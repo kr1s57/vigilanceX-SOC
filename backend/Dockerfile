@@ -48,6 +48,9 @@ COPY --from=builder /build/reset-password /app/reset-password
 # Copy scenarios directory (for Detect2Ban)
 COPY --from=builder /build/scenarios /app/scenarios
 
+# Create data directory for license persistence (v2.9)
+RUN mkdir -p /app/data
+
 # Set ownership
 RUN chown -R vigilance:vigilance /app
 

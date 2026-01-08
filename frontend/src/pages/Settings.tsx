@@ -31,10 +31,13 @@ import {
   X,
   Key,
   Palette,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { threatsApi, bansApi, modsecApi, statusApi, configApi } from '@/lib/api'
+import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, type LicenseStatus } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ThreatProvider {
@@ -138,6 +141,29 @@ export function Settings() {
   const [loadingIntegrations, setLoadingIntegrations] = useState(true)
   const [saved, setSaved] = useState(false)
 
+  // License status state
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
+  const [loadingLicense, setLoadingLicense] = useState(true)
+
+  // Collapsible sections state
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+
+  const toggleSection = (sectionId: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }))
+  }
+
+  const toggleAllSections = (collapse: boolean) => {
+    const sections = ['display', 'dashboard', 'notifications', 'security', 'license', 'integrations']
+    setCollapsedSections(
+      sections.reduce((acc, section) => ({ ...acc, [section]: collapse }), {})
+    )
+  }
+
+  const allCollapsed = Object.values(collapsedSections).filter(Boolean).length >= 5
+
   // Plugin editor state
   const [editingPlugin, setEditingPlugin] = useState<PluginConfig | null>(null)
   const [pluginFormData, setPluginFormData] = useState<Record<string, string>>({})
@@ -191,6 +217,23 @@ export function Settings() {
     }
 
     fetchIntegrations()
+  }, [])
+
+  // Fetch license status
+  useEffect(() => {
+    async function fetchLicenseStatus() {
+      setLoadingLicense(true)
+      try {
+        const status = await licenseApi.getStatus()
+        setLicenseStatus(status)
+      } catch (err) {
+        console.error('Failed to fetch license status:', err)
+      } finally {
+        setLoadingLicense(false)
+      }
+    }
+
+    fetchLicenseStatus()
   }, [])
 
   // Show saved indicator
@@ -285,6 +328,13 @@ export function Settings() {
             </span>
           )}
           <button
+            onClick={() => toggleAllSections(!allCollapsed)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+          >
+            <ChevronsUpDown className="w-4 h-4" />
+            {allCollapsed ? 'Expand all' : 'Collapse all'}
+          </button>
+          <button
             onClick={resetSettings}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
           >
@@ -299,6 +349,8 @@ export function Settings() {
         title="Display"
         description="Appearance and formatting preferences"
         icon={<Monitor className="w-5 h-5" />}
+        isCollapsed={collapsedSections['display']}
+        onToggle={() => toggleSection('display')}
       >
         {/* Theme */}
         <SettingRow
@@ -405,6 +457,8 @@ export function Settings() {
         title="Dashboard & Refresh"
         description="Data refresh and display options"
         icon={<RefreshCw className="w-5 h-5" />}
+        isCollapsed={collapsedSections['dashboard']}
+        onToggle={() => toggleSection('dashboard')}
       >
         {/* Refresh Interval */}
         <SettingRow
@@ -459,6 +513,8 @@ export function Settings() {
         title="Notifications"
         description="Alert and notification preferences"
         icon={<Bell className="w-5 h-5" />}
+        isCollapsed={collapsedSections['notifications']}
+        onToggle={() => toggleSection('notifications')}
       >
         {/* Notifications Enabled */}
         <SettingRow
@@ -508,6 +564,8 @@ export function Settings() {
         title="Security & Privacy"
         description="Security and data display options"
         icon={<Shield className="w-5 h-5" />}
+        isCollapsed={collapsedSections['security']}
+        onToggle={() => toggleSection('security')}
       >
         {/* Session Timeout */}
         <SettingRow
@@ -552,12 +610,168 @@ export function Settings() {
         </SettingRow>
       </SettingsSection>
 
+      {/* License Status Section */}
+      <SettingsSection
+        title="License"
+        description="License status and subscription information"
+        icon={<Key className="w-5 h-5" />}
+        isCollapsed={collapsedSections['license']}
+        onToggle={() => toggleSection('license')}
+      >
+        {loadingLicense ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : licenseStatus ? (
+          <>
+            {/* License Status */}
+            <div className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="text-muted-foreground">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-medium">Status</p>
+                  <p className="text-sm text-muted-foreground">Current license status</p>
+                </div>
+              </div>
+              <div
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
+                  licenseStatus.licensed
+                    ? licenseStatus.grace_mode
+                      ? 'bg-yellow-500/10 text-yellow-500'
+                      : 'bg-green-500/10 text-green-500'
+                    : 'bg-red-500/10 text-red-500'
+                )}
+              >
+                {licenseStatus.licensed ? (
+                  licenseStatus.grace_mode ? (
+                    <>
+                      <AlertTriangle className="w-4 h-4" />
+                      Grace Mode
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Active
+                    </>
+                  )
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    {licenseStatus.status === 'not_activated' ? 'Not Activated' : 'Invalid'}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Customer Name */}
+            {licenseStatus.customer_name && (
+              <div className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-muted-foreground">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Customer</p>
+                    <p className="text-sm text-muted-foreground">Licensed organization</p>
+                  </div>
+                </div>
+                <p className="font-medium">{licenseStatus.customer_name}</p>
+              </div>
+            )}
+
+            {/* Expiration Date */}
+            {licenseStatus.expires_at && (
+              <div className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-muted-foreground">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Expiration</p>
+                    <p className="text-sm text-muted-foreground">License valid until</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-medium">
+                    {new Date(licenseStatus.expires_at).toLocaleDateString()}
+                  </p>
+                  {licenseStatus.days_remaining !== undefined && licenseStatus.days_remaining > 0 && (
+                    <p className={cn(
+                      "text-sm",
+                      licenseStatus.days_remaining > 30
+                        ? "text-muted-foreground"
+                        : licenseStatus.days_remaining > 7
+                          ? "text-yellow-500"
+                          : "text-red-500"
+                    )}>
+                      {licenseStatus.days_remaining} days remaining
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Features */}
+            {licenseStatus.features && licenseStatus.features.length > 0 && (
+              <div className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-muted-foreground">
+                    <Zap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Features</p>
+                    <p className="text-sm text-muted-foreground">Enabled capabilities</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-end">
+                  {licenseStatus.features.map((feature) => (
+                    <span
+                      key={feature}
+                      className="px-2 py-1 bg-primary/10 text-primary rounded text-xs font-medium"
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Hardware ID (for support) */}
+            {licenseStatus.hardware_id && (
+              <div className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-muted-foreground">
+                    <Server className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Hardware ID</p>
+                    <p className="text-sm text-muted-foreground">Machine identifier (for support)</p>
+                  </div>
+                </div>
+                <p className="font-mono text-xs text-muted-foreground">
+                  {licenseStatus.hardware_id.substring(0, 16)}...
+                </p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="px-6 py-8 text-center text-muted-foreground">
+            <p>Unable to retrieve license information</p>
+          </div>
+        )}
+      </SettingsSection>
+
       {/* Integrations Status */}
       <SettingsSection
         title="Integrations"
         description={isAdmin ? "Status and configuration of external services" : "Admin access required to modify integrations"}
         icon={<Plug className="w-5 h-5" />}
         disabled={!isAdmin}
+        isCollapsed={collapsedSections['integrations']}
+        onToggle={() => toggleSection('integrations')}
       >
         {loadingIntegrations ? (
           <div className="flex items-center justify-center py-8">
@@ -730,8 +944,8 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v2.6.0</p>
-        <p className="mt-1">Security Operations Center - Enhanced OSINT Stack</p>
+        <p>VIGILANCE X v2.9.0</p>
+        <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
   )
@@ -745,28 +959,46 @@ function SettingsSection({
   icon,
   children,
   disabled = false,
+  isCollapsed = false,
+  onToggle,
 }: {
   title: string
   description: string
   icon: React.ReactNode
   children: React.ReactNode
   disabled?: boolean
+  isCollapsed?: boolean
+  onToggle?: () => void
 }) {
   return (
     <div className={cn("bg-card rounded-xl border relative", disabled && "opacity-60")}>
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+      <div
+        className={cn(
+          "flex items-center gap-3 px-6 py-4",
+          !isCollapsed && "border-b border-border",
+          onToggle && "cursor-pointer hover:bg-muted/50 transition-colors"
+        )}
+        onClick={onToggle}
+      >
         <div className={cn("p-2 rounded-lg", disabled ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary")}>
           {icon}
         </div>
-        <div>
+        <div className="flex-1">
           <h2 className="font-semibold flex items-center gap-2">
             {title}
             {disabled && <Lock className="w-4 h-4 text-muted-foreground" />}
           </h2>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
+        {onToggle && (
+          <div className="p-2 text-muted-foreground">
+            {isCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+          </div>
+        )}
       </div>
-      <div className={cn("divide-y divide-border", disabled && "pointer-events-none")}>{children}</div>
+      {!isCollapsed && (
+        <div className={cn("divide-y divide-border", disabled && "pointer-events-none")}>{children}</div>
+      )}
     </div>
   )
 }

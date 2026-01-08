@@ -17,6 +17,26 @@ type Config struct {
 	ThreatIntel ThreatIntelConfig
 	JWT         JWTConfig
 	Admin       AdminConfig
+	License     LicenseConfig
+	OSINTProxy  OSINTProxyConfig
+}
+
+// LicenseConfig holds license server configuration
+type LicenseConfig struct {
+	ServerURL    string
+	LicenseKey   string
+	HeartbeatInt time.Duration
+	GracePeriod  time.Duration
+	Enabled      bool
+	StorePath    string
+}
+
+// OSINTProxyConfig holds OSINT proxy configuration
+type OSINTProxyConfig struct {
+	Enabled   bool
+	ServerURL string
+	Timeout   time.Duration
+	RateLimit int // requests per minute
 }
 
 type SophosSSHConfig struct {
@@ -164,6 +184,20 @@ func Load() (*Config, error) {
 			LogPath:      viper.GetString("SOPHOS_SSH_LOG_PATH"),
 			SyncInterval: viper.GetDuration("SOPHOS_SSH_SYNC_INTERVAL"),
 		},
+		License: LicenseConfig{
+			ServerURL:    viper.GetString("LICENSE_SERVER_URL"),
+			LicenseKey:   viper.GetString("LICENSE_KEY"),
+			HeartbeatInt: viper.GetDuration("LICENSE_HEARTBEAT_INTERVAL"),
+			GracePeriod:  viper.GetDuration("LICENSE_GRACE_PERIOD"),
+			Enabled:      viper.GetBool("LICENSE_ENABLED"),
+			StorePath:    viper.GetString("LICENSE_STORE_PATH"),
+		},
+		OSINTProxy: OSINTProxyConfig{
+			Enabled:   viper.GetBool("OSINT_PROXY_ENABLED"),
+			ServerURL: viper.GetString("OSINT_PROXY_URL"),
+			Timeout:   viper.GetDuration("OSINT_PROXY_TIMEOUT"),
+			RateLimit: viper.GetInt("OSINT_PROXY_RATE_LIMIT"),
+		},
 	}
 
 	return config, nil
@@ -224,6 +258,20 @@ func bindEnvVars() {
 	viper.BindEnv("SOPHOS_SSH_KEY_PATH")
 	viper.BindEnv("SOPHOS_SSH_LOG_PATH")
 	viper.BindEnv("SOPHOS_SSH_SYNC_INTERVAL")
+
+	// License
+	viper.BindEnv("LICENSE_SERVER_URL")
+	viper.BindEnv("LICENSE_KEY")
+	viper.BindEnv("LICENSE_HEARTBEAT_INTERVAL")
+	viper.BindEnv("LICENSE_GRACE_PERIOD")
+	viper.BindEnv("LICENSE_ENABLED")
+	viper.BindEnv("LICENSE_STORE_PATH")
+
+	// OSINT Proxy
+	viper.BindEnv("OSINT_PROXY_ENABLED")
+	viper.BindEnv("OSINT_PROXY_URL")
+	viper.BindEnv("OSINT_PROXY_TIMEOUT")
+	viper.BindEnv("OSINT_PROXY_RATE_LIMIT")
 }
 
 func setDefaults() {
@@ -268,6 +316,18 @@ func setDefaults() {
 	viper.SetDefault("SOPHOS_SSH_KEY_PATH", "/root/.ssh/id_rsa_xgs")
 	viper.SetDefault("SOPHOS_SSH_LOG_PATH", "/log/reverseproxy.log")
 	viper.SetDefault("SOPHOS_SSH_SYNC_INTERVAL", 5*time.Minute)
+
+	// License defaults
+	viper.SetDefault("LICENSE_SERVER_URL", "http://10.56.126.126")
+	viper.SetDefault("LICENSE_HEARTBEAT_INTERVAL", 12*time.Hour)
+	viper.SetDefault("LICENSE_GRACE_PERIOD", 72*time.Hour)
+	viper.SetDefault("LICENSE_ENABLED", true)
+	viper.SetDefault("LICENSE_STORE_PATH", "/app/data/license.json")
+
+	// OSINT Proxy defaults
+	viper.SetDefault("OSINT_PROXY_ENABLED", false)
+	viper.SetDefault("OSINT_PROXY_TIMEOUT", 30*time.Second)
+	viper.SetDefault("OSINT_PROXY_RATE_LIMIT", 60)
 }
 
 func (c *Config) IsDevelopment() bool {

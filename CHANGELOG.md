@@ -4,6 +4,212 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.9.0] - 2026-01-07
+
+### Licensing System & OSINT Proxy (Kill Switch)
+
+Version majeure introduisant un système de licence avec kill switch et un proxy OSINT centralisé pour protéger les clés API.
+
+---
+
+### 🔑 Licensing System
+
+Système de validation de licence avec heartbeat pour le contrôle des déploiements client.
+
+#### Architecture
+| Composant | Description |
+|-----------|-------------|
+| **HardwareID** | Identification unique par VM (product_uuid + machine-id) |
+| **License Store** | Persistance locale chiffrée (AES-256) |
+| **Heartbeat** | Validation périodique (12h par défaut) |
+| **Grace Period** | Fonctionnement hors-ligne (72h par défaut) |
+| **Kill Switch** | Blocage API si licence invalide |
+
+#### Flux d'Activation
+1. L'utilisateur saisit la clé licence (XXXX-XXXX-XXXX-XXXX)
+2. Le backend génère le HardwareID de la VM
+3. Envoi au serveur de licence (vigilanceKey)
+4. Stockage local chiffré de la licence validée
+5. Heartbeat périodique pour maintenir la validité
+
+#### Grace Mode
+| Condition | Comportement |
+|-----------|--------------|
+| Serveur accessible | Validation normale |
+| Serveur injoignable | Grace mode (72h) |
+| Grace expirée | Kill switch activé |
+
+#### API Endpoints
+| Endpoint | Method | Description | Auth |
+|----------|--------|-------------|------|
+| `/api/v1/license/status` | GET | Status licence actuel | Public |
+| `/api/v1/license/activate` | POST | Activer une licence | Public |
+| `/api/v1/license/info` | GET | Détails complets licence | Admin |
+| `/api/v1/license/validate` | POST | Forcer validation | Admin |
+
+---
+
+### 🌐 OSINT Proxy API
+
+Proxy centralisé pour les requêtes OSINT afin de protéger les clés API payantes.
+
+#### Avantages
+| Aspect | Bénéfice |
+|--------|----------|
+| **Sécurité** | Clés API jamais exposées aux clients |
+| **Gestion** | Mise à jour centralisée des clés |
+| **Contrôle** | Rate limiting par licence |
+| **Audit** | Logs centralisés des requêtes |
+
+#### Configuration
+```bash
+# Mode proxy (clés API centralisées sur vigilanceKey)
+OSINT_PROXY_ENABLED=true
+OSINT_PROXY_URL=https://vigilancexkey.cloudcomputing.lu
+
+# Mode local (clés API dans chaque déploiement) - défaut
+OSINT_PROXY_ENABLED=false
+```
+
+#### Fonctionnement
+1. Client envoie requête OSINT (IP à vérifier)
+2. Aggregator route vers proxy si activé
+3. Proxy valide licence + hardware ID
+4. Proxy exécute requêtes vers providers (AbuseIPDB, VirusTotal, etc.)
+5. Résultat agrégé retourné au client
+
+---
+
+### 🖥️ Frontend - License UI
+
+#### License Activation Page (`/license`)
+| Élément | Description |
+|---------|-------------|
+| **Input licence** | Champ avec format XXXX-XXXX-XXXX-XXXX |
+| **Status actuel** | Affichage licensed/grace/expired |
+| **Activation** | Bouton avec feedback succès/erreur |
+| **Contact support** | Lien vers support@vigilancex.io |
+
+#### Sidebar License Indicator
+| État | Affichage |
+|------|-----------|
+| Licensed | Vert avec jours restants |
+| Grace Mode | Jaune avec "Server unreachable" |
+| Unlicensed | Rouge avec lien activation |
+
+#### Protected Routes
+| Condition | Comportement |
+|-----------|--------------|
+| Licence valide | Accès normal |
+| Grace mode | Accès normal + warning |
+| Licence invalide | Redirection `/license` |
+
+---
+
+### 📁 New Files
+
+**Backend:**
+| Fichier | Description |
+|---------|-------------|
+| `internal/license/hwid.go` | Génération HardwareID VM |
+| `internal/license/store.go` | Persistance licence chiffrée |
+| `internal/license/client.go` | Client service licence |
+| `internal/license/heartbeat.go` | Service heartbeat background |
+| `internal/adapter/controller/http/middleware/license.go` | Middleware kill switch |
+| `internal/adapter/controller/http/handlers/license.go` | Handlers API licence |
+| `internal/adapter/external/threatintel/proxy_client.go` | Client OSINT proxy |
+
+**Frontend:**
+| Fichier | Description |
+|---------|-------------|
+| `src/contexts/LicenseContext.tsx` | Context React licence |
+| `src/pages/LicenseActivation.tsx` | Page activation |
+
+---
+
+### 📝 Modified Files
+
+| Fichier | Modifications |
+|---------|---------------|
+| `backend/internal/config/config.go` | LicenseConfig, OSINTProxyConfig |
+| `backend/internal/adapter/external/threatintel/aggregator.go` | Mode proxy |
+| `backend/cmd/api/main.go` | Intégration licence + proxy |
+| `frontend/src/lib/api.ts` | licenseApi |
+| `frontend/src/components/ProtectedRoute.tsx` | Check licence |
+| `frontend/src/components/layout/Sidebar.tsx` | Indicateur licence |
+| `frontend/src/main.tsx` | LicenseProvider |
+| `frontend/src/App.tsx` | Route /license |
+
+---
+
+### 🔧 Environment Variables
+
+```bash
+# Licensing System
+LICENSE_SERVER_URL=https://vigilancexkey.cloudcomputing.lu
+LICENSE_KEY=XXXX-XXXX-XXXX-XXXX
+LICENSE_ENABLED=true
+LICENSE_HEARTBEAT_INTERVAL=12h
+LICENSE_GRACE_PERIOD=72h
+LICENSE_STORE_PATH=/app/data/license.json
+
+# OSINT Proxy
+OSINT_PROXY_ENABLED=false
+OSINT_PROXY_URL=https://vigilancexkey.cloudcomputing.lu
+OSINT_PROXY_TIMEOUT=30s
+OSINT_PROXY_RATE_LIMIT=60
+```
+
+---
+
+### 🔒 Security Considerations
+
+| Mesure | Description |
+|--------|-------------|
+| **Chiffrement local** | AES-256 avec clé dérivée du HardwareID |
+| **Validation HardwareID** | Empêche copie licence entre VMs |
+| **Heartbeat** | Permet révocation à distance |
+| **Grace period** | Évite interruption service si réseau indisponible |
+| **TLS obligatoire** | Production exige HTTPS |
+
+---
+
+### 🎨 UI Improvements
+
+#### Logo & Branding
+| Changement | Description |
+|------------|-------------|
+| **Logo géométrique** | Nouvel icône œil géométrique avec iris hexagonal |
+| **Design épuré** | SVG personnalisé remplaçant l'icône bouclier générique |
+
+#### Page Advanced Threat
+| Amélioration | Description |
+|--------------|-------------|
+| **Provider badges** | Icônes distinctes par provider (AbuseIPDB, VirusTotal, etc.) |
+| **Couleurs thématiques** | Chaque provider a sa couleur unique |
+| **Status amélioré** | Badge coloré si configuré, grisé sinon |
+
+#### Page Geoblocking
+| Amélioration | Description |
+|--------------|-------------|
+| **Tri Active Rules** | Règles triées par score (points) décroissant |
+| **Visibilité** | Hosts à haut risque affichés en premier |
+
+#### Page Reports
+| Amélioration | Description |
+|--------------|-------------|
+| **Réorganisation** | Quick Reports et Custom Report en haut de page |
+| **Accès rapide** | Génération de rapports en un clic |
+
+#### Page Settings
+| Amélioration | Description |
+|--------------|-------------|
+| **Sections réductibles** | Chaque catégorie peut être réduite/développée |
+| **Collapse all/Expand all** | Bouton pour gérer toutes les sections |
+| **Section License** | Affichage status, customer, expiration, features, HardwareID |
+
+---
+
 ## [2.6.0] - 2026-01-07
 
 ### Authentication System & Role-Based Access Control

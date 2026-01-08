@@ -20,6 +20,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
+	"github.com/kr1s57/vigilancex/internal/license" // v2.9: License system
 	"github.com/kr1s57/vigilancex/internal/usecase/auth"
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
@@ -68,23 +69,83 @@ func main() {
 	geoblockingRepo := clickhouse.NewGeoblockingRepository(chConn) // v2.0: Geoblocking
 	usersRepo := clickhouse.NewUsersRepository(chConn)             // v2.6: Authentication
 
-	// Initialize threat intelligence aggregator (v1.6: 7 providers)
-	threatAggregator := threatintel.NewAggregator(threatintel.AggregatorConfig{
-		// Core providers
-		AbuseIPDBKey:  cfg.ThreatIntel.AbuseIPDBKey,
-		VirusTotalKey: cfg.ThreatIntel.VirusTotalKey,
-		OTXKey:        cfg.ThreatIntel.AlienVaultKey,
-		// v1.6 providers
-		GreyNoiseKey:  cfg.ThreatIntel.GreyNoiseKey,
-		CriminalIPKey: cfg.ThreatIntel.CriminalIPKey,
-		PulsediveKey:  cfg.ThreatIntel.PulsediveKey,
-		// IPSum is auto-configured (no API key needed)
-		CacheTTL: cfg.ThreatIntel.CacheTTL,
-	})
+	// v2.9: Initialize License Client
+	var licenseClient *license.Client
+	var heartbeatService *license.HeartbeatService
+	if cfg.License.Enabled {
+		var err error
+		licenseClient, err = license.NewClient(license.LicenseConfig{
+			ServerURL:    cfg.License.ServerURL,
+			LicenseKey:   cfg.License.LicenseKey,
+			HeartbeatInt: cfg.License.HeartbeatInt,
+			GracePeriod:  cfg.License.GracePeriod,
+			Enabled:      cfg.License.Enabled,
+			StorePath:    cfg.License.StorePath,
+		})
+		if err != nil {
+			logger.Error("Failed to initialize license client", "error", err)
+			// Continue without license (will show unlicensed)
+		} else {
+			// Try to load persisted license
+			if err := licenseClient.LoadFromStore(); err != nil {
+				logger.Info("No persisted license found, activation required")
+			}
+
+			// Auto-activate if license key provided
+			if cfg.License.LicenseKey != "" && !licenseClient.IsLicensed() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				if err := licenseClient.Activate(ctx, cfg.License.LicenseKey); err != nil {
+					logger.Warn("Auto-activation failed", "error", err)
+				}
+				cancel()
+			}
+
+			// Start heartbeat service
+			heartbeatService = license.NewHeartbeatService(licenseClient, cfg.License.HeartbeatInt)
+			heartbeatService.Start()
+
+			logger.Info("License system initialized",
+				"server", cfg.License.ServerURL,
+				"licensed", licenseClient.IsLicensed())
+		}
+	} else {
+		logger.Info("License system disabled")
+	}
+
+	// Initialize threat intelligence aggregator (v2.9: with proxy support)
+	var threatAggregator *threatintel.Aggregator
+	if cfg.OSINTProxy.Enabled && licenseClient != nil && licenseClient.IsLicensed() {
+		// v2.9: Use OSINT proxy mode - queries go through license server
+		proxyClient := threatintel.NewOSINTProxyClient(threatintel.ProxyConfig{
+			ServerURL:  cfg.OSINTProxy.ServerURL,
+			LicenseKey: licenseClient.GetLicenseKey(),
+			HardwareID: licenseClient.GetHardwareID(),
+			Timeout:    cfg.OSINTProxy.Timeout,
+			RateLimit:  cfg.OSINTProxy.RateLimit,
+		})
+		threatAggregator = threatintel.NewAggregatorWithProxy(proxyClient, cfg.ThreatIntel.CacheTTL)
+		logger.Info("OSINT Proxy mode enabled", "server", cfg.OSINTProxy.ServerURL)
+	} else {
+		// Local providers mode (v1.6: 7 providers)
+		threatAggregator = threatintel.NewAggregator(threatintel.AggregatorConfig{
+			// Core providers
+			AbuseIPDBKey:  cfg.ThreatIntel.AbuseIPDBKey,
+			VirusTotalKey: cfg.ThreatIntel.VirusTotalKey,
+			OTXKey:        cfg.ThreatIntel.AlienVaultKey,
+			// v1.6 providers
+			GreyNoiseKey:  cfg.ThreatIntel.GreyNoiseKey,
+			CriminalIPKey: cfg.ThreatIntel.CriminalIPKey,
+			PulsediveKey:  cfg.ThreatIntel.PulsediveKey,
+			// IPSum is auto-configured (no API key needed)
+			CacheTTL: cfg.ThreatIntel.CacheTTL,
+		})
+	}
 
 	// Log configured providers
 	providers := threatAggregator.GetConfiguredProviders()
-	logger.Info("Threat Intelligence providers configured", "providers", providers)
+	logger.Info("Threat Intelligence providers configured",
+		"providers", providers,
+		"proxy_mode", threatAggregator.IsProxyMode())
 
 	// Initialize Sophos XGS client
 	var sophosClient *sophos.Client
@@ -179,6 +240,7 @@ func main() {
 	geoblockingHandler := handlers.NewGeoblockingHandler(geoblockingService) // v2.0: Geoblocking
 	authHandler := handlers.NewAuthHandler(authService, logger)              // v2.6: Authentication
 	usersHandler := handlers.NewUsersHandler(authService, logger)            // v2.6: User management
+	licenseHandler := handlers.NewLicenseHandler(licenseClient)              // v2.9: License management
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -220,9 +282,15 @@ func main() {
 		// Public routes (no auth required)
 		r.Group(func(r chi.Router) {
 			r.Post("/auth/login", authHandler.Login)
+			// v2.9: License endpoints (public - needed before activation)
+			r.Get("/license/status", licenseHandler.GetStatus)
+			r.Post("/license/activate", licenseHandler.Activate)
 		})
 
-		// Protected routes (require valid JWT - v2.6)
+		// ==============================================
+		// FREE ROUTES (Auth only, no license required)
+		// Dashboard, Events, Syslog, basic stats
+		// ==============================================
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.JWTAuth(authService))
 
@@ -231,20 +299,7 @@ func main() {
 			r.Get("/auth/me", authHandler.Me)
 			r.Post("/auth/change-password", authHandler.ChangePassword)
 
-			// Admin-only routes (v2.6)
-			r.Group(func(r chi.Router) {
-				r.Use(middleware.RequireAdmin())
-				r.Route("/users", func(r chi.Router) {
-					r.Get("/", usersHandler.List)
-					r.Post("/", usersHandler.Create)
-					r.Get("/{id}", usersHandler.Get)
-					r.Put("/{id}", usersHandler.Update)
-					r.Delete("/{id}", usersHandler.Delete)
-					r.Post("/{id}/reset-password", usersHandler.ResetPassword)
-				})
-			})
-
-			// Events
+			// Events (free - core dashboard functionality)
 			r.Route("/events", func(r chi.Router) {
 				r.Get("/", eventsHandler.ListEvents)
 				r.Get("/hostnames", eventsHandler.GetHostnames)
@@ -254,7 +309,7 @@ func main() {
 				r.Get("/export", handlers.NotImplemented)
 			})
 
-			// Stats
+			// Stats (free - basic dashboard stats)
 			r.Route("/stats", func(r chi.Router) {
 				r.Get("/overview", eventsHandler.GetOverview)
 				r.Get("/hourly", handlers.NotImplemented)
@@ -268,7 +323,48 @@ func main() {
 				r.Get("/top-targets", eventsHandler.GetTopTargets)
 			})
 
-			// Geo
+			// Status endpoints (free - syslog status)
+			r.Route("/status", func(r chi.Router) {
+				r.Get("/syslog", eventsHandler.GetSyslogStatus)
+			})
+
+			// Alerts endpoints (free - critical alerts)
+			r.Route("/alerts", func(r chi.Router) {
+				r.Get("/critical", eventsHandler.GetCriticalAlerts)
+			})
+
+			// WebSocket endpoint (free - real-time updates)
+			r.Get("/ws", wsHub.ServeWS)
+		})
+
+		// ==============================================
+		// LICENSED ROUTES (Auth + License required)
+		// OSINT, Bans, Whitelist, Geoblocking, Reports...
+		// ==============================================
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.JWTAuth(authService))
+			// v2.9: Add license middleware for premium features
+			if cfg.License.Enabled {
+				r.Use(middleware.RequireLicense(licenseClient))
+			}
+
+			// Admin-only routes (v2.6)
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireAdmin())
+				r.Route("/users", func(r chi.Router) {
+					r.Get("/", usersHandler.List)
+					r.Post("/", usersHandler.Create)
+					r.Get("/{id}", usersHandler.Get)
+					r.Put("/{id}", usersHandler.Update)
+					r.Delete("/{id}", usersHandler.Delete)
+					r.Post("/{id}/reset-password", usersHandler.ResetPassword)
+				})
+				// v2.9: License admin routes
+				r.Get("/license/info", licenseHandler.GetInfo)
+				r.Post("/license/validate", licenseHandler.ForceValidate)
+			})
+
+			// Geo (licensed - heatmap and geo features)
 			r.Route("/geo", func(r chi.Router) {
 				r.Get("/heatmap", eventsHandler.GetGeoHeatmap)
 				r.Get("/by-country", handlers.NotImplemented)
@@ -403,16 +499,6 @@ func main() {
 				r.Get("/preview", reportsHandler.PreviewReport)
 			})
 
-			// Status endpoints
-			r.Route("/status", func(r chi.Router) {
-				r.Get("/syslog", eventsHandler.GetSyslogStatus)
-			})
-
-			// Alerts endpoints
-			r.Route("/alerts", func(r chi.Router) {
-				r.Get("/critical", eventsHandler.GetCriticalAlerts)
-			})
-
 			// System
 			r.Route("/system", func(r chi.Router) {
 				r.Get("/config", handlers.NotImplemented)
@@ -430,9 +516,6 @@ func main() {
 				r.Get("/system-whitelist", configHandler.GetSystemWhitelist)
 				r.Get("/system-whitelist/check/*", configHandler.CheckSystemWhitelist)
 			})
-
-			// WebSocket endpoint
-			r.Get("/ws", wsHub.ServeWS)
 		})
 	})
 
@@ -464,6 +547,12 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down server...")
+
+	// v2.9: Stop heartbeat service
+	if heartbeatService != nil {
+		heartbeatService.Stop()
+		logger.Info("License heartbeat service stopped")
+	}
 
 	// Stop Feed Ingester
 	blocklistsService.Stop()

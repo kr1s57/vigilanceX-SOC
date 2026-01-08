@@ -10,6 +10,12 @@ import {
   CheckCircle,
   XCircle,
   Eye,
+  Bug,
+  Radar,
+  Radio,
+  List,
+  Fingerprint,
+  Activity,
 } from 'lucide-react'
 import { threatsApi } from '@/lib/api'
 import { StatCard } from '@/components/dashboard/StatCard'
@@ -26,6 +32,20 @@ const threatLevelColors: Record<string, { bg: string; text: string; border: stri
   low: { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/30' },
   minimal: { bg: 'bg-green-500/10', text: 'text-green-500', border: 'border-green-500/30' },
   none: { bg: 'bg-gray-500/10', text: 'text-gray-500', border: 'border-gray-500/30' },
+}
+
+// Provider icons and colors
+const getProviderStyle = (name: string): { icon: React.ReactNode; color: string; bg: string } => {
+  const styles: Record<string, { icon: React.ReactNode; color: string; bg: string }> = {
+    'AbuseIPDB': { icon: <ShieldAlert className="w-4 h-4" />, color: 'text-red-400', bg: 'bg-red-500/10' },
+    'VirusTotal': { icon: <Bug className="w-4 h-4" />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+    'AlienVault OTX': { icon: <Radar className="w-4 h-4" />, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+    'GreyNoise': { icon: <Radio className="w-4 h-4" />, color: 'text-gray-400', bg: 'bg-gray-500/10' },
+    'IPSum': { icon: <List className="w-4 h-4" />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+    'CriminalIP': { icon: <Fingerprint className="w-4 h-4" />, color: 'text-orange-400', bg: 'bg-orange-500/10' },
+    'Pulsedive': { icon: <Activity className="w-4 h-4" />, color: 'text-green-400', bg: 'bg-green-500/10' },
+  }
+  return styles[name] || { icon: <Shield className="w-4 h-4" />, color: 'text-gray-400', bg: 'bg-gray-500/10' }
 }
 
 export function AdvancedThreat() {
@@ -196,19 +216,34 @@ export function AdvancedThreat() {
       {/* Providers Status */}
       <div className="bg-card rounded-xl border p-4">
         <h3 className="text-sm font-medium text-muted-foreground mb-3">Threat Intelligence Providers</h3>
-        <div className="flex flex-wrap gap-4">
-          {providers.map((provider) => (
-            <div key={provider.name} className="flex items-center gap-2">
-              {provider.configured && provider.available ? (
-                <CheckCircle className="w-4 h-4 text-green-500" />
-              ) : (
-                <XCircle className="w-4 h-4 text-red-500" />
-              )}
-              <span className="text-sm">{provider.name}</span>
-            </div>
-          ))}
+        <div className="flex flex-wrap gap-3">
+          {providers.map((provider) => {
+            const style = getProviderStyle(provider.name)
+            const isActive = provider.configured
+            return (
+              <div
+                key={provider.name}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors',
+                  isActive
+                    ? `${style.bg} ${style.color} border-current/20`
+                    : 'bg-muted/50 text-muted-foreground border-transparent opacity-50'
+                )}
+              >
+                <span className={isActive ? style.color : 'text-muted-foreground'}>
+                  {style.icon}
+                </span>
+                <span className="text-sm font-medium">{provider.name}</span>
+                {isActive ? (
+                  <CheckCircle className="w-3 h-3 text-green-500" />
+                ) : (
+                  <XCircle className="w-3 h-3 text-red-400" />
+                )}
+              </div>
+            )
+          })}
           {stats?.cache_stats && (
-            <div className="ml-auto text-xs text-muted-foreground">
+            <div className="ml-auto flex items-center text-xs text-muted-foreground">
               Cache: {stats.cache_stats.size} entries |
               Hit rate: {(stats.cache_stats.hit_rate * 100).toFixed(1)}%
             </div>

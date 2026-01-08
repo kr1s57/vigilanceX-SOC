@@ -159,7 +159,7 @@ export interface ThreatStats {
 export interface ThreatProvider {
   name: string
   configured: boolean
-  available: boolean
+  available?: boolean  // Optional - not always returned by backend
   description?: string  // v1.6: Provider description
 }
 

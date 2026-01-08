@@ -144,6 +144,188 @@ export function Reports() {
         </div>
       )}
 
+      {/* Quick Reports - Moved to top */}
+      <div className="bg-card rounded-xl border p-6">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Clock className="w-5 h-5" />
+          Quick Reports
+        </h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Generate predefined reports for common time periods
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <button
+            onClick={() => generateReport('daily')}
+            disabled={generating}
+            className="flex items-center justify-center gap-3 p-4 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generatingType === 'daily' ? (
+              <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+            ) : (
+              <Download className="w-5 h-5 text-blue-500" />
+            )}
+            <div className="text-left">
+              <p className="font-medium">Daily Report</p>
+              <p className="text-xs text-muted-foreground">Last 24 hours</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => generateReport('weekly')}
+            disabled={generating}
+            className="flex items-center justify-center gap-3 p-4 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generatingType === 'weekly' ? (
+              <Loader2 className="w-5 h-5 animate-spin text-purple-500" />
+            ) : (
+              <Download className="w-5 h-5 text-purple-500" />
+            )}
+            <div className="text-left">
+              <p className="font-medium">Weekly Report</p>
+              <p className="text-xs text-muted-foreground">Last 7 days</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => generateReport('monthly')}
+            disabled={generating}
+            className="flex items-center justify-center gap-3 p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generatingType === 'monthly' ? (
+              <Loader2 className="w-5 h-5 animate-spin text-green-500" />
+            ) : (
+              <Download className="w-5 h-5 text-green-500" />
+            )}
+            <div className="text-left">
+              <p className="font-medium">Monthly Report</p>
+              <p className="text-xs text-muted-foreground">Last 30 days</p>
+            </div>
+          </button>
+        </div>
+
+        {/* Format Selection */}
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground">Format:</span>
+          <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+            <button
+              onClick={() => setFormat('pdf')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                format === 'pdf'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              PDF
+            </button>
+            <button
+              onClick={() => setFormat('xml')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                format === 'xml'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              XML
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Custom Report Builder - Moved to top */}
+      <div className="bg-card rounded-xl border p-6">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <FileText className="w-5 h-5" />
+          Custom Report
+        </h2>
+        <p className="text-sm text-muted-foreground mb-6">
+          Build a custom report with specific date range and modules
+        </p>
+
+        {/* Date Range */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium mb-2">Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">End Date</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        {/* Module Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-3">Include Modules</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {MODULES.map((module) => (
+              <label
+                key={module.id}
+                className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                  selectedModules.includes(module.id)
+                    ? 'bg-primary/10 border-primary/50'
+                    : 'bg-muted/30 border-transparent hover:bg-muted/50'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedModules.includes(module.id)}
+                  onChange={() => handleModuleToggle(module.id)}
+                  className="sr-only"
+                />
+                <div className={`p-2 rounded-lg ${selectedModules.includes(module.id) ? 'bg-primary/20' : 'bg-muted'}`}>
+                  {module.icon}
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium">{module.label}</p>
+                  <p className="text-xs text-muted-foreground">{module.description}</p>
+                </div>
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  selectedModules.includes(module.id)
+                    ? 'border-primary bg-primary'
+                    : 'border-muted-foreground'
+                }`}>
+                  {selectedModules.includes(module.id) && (
+                    <CheckCircle2 className="w-4 h-4 text-primary-foreground" />
+                  )}
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Generate Button */}
+        <div className="flex items-center justify-end">
+          <button
+            onClick={() => generateReport('custom')}
+            disabled={generating || !startDate || !endDate}
+            className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download className="w-5 h-5" />
+                Generate Custom Report
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Database Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-card rounded-xl border p-6">
@@ -240,213 +422,6 @@ export function Reports() {
         </div>
       )}
 
-      {/* Quick Reports */}
-      <div className="bg-card rounded-xl border p-6">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Clock className="w-5 h-5" />
-          Quick Reports
-        </h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Generate predefined reports for common time periods
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <button
-            onClick={() => generateReport('daily')}
-            disabled={generating}
-            className="flex items-center justify-center gap-3 p-4 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {generatingType === 'daily' ? (
-              <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-            ) : (
-              <Download className="w-5 h-5 text-blue-500" />
-            )}
-            <div className="text-left">
-              <p className="font-medium">Daily Report</p>
-              <p className="text-xs text-muted-foreground">Last 24 hours</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => generateReport('weekly')}
-            disabled={generating}
-            className="flex items-center justify-center gap-3 p-4 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {generatingType === 'weekly' ? (
-              <Loader2 className="w-5 h-5 animate-spin text-purple-500" />
-            ) : (
-              <Download className="w-5 h-5 text-purple-500" />
-            )}
-            <div className="text-left">
-              <p className="font-medium">Weekly Report</p>
-              <p className="text-xs text-muted-foreground">Last 7 days</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => generateReport('monthly')}
-            disabled={generating}
-            className="flex items-center justify-center gap-3 p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {generatingType === 'monthly' ? (
-              <Loader2 className="w-5 h-5 animate-spin text-green-500" />
-            ) : (
-              <Download className="w-5 h-5 text-green-500" />
-            )}
-            <div className="text-left">
-              <p className="font-medium">Monthly Report</p>
-              <p className="text-xs text-muted-foreground">Last 30 days</p>
-            </div>
-          </button>
-        </div>
-
-        {/* Format Selection */}
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-muted-foreground">Format:</span>
-          <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-            <button
-              onClick={() => setFormat('pdf')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                format === 'pdf'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              PDF
-            </button>
-            <button
-              onClick={() => setFormat('xml')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                format === 'xml'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              XML
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Custom Report Builder */}
-      <div className="bg-card rounded-xl border p-6">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <FileText className="w-5 h-5" />
-          Custom Report
-        </h2>
-        <p className="text-sm text-muted-foreground mb-6">
-          Build a custom report with specific date range and modules
-        </p>
-
-        {/* Date Range */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium mb-2">Start Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">End Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-        </div>
-
-        {/* Module Selection */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-3">Include Modules</label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {MODULES.map((module) => (
-              <label
-                key={module.id}
-                className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-                  selectedModules.includes(module.id)
-                    ? 'bg-primary/10 border-primary/50'
-                    : 'bg-muted/30 border-transparent hover:bg-muted/50'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedModules.includes(module.id)}
-                  onChange={() => handleModuleToggle(module.id)}
-                  className="sr-only"
-                />
-                <div className={`p-2 rounded-lg ${selectedModules.includes(module.id) ? 'bg-primary/20' : 'bg-muted'}`}>
-                  {module.icon}
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">{module.label}</p>
-                  <p className="text-xs text-muted-foreground">{module.description}</p>
-                </div>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  selectedModules.includes(module.id)
-                    ? 'border-primary bg-primary'
-                    : 'border-muted-foreground'
-                }`}>
-                  {selectedModules.includes(module.id) && (
-                    <CheckCircle2 className="w-4 h-4 text-primary-foreground" />
-                  )}
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Generate Button */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">Format:</span>
-            <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-              <button
-                onClick={() => setFormat('pdf')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  format === 'pdf'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                PDF
-              </button>
-              <button
-                onClick={() => setFormat('xml')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  format === 'xml'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                XML
-              </button>
-            </div>
-          </div>
-
-          <button
-            onClick={() => generateReport('custom')}
-            disabled={generating || !startDate || !endDate}
-            className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Download className="w-5 h-5" />
-                Generate Custom Report
-              </>
-            )}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
