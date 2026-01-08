@@ -74,10 +74,18 @@ type CrowdSecLocation struct {
 	Longitude float64 `json:"longitude"`
 }
 
+// CrowdSecClassificationItem represents a classification entry
+type CrowdSecClassificationItem struct {
+	Name        string   `json:"name"`
+	Label       string   `json:"label"`
+	Description string   `json:"description"`
+	References  []string `json:"references,omitempty"`
+}
+
 // CrowdSecClassification holds false positive and classification info
 type CrowdSecClassification struct {
-	FalsePositives  []string `json:"false_positives"`
-	Classifications []string `json:"classifications"`
+	FalsePositives  []CrowdSecClassificationItem `json:"false_positives"`
+	Classifications []CrowdSecClassificationItem `json:"classifications"`
 }
 
 // CrowdSecAttack represents attack details
@@ -234,9 +242,13 @@ func (c *CrowdSecClient) processResponse(resp *CrowdSecResponse) *CrowdSecResult
 		result.Behaviors = append(result.Behaviors, b.Name)
 	}
 
-	// Extract classifications
-	result.Classifications = resp.Classifications.Classifications
-	result.FalsePositives = resp.Classifications.FalsePositives
+	// Extract classification names
+	for _, c := range resp.Classifications.Classifications {
+		result.Classifications = append(result.Classifications, c.Name)
+	}
+	for _, fp := range resp.Classifications.FalsePositives {
+		result.FalsePositives = append(result.FalsePositives, fp.Name)
+	}
 
 	// Extract MITRE technique names
 	for _, m := range resp.MitreTechniques {
