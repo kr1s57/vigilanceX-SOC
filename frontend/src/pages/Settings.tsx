@@ -153,8 +153,15 @@ export function Settings() {
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [loadingLicense, setLoadingLicense] = useState(true)
 
-  // Collapsible sections state
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+  // Collapsible sections state - all collapsed by default
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    display: true,
+    dashboard: true,
+    notifications: true,
+    security: true,
+    license: true,
+    integrations: true,
+  })
 
   const toggleSection = (sectionId: string) => {
     setCollapsedSections(prev => ({
@@ -170,7 +177,7 @@ export function Settings() {
     )
   }
 
-  const allCollapsed = Object.values(collapsedSections).filter(Boolean).length >= 5
+  const allCollapsed = Object.values(collapsedSections).every(Boolean)
 
   // Plugin editor state
   const [editingPlugin, setEditingPlugin] = useState<PluginConfig | null>(null)
@@ -956,7 +963,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v2.9.6</p>
+        <p>VIGILANCE X v2.9.7</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
