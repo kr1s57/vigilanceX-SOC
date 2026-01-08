@@ -1,134 +1,228 @@
-# VIGILANCE X - SOC Platform
+# VIGILANCE X
 
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://docs.docker.com/)
-[![License](https://img.shields.io/badge/License-Proprietary-red)](LICENSE)
+**La plateforme SOC temps réel conçue pour Sophos XGS**
 
-**VIGILANCE X** is a real-time Security Operations Center (SOC) platform that collects Sophos XGS logs, analyzes threats with 11 Threat Intelligence providers, and automatically bans malicious IPs.
-
-## Quick Start
-
-### Prerequisites
-
-- **Docker** 20.10+ with Docker Compose v2
-- **4 GB RAM** minimum (8 GB recommended)
-- **20 GB disk** space
-- **Sophos XGS** firewall with Syslog enabled
-- **License Key** (contact support@vigilancex.io)
-
-### Installation
-
-```bash
-# 1. Clone this repository
-git clone https://github.com/kr1s57/vigilanceX-SOC.git
-cd vigilanceX-SOC
-
-# 2. Configure your environment
-cp deploy/config.template deploy/.env
-nano deploy/.env  # Edit with your settings
-
-# 3. Install and start
-./vigilance.sh install
-```
-
-### Configuration
-
-Edit `deploy/.env` with your settings:
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `CLICKHOUSE_PASSWORD` | ClickHouse database password | Yes |
-| `REDIS_PASSWORD` | Redis cache password | Yes |
-| `JWT_SECRET` | JWT signing key (32+ chars) | Yes |
-| `SOPHOS_HOST` | Sophos XGS IP address | Yes |
-| `SOPHOS_PASSWORD` | Sophos API password | Yes |
-| `LICENSE_KEY` | Your VigilanceX license | Yes |
-
-Generate a secure JWT secret:
-```bash
-openssl rand -hex 32
-```
-
-### Sophos XGS Configuration
-
-1. **Enable Syslog**: System > Administration > Notification > Syslog
-2. **Add Server**: IP of your VIGILANCE X server, port 514 (UDP) or 1514 (TCP)
-3. **Select Logs**: Web filter, IPS, WAF, Authentication
-
-## Usage
-
-```bash
-# Show help
-./vigilance.sh help
-
-# Check status
-./vigilance.sh status
-
-# View logs
-./vigilance.sh logs backend
-
-# Update to latest version
-./vigilance.sh update
-
-# Create backup
-./vigilance.sh backup
-```
-
-## Access
-
-After installation:
-
-- **Dashboard**: https://localhost
-- **Default Login**: admin / VigilanceX2024!
-
-> **Important**: Change the default password after first login!
-
-## Architecture
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ Sophos XGS  │────▶│   Vector    │────▶│ ClickHouse  │
-│  Firewall   │     │   (Syslog)  │     │  (Analytics)│
-└─────────────┘     └─────────────┘     └─────────────┘
-                                               │
-┌─────────────┐     ┌─────────────┐            │
-│   Nginx     │────▶│  Frontend   │            │
-│  (Reverse   │     │   (React)   │            │
-│   Proxy)    │     └─────────────┘            │
-└─────────────┘            │                   │
-       │                   ▼                   │
-       │            ┌─────────────┐            │
-       └───────────▶│   Backend   │◀───────────┘
-                    │   (Go API)  │
-                    └─────────────┘
-                           │
-                    ┌──────┴──────┐
-                    ▼             ▼
-             ┌───────────┐ ┌───────────┐
-             │  Sophos   │ │   Threat  │
-             │  XML API  │ │   Intel   │
-             │  (Bans)   │ │ (11 APIs) │
-             └───────────┘ └───────────┘
-```
-
-## Network Ports
-
-| Port | Protocol | Direction | Description |
-|------|----------|-----------|-------------|
-| 443 | TCP | Inbound | Web Dashboard (HTTPS) |
-| 80 | TCP | Inbound | HTTP redirect to HTTPS |
-| 514 | UDP | Inbound | Sophos Syslog |
-| 1514 | TCP | Inbound | Sophos Syslog (reliable) |
-
-## Support
-
-- **Email**: support@vigilancex.io
-- **Documentation**: See `wiki/` folder
-
-## License
-
-This software is proprietary and requires a valid license.
-Contact support@vigilancex.io for licensing information.
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)]()
+[![License](https://img.shields.io/badge/license-Commercial-green.svg)]()
+[![Sophos](https://img.shields.io/badge/Sophos-XGS%20Ready-red.svg)]()
 
 ---
 
-**VIGILANCE X** - Real-time SOC Platform for Sophos XGS
+## Le Problème
+
+**80% des administrateurs désactivent le WAF de leur Sophos XGS.**
+
+Pourquoi ? Parce que ModSecurity génère trop de faux positifs, et la WebUI Sophos ne permet pas de debugger efficacement. Résultat : des heures perdues à analyser des milliers de lignes de logs en CLI pour trouver les règles qui bloquent.
+
+**VIGILANCE X change la donne.**
+
+---
+
+## Ce que VIGILANCE X Apporte
+
+### WAF Debug Engine - *Notre Force*
+
+> *"De plusieurs heures de debug à 30 secondes."*
+
+Contrairement aux solutions syslog classiques qui ne capturent pas les IDs ModSecurity, VIGILANCE X corrèle automatiquement chaque blocage WAF avec ses règles déclencheuses.
+
+| Avant VIGILANCE X | Avec VIGILANCE X |
+|-------------------|------------------|
+| SSH sur le XGS | Interface web intuitive |
+| `grep` dans des milliers de lignes | Vue consolidée instantanée |
+| Heures de debug | **30 secondes** |
+| WAF souvent désactivé | WAF optimisé et actif |
+
+**Fonctionnalités clés :**
+- Identification instantanée des règles ModSec bloquantes
+- Distinction rapide entre blocages légitimes et faux positifs
+- Historique des patterns de blocage par application
+- Recommandations d'exclusions ciblées
+
+---
+
+### Risk Scoring Engine
+
+Notre moteur de scoring propriétaire ne se contente pas d'interroger des APIs. Il **corrèle** les données pour établir un score de risque contextuel.
+
+```
+                    ┌─────────────────────┐
+   Threat Intel ───►│                     │
+   (11 providers)   │   RISK SCORING      │───► Score 0-100
+                    │     ENGINE          │───► Threat Level
+   Internal ───────►│                     │───► Action recommandée
+   Policies         └─────────────────────┘
+```
+
+**Sources intégrées :**
+- AbuseIPDB, VirusTotal, GreyNoise, CrowdSec
+- AlienVault OTX, Shodan, IPSum, ThreatFox
+- Pulsedive, CriminalIP, URLhaus
+
+**Ce qui nous différencie :**
+- Système de cascade intelligent (économise vos quotas API)
+- Corrélation avec vos policies internes
+- Score contextuel basé sur VOTRE infrastructure
+- Historique et tendances par IP
+
+---
+
+### Active Response - Detect2Ban
+
+> *"Le fail2ban nouvelle génération pour environnements critiques."*
+
+Detect2Ban va au-delà de la simple détection. C'est un système **Active/Response** qui protège vos assets en temps réel.
+
+**Scénario type :**
+```
+22:47 - IP 185.x.x.x scanne votre serveur web critique
+22:47 - Detect2Ban détecte le pattern d'attaque
+22:47 - Score de risque calculé : 87/100 (Critical)
+22:47 - IP marquée "BANNED" dans VIGILANCE X
+22:47 - IP créée sur Sophos XGS
+22:47 - IP ajoutée au groupe VIGILANCE_X_BLOCKLIST
+22:47 - Trafic DROP immédiat
+
+       Temps total : < 5 secondes
+```
+
+**Capacités :**
+- Réponse automatique 24/7
+- Escalade progressive (warn → temp ban → permanent)
+- Intégration native API XML Sophos
+- Synchronisation bidirectionnelle des blocklists
+- Policies personnalisables par criticité d'asset
+
+---
+
+### Syslog Server Nouvelle Génération
+
+VIGILANCE X ingère et structure **tous** vos logs Sophos XGS :
+
+| Type de Log | Traitement |
+|-------------|------------|
+| WAF / ModSecurity | Parsing avancé avec extraction IDs |
+| IPS/IDS | Corrélation avec Threat Intel |
+| Firewall | Timeline et géolocalisation |
+| Authentication | Détection brute-force |
+| VPN | Monitoring sessions |
+| Web Filter | Catégorisation et tendances |
+
+**Architecture haute performance :**
+- **Vector.dev** pour l'ingestion (100K+ events/sec)
+- **ClickHouse** pour l'analytique temps réel
+- **WebSocket** pour le dashboard live
+
+---
+
+## Stack Technique
+
+| Composant | Technologie |
+|-----------|-------------|
+| Backend | Go 1.22 (haute performance) |
+| Frontend | React + TypeScript |
+| Database | ClickHouse (analytique) |
+| Ingestion | Vector.dev |
+| Cache | Redis |
+| Conteneurisation | Docker |
+
+---
+
+## Prérequis
+
+- **Serveur** : Ubuntu 22.04 LTS, 4GB RAM, 20GB SSD
+- **Firewall** : Sophos XGS (toute version supportant Syslog)
+- **Réseau** : Accès Syslog (UDP 514 / TCP 1514)
+- **Licence** : Clé VIGILANCE X active
+
+---
+
+## Installation Rapide
+
+```bash
+# 1. Cloner le repository
+git clone https://github.com/kr1s57/vigilanceX-SOC.git
+cd vigilanceX-SOC
+
+# 2. Se connecter au registry Docker
+echo "VOTRE_TOKEN" | docker login ghcr.io -u kr1s57 --password-stdin
+
+# 3. Configurer
+cp deploy/config.template deploy/.env
+nano deploy/.env
+
+# 4. Installer et démarrer
+./vigilance.sh install
+./vigilance.sh start
+
+# 5. Accéder au dashboard
+# https://VOTRE_IP (admin / VigilanceX2024!)
+```
+
+---
+
+## Configuration Sophos XGS
+
+### Activer Syslog
+
+1. **System** → **Administration** → **Notification** → **Syslog**
+2. Ajouter un serveur :
+   - IP : Votre serveur VIGILANCE X
+   - Port : 514 (UDP) ou 1514 (TCP)
+3. Sélectionner les logs : WAF, IPS, Firewall, Auth, VPN
+
+### Activer l'API XML (pour Active Response)
+
+1. **System** → **Administration** → **Admin Settings**
+2. Activer "Allow API access"
+3. Noter le port (défaut : 4444)
+
+---
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Installation](wiki/Installation-Guide.md) | Guide complet d'installation |
+| [Configuration](wiki/Configuration.md) | Variables et paramètres |
+| [Architecture](wiki/Architecture.md) | Schémas et flux réseau |
+| [Administration](wiki/Administration.md) | Backup, updates, users |
+| [Sécurité](wiki/Security-Hardening.md) | Hardening et bonnes pratiques |
+| [Troubleshooting](wiki/Troubleshooting.md) | Diagnostic et résolution |
+
+---
+
+## Commandes Essentielles
+
+```bash
+./vigilance.sh status      # État des services
+./vigilance.sh logs        # Voir les logs
+./vigilance.sh backup      # Backup des données
+./vigilance.sh update      # Mise à jour
+./vigilance.sh restart     # Redémarrer
+```
+
+---
+
+## Support
+
+- **Email** : support@vigilancex.io
+- **Documentation** : wiki/
+- **Licence** : Settings → License dans le dashboard
+
+---
+
+## Sécurité
+
+- Images Docker signées (Cosign)
+- Binaires obfusqués
+- TLS 1.2+ obligatoire
+- Authentification JWT
+- RBAC (admin/audit)
+
+---
+
+<p align="center">
+  <strong>VIGILANCE X</strong><br>
+  <em>Transformez votre Sophos XGS en plateforme SOC</em>
+</p>
