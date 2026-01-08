@@ -365,9 +365,11 @@ En cas de perte du mot de passe admin :
 docker exec vigilance_backend /app/reset-password <username> <new_password>
 ```
 
+**Mot de passe par défaut pour les resets** : `Admin12345`
+
 Exemple :
 ```bash
-docker exec vigilance_backend /app/reset-password admin MonNouveauPass123!
+docker exec vigilance_backend /app/reset-password admin Admin12345
 ```
 
 ## Licence
