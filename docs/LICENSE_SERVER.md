@@ -712,6 +712,243 @@ XXXX-XXXX-XXXX-XXXX
 
 ---
 
+## Procédures de Gestion des Licences
+
+### 1. Renouvellement de licence (même clé)
+
+Prolonger la date d'expiration d'une licence existante sans changer la clé.
+
+#### Via Dashboard vigilanceKey
+
+1. Accéder au dashboard vigilanceKey
+2. Trouver la licence dans la liste
+3. Cliquer sur "Edit" / "Modifier"
+4. Mettre à jour la date d'expiration
+5. Sauvegarder
+
+#### Via API
+
+```bash
+curl -X PUT "https://vigilancexkey.cloudcomputing.lu/api/v1/admin/licenses/{license_id}" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expires_at": "2028-12-31T23:59:59Z"
+  }'
+```
+
+**Effet côté client :** Le prochain heartbeat (max 12h) récupérera automatiquement la nouvelle date d'expiration. Aucune action requise côté client.
+
+---
+
+### 2. Changement de clé licence (nouvelle clé)
+
+Remplacer une licence par une nouvelle clé (ex: upgrade, changement de client).
+
+#### Étape 1 : Créer la nouvelle licence (vigilanceKey)
+
+Via dashboard ou API :
+
+```bash
+curl -X POST "https://vigilancexkey.cloudcomputing.lu/api/v1/admin/licenses" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_name": "Client ABC - Renewed",
+    "max_firewalls": 10,
+    "expires_at": "2028-12-31T23:59:59Z",
+    "features": ["osint", "reports", "geoblocking", "threat_intel"]
+  }'
+```
+
+#### Étape 2 : Supprimer le cache local (vigilanceX)
+
+```bash
+# Supprimer le fichier de licence local
+docker exec vigilance_backend rm -f /app/data/license.json
+
+# Redémarrer le backend
+cd /opt/vigilanceX/docker && docker compose restart backend
+```
+
+#### Étape 3 : Activer la nouvelle licence
+
+1. Accéder au dashboard vigilanceX
+2. Vous serez redirigé vers `/license`
+3. Saisir la nouvelle clé : `XXXX-XXXX-XXXX-XXXX`
+4. Cliquer sur "Activate License"
+
+#### Étape 4 (optionnel) : Supprimer l'ancienne licence
+
+```bash
+curl -X DELETE "https://vigilancexkey.cloudcomputing.lu/api/v1/admin/licenses/{old_license_id}" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+---
+
+### 3. Révocation immédiate d'une licence
+
+Bloquer l'accès d'un client immédiatement (ex: non-paiement, abus).
+
+#### Étape 1 : Révoquer sur vigilanceKey
+
+```bash
+curl -X DELETE "https://vigilancexkey.cloudcompeling.lu/api/v1/admin/licenses/{license_id}" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+#### Effet côté client
+
+| Délai | Comportement |
+|-------|--------------|
+| **0 - 12h** | Client fonctionne encore (cache local valide) |
+| **12h** | Heartbeat échoue → Grace Mode activé |
+| **12h - 84h** | Grace Mode (72h) - Client fonctionne avec warning |
+| **> 84h** | Kill Switch activé - API bloquée |
+
+#### Révocation immédiate (sans attendre le heartbeat)
+
+Pour bloquer immédiatement, contacter le client pour supprimer le cache :
+
+```bash
+# Sur le serveur vigilanceX du client
+docker exec vigilance_backend rm -f /app/data/license.json
+docker compose restart backend
+```
+
+---
+
+### 4. Réinitialisation du cache local
+
+Forcer une ré-activation (utile pour debug ou changement de clé).
+
+#### Commandes
+
+```bash
+# Méthode 1 : Via docker exec
+docker exec vigilance_backend rm -f /app/data/license.json
+cd /opt/vigilanceX/docker && docker compose restart backend
+
+# Méthode 2 : Via volume monté (si accessible)
+rm -f /opt/vigilanceX/docker/data/license.json
+cd /opt/vigilanceX/docker && docker compose restart backend
+```
+
+#### Vérification
+
+```bash
+# Vérifier que le cache est supprimé
+docker exec vigilance_backend ls -la /app/data/
+
+# Vérifier le status (devrait être unlicensed)
+curl http://localhost:8080/api/v1/license/status
+```
+
+**Réponse attendue :**
+```json
+{
+  "licensed": false,
+  "status": "unlicensed",
+  "message": "No license found. Please activate."
+}
+```
+
+---
+
+### 5. Migration vers une nouvelle VM
+
+Transférer une licence vers un nouveau serveur (changement d'infrastructure).
+
+#### Option A : Nouvelle activation (recommandé)
+
+1. **Sur vigilanceKey** : La licence existante peut être réutilisée si `max_firewalls` le permet
+2. **Sur nouvelle VM** : Installer vigilanceX et activer avec la même clé
+3. **Sur ancienne VM** : Désactiver ou supprimer
+
+```bash
+# Sur l'ancienne VM - supprimer la licence locale
+docker exec vigilance_backend rm -f /app/data/license.json
+docker compose down
+```
+
+#### Option B : Nouvelle clé
+
+Si le HardwareID change et la licence est déjà liée :
+
+1. Créer une nouvelle licence sur vigilanceKey
+2. Supprimer l'ancienne licence
+3. Activer la nouvelle clé sur la nouvelle VM
+
+---
+
+### 6. Forcer un heartbeat immédiat
+
+Utile après un renouvellement pour mettre à jour immédiatement.
+
+#### Via API (nécessite JWT)
+
+```bash
+# Obtenir un token JWT
+TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"YOUR_PASSWORD"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+# Forcer la validation
+curl -X POST http://localhost:8080/api/v1/license/validate \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### Via redémarrage backend
+
+```bash
+cd /opt/vigilanceX/docker && docker compose restart backend
+```
+
+Le heartbeat est exécuté au démarrage du backend.
+
+---
+
+### 7. Vérifier le status d'une licence
+
+#### Côté Client (vigilanceX)
+
+```bash
+# Status public (sans auth)
+curl http://localhost:8080/api/v1/license/status
+
+# Status détaillé (avec auth admin)
+curl http://localhost:8080/api/v1/license/info \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### Côté Serveur (vigilanceKey)
+
+```bash
+# Lister toutes les licences
+curl https://vigilancexkey.cloudcomputing.lu/api/v1/admin/licenses \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+# Détails d'une licence spécifique
+curl https://vigilancexkey.cloudcomputing.lu/api/v1/admin/licenses/{license_id} \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+
+---
+
+### Tableau récapitulatif des procédures
+
+| Scénario | Action vigilanceKey | Action vigilanceX | Délai effectif |
+|----------|---------------------|-------------------|----------------|
+| **Renouvellement** | Modifier expires_at | Aucune (heartbeat) | 0-12h |
+| **Nouvelle clé** | Créer nouvelle licence | Supprimer cache + activer | Immédiat |
+| **Révocation** | Supprimer licence | Aucune (auto) | 12-84h |
+| **Révocation immédiate** | Supprimer licence | Supprimer cache | Immédiat |
+| **Migration VM** | Aucune ou nouvelle clé | Activer sur nouvelle VM | Immédiat |
+| **Debug/Reset** | Aucune | Supprimer cache + restart | Immédiat |
+
+---
+
 ## Troubleshooting
 
 ### Problèmes courants
