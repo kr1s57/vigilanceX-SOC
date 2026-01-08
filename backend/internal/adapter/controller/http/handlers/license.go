@@ -14,6 +14,15 @@ type LicenseHandler struct {
 	client *license.Client
 }
 
+// maskHardwareID masks a hardware ID for display (security: prevents exposure of full binding hash)
+// v3.0: Commercial distribution security enhancement
+func maskHardwareID(hwid string) string {
+	if len(hwid) <= 12 {
+		return hwid
+	}
+	return hwid[:8] + "..." + hwid[len(hwid)-4:]
+}
+
 // NewLicenseHandler creates a new license handler
 func NewLicenseHandler(client *license.Client) *LicenseHandler {
 	return &LicenseHandler{
@@ -68,14 +77,14 @@ func (h *LicenseHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	status := h.client.GetStatus()
 
 	response := LicenseStatusResponse{
-		Licensed:       status.Licensed,
-		Status:         status.Status,
-		CustomerName:   status.CustomerName,
-		ExpiresAt:      status.ExpiresAt,
-		DaysRemaining:  status.DaysRemaining,
-		GraceMode:      status.GraceMode,
-		Features:       status.Features,
-		HardwareID:     status.HardwareID,
+		Licensed:      status.Licensed,
+		Status:        status.Status,
+		CustomerName:  status.CustomerName,
+		ExpiresAt:     status.ExpiresAt,
+		DaysRemaining: status.DaysRemaining,
+		GraceMode:     status.GraceMode,
+		Features:      status.Features,
+		HardwareID:    maskHardwareID(status.HardwareID), // v3.0: Masked for security
 		// v3.0: Firewall binding info
 		BindingVersion: status.BindingVersion,
 		FirewallSerial: status.FirewallSerial,
@@ -166,7 +175,7 @@ func (h *LicenseHandler) GetInfo(w http.ResponseWriter, r *http.Request) {
 			DaysRemaining: status.DaysRemaining,
 			GraceMode:     status.GraceMode,
 			Features:      status.Features,
-			HardwareID:    status.HardwareID,
+			HardwareID:    maskHardwareID(status.HardwareID), // v3.0: Masked for security
 		},
 		LicenseKey: licenseKey,
 	}

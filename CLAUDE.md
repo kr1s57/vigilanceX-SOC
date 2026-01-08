@@ -367,6 +367,29 @@ GREYNOISE_API_KEY=xxx
 6. **Documenter** les nouveaux endpoints dans README.md
 7. **Mettre a jour** CHANGELOG.md pour chaque version
 
+### Regles de Versioning (Semantic Versioning)
+
+Les projets **VigilanceX** et **VigilanceKey** suivent une numerotation stricte des versions:
+
+| Type de changement | Increment | Exemple |
+|--------------------|-----------|---------|
+| **Bugfix / Changement mineur** | PATCH | 2.9.7 → 2.9.8 |
+| **Ajout de module / Modification majeure** | MAJOR | 2.9.7 → 3.0.0 |
+
+**Montee PATCH** (X.Y.Z → X.Y.Z+1):
+- Corrections de bugs
+- Ameliorations mineures de code
+- Ajustements de configuration
+- Pack de bugfixes
+
+**Montee MAJOR** (X.Y.Z → X+1.0.0):
+- Ajout d'un nouveau module ou fonctionnalite majeure
+- Refactoring important du code
+- Changements d'architecture
+- Modifications cassant la compatibilite
+
+> **Important**: Toujours mettre a jour le numero de version dans CHANGELOG.md ET dans les fichiers concernes (package.json, version.go, etc.)
+
 ### Commandes Frequentes
 
 ```bash

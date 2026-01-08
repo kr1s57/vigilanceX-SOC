@@ -304,7 +304,9 @@ func main() {
 			r.Post("/auth/login", authHandler.Login)
 			// v2.9: License endpoints (public - needed before activation)
 			r.Get("/license/status", licenseHandler.GetStatus)
-			r.Post("/license/activate", licenseHandler.Activate)
+			// v3.0: Rate limit license activation to prevent brute-force (5 attempts per hour per IP)
+			r.With(httprate.Limit(5, time.Hour, httprate.WithKeyFuncs(httprate.KeyByIP))).
+				Post("/license/activate", licenseHandler.Activate)
 		})
 
 		// ==============================================

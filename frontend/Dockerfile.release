@@ -1,0 +1,29 @@
+# VIGILANCE X Frontend - Release Dockerfile
+# Uses pre-built frontend with Terser obfuscation
+# This image is optimized for commercial distribution
+
+FROM nginx:alpine
+
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copy pre-built frontend from CI/CD artifacts
+COPY dist /usr/share/nginx/html
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Expose HTTP port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 -O /dev/null http://127.0.0.1/health || exit 1
+
+# Labels for image metadata
+LABEL org.opencontainers.image.title="VIGILANCE X Frontend" \
+      org.opencontainers.image.description="VIGILANCE X SOC Platform - Web Dashboard" \
+      org.opencontainers.image.vendor="VigilanceX" \
+      org.opencontainers.image.licenses="Proprietary"
+
+CMD ["nginx", "-g", "daemon off;"]

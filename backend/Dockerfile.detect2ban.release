@@ -1,0 +1,40 @@
+# VIGILANCE X Detect2Ban - Release Dockerfile
+# Uses pre-built obfuscated binary (Garble + UPX)
+# This image is optimized for commercial distribution
+
+FROM alpine:3.19
+
+# Install minimal runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata
+
+# Create non-root user for security
+RUN addgroup -g 1000 vigilance && \
+    adduser -u 1000 -G vigilance -D -h /app vigilance
+
+WORKDIR /app
+
+# Copy pre-built obfuscated binary from CI/CD artifacts
+COPY build/vigilancex-detect2ban-linux-amd64 /app/vigilancex-detect2ban
+
+# Copy scenarios directory for detection rules
+COPY backend/scenarios /app/scenarios
+
+# Set executable permissions
+RUN chmod +x /app/vigilancex-detect2ban
+
+# Create data directory
+RUN mkdir -p /app/data && \
+    chown -R vigilance:vigilance /app
+
+# Switch to non-root user
+USER vigilance
+
+# Labels for image metadata
+LABEL org.opencontainers.image.title="VIGILANCE X Detect2Ban" \
+      org.opencontainers.image.description="VIGILANCE X SOC Platform - Detection Engine" \
+      org.opencontainers.image.vendor="VigilanceX" \
+      org.opencontainers.image.licenses="Proprietary"
+
+ENTRYPOINT ["/app/vigilancex-detect2ban"]

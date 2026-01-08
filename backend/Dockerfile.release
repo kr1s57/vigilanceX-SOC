@@ -1,0 +1,50 @@
+# VIGILANCE X API - Release Dockerfile
+# Uses pre-built obfuscated binaries (Garble + UPX)
+# This image is optimized for commercial distribution
+
+FROM alpine:3.19
+
+# Install minimal runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    wget
+
+# Create non-root user for security
+RUN addgroup -g 1000 vigilance && \
+    adduser -u 1000 -G vigilance -D -h /app vigilance
+
+WORKDIR /app
+
+# Copy pre-built obfuscated binaries from CI/CD artifacts
+# These binaries are built with Garble obfuscation and UPX compression
+COPY build/vigilancex-api-linux-amd64 /app/vigilancex-api
+COPY build/reset-password-linux-amd64 /app/reset-password
+
+# Copy scenarios directory for Detect2Ban rules
+COPY backend/scenarios /app/scenarios
+
+# Set executable permissions
+RUN chmod +x /app/vigilancex-api /app/reset-password
+
+# Create data directory for license persistence
+RUN mkdir -p /app/data /app/.ssh && \
+    chown -R vigilance:vigilance /app
+
+# Switch to non-root user
+USER vigilance
+
+# Expose API port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget -q --spider http://localhost:8080/health || exit 1
+
+# Labels for image metadata
+LABEL org.opencontainers.image.title="VIGILANCE X API" \
+      org.opencontainers.image.description="VIGILANCE X SOC Platform - API Server" \
+      org.opencontainers.image.vendor="VigilanceX" \
+      org.opencontainers.image.licenses="Proprietary"
+
+ENTRYPOINT ["/app/vigilancex-api"]

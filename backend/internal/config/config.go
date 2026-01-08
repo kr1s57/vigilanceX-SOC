@@ -97,9 +97,9 @@ type ThreatIntelConfig struct {
 	RateLimitDelay time.Duration
 
 	// v2.9.5: Cascade configuration
-	CascadeEnabled    bool // Enable tiered cascade (saves API quota)
-	Tier2Threshold    int  // Score threshold to query Tier 2 (default: 30)
-	Tier3Threshold    int  // Score threshold to query Tier 3 (default: 60)
+	CascadeEnabled bool // Enable tiered cascade (saves API quota)
+	Tier2Threshold int  // Score threshold to query Tier 2 (default: 30)
+	Tier3Threshold int  // Score threshold to query Tier 3 (default: 60)
 }
 
 type JWTConfig struct {
@@ -325,8 +325,8 @@ func setDefaults() {
 	viper.SetDefault("THREAT_INTEL_RATE_LIMIT", 200*time.Millisecond)
 	// v2.9.5: Cascade defaults (enabled by default to save API quota)
 	viper.SetDefault("CASCADE_ENABLED", true)
-	viper.SetDefault("CASCADE_TIER2_THRESHOLD", 30)  // Query Tier 2 if score >= 30
-	viper.SetDefault("CASCADE_TIER3_THRESHOLD", 60)  // Query Tier 3 if score >= 60
+	viper.SetDefault("CASCADE_TIER2_THRESHOLD", 30) // Query Tier 2 if score >= 30
+	viper.SetDefault("CASCADE_TIER3_THRESHOLD", 60) // Query Tier 3 if score >= 60
 
 	// JWT defaults
 	viper.SetDefault("JWT_EXPIRY", 24*time.Hour)
@@ -346,7 +346,7 @@ func setDefaults() {
 	// License defaults
 	viper.SetDefault("LICENSE_SERVER_URL", "http://10.56.126.126")
 	viper.SetDefault("LICENSE_HEARTBEAT_INTERVAL", 12*time.Hour)
-	viper.SetDefault("LICENSE_GRACE_PERIOD", 168*time.Hour) // v3.0: 7 days grace period
+	viper.SetDefault("LICENSE_GRACE_PERIOD", 72*time.Hour) // v3.0: 3 days grace period (commercial distribution)
 	viper.SetDefault("LICENSE_ENABLED", true)
 	viper.SetDefault("LICENSE_STORE_PATH", "/app/data/license.json")
 
