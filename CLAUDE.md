@@ -6,6 +6,74 @@ Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architec
 
 ---
 
+## Architecture de Deploiement Securise
+
+### Modele de Securite
+
+VIGILANCE X est deploye dans un environnement **securise par design**:
+
+| Couche | Protection |
+|--------|------------|
+| **Reseau** | Pas d'exposition Internet, interne uniquement |
+| **Acces** | VPN obligatoire pour acces distant |
+| **Firewall** | Regles restrictives, uniquement PC admin autorises |
+| **Authentification** | JWT + RBAC (admin/audit) |
+
+### Implications sur la Securite
+
+Cette architecture elimine les vecteurs d'attaque externes:
+
+| Menace | Statut | Raison |
+|--------|--------|--------|
+| Brute-force login | **Non applicable** | Seuls admins de confiance ont acces |
+| DDoS | **Non applicable** | Pas d'exposition Internet |
+| Injection depuis Internet | **Non applicable** | Reseau isole |
+| Man-in-the-middle externe | **Non applicable** | Trafic interne uniquement |
+
+### Securite Implementee
+
+Les mesures suivantes sont en place et suffisantes pour l'environnement:
+
+- **Hashage bcrypt** (cout 12) pour mots de passe
+- **JWT avec validation HMAC** pour sessions
+- **RBAC** avec roles admin/audit
+- **Rate limiting global** (100 req/min)
+- **Placeholders SQL** contre injections
+- **Password hash jamais expose** en JSON
+
+### Mesures NON necessaires (environnement controle)
+
+Ces mesures seraient requises uniquement si exposition Internet:
+
+- Lockout apres N tentatives login
+- Rate limiting agressif sur /auth/login
+- Protection anti-brute-force
+- WAF applicatif
+
+---
+
+## Statut des Fonctionnalites
+
+### En Production
+- Dashboard temps reel
+- WAF Explorer
+- Attacks Analyzer
+- Advanced Threat (11 providers TI)
+- VPN & Network
+- Soft Whitelist
+- Geoblocking
+- Authentication & User Management
+- Systeme de licence VX3
+
+### En Developpement (Coquille)
+- **Policies de bans**: Logique de decision non finalisee
+- **Detect2Ban engine**: Scenarios YAML a completer
+- **Recidivisme automatique**: A configurer selon besoins
+
+> **Note**: Ne pas modifier la logique des bans sans consultation prealable.
+
+---
+
 ## Vue d'Ensemble du Projet
 
 **VIGILANCE X** est une plateforme SOC (Security Operations Center) temps reel qui:
