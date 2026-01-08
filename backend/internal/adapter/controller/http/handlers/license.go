@@ -36,6 +36,12 @@ type LicenseStatusResponse struct {
 	GraceMode     bool       `json:"grace_mode"`
 	Features      []string   `json:"features"`
 	HardwareID    string     `json:"hardware_id,omitempty"`
+	// v3.0: Firewall binding info
+	BindingVersion string `json:"binding_version,omitempty"`
+	FirewallSerial string `json:"firewall_serial,omitempty"`
+	FirewallModel  string `json:"firewall_model,omitempty"`
+	FirewallName   string `json:"firewall_name,omitempty"`
+	SecureBinding  bool   `json:"secure_binding"`
 }
 
 // LicenseInfoResponse represents detailed license info (admin only)
@@ -62,14 +68,20 @@ func (h *LicenseHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	status := h.client.GetStatus()
 
 	response := LicenseStatusResponse{
-		Licensed:      status.Licensed,
-		Status:        status.Status,
-		CustomerName:  status.CustomerName,
-		ExpiresAt:     status.ExpiresAt,
-		DaysRemaining: status.DaysRemaining,
-		GraceMode:     status.GraceMode,
-		Features:      status.Features,
-		HardwareID:    status.HardwareID,
+		Licensed:       status.Licensed,
+		Status:         status.Status,
+		CustomerName:   status.CustomerName,
+		ExpiresAt:      status.ExpiresAt,
+		DaysRemaining:  status.DaysRemaining,
+		GraceMode:      status.GraceMode,
+		Features:       status.Features,
+		HardwareID:     status.HardwareID,
+		// v3.0: Firewall binding info
+		BindingVersion: status.BindingVersion,
+		FirewallSerial: status.FirewallSerial,
+		FirewallModel:  status.FirewallModel,
+		FirewallName:   status.FirewallName,
+		SecureBinding:  status.SecureBinding,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

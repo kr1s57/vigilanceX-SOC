@@ -24,24 +24,33 @@ type LicenseInfo struct {
 
 // LicenseStatus represents the current license status for API responses
 type LicenseStatus struct {
-	Licensed      bool       `json:"licensed"`
-	Status        string     `json:"status"`
-	CustomerName  string     `json:"customer_name,omitempty"`
-	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
-	DaysRemaining int        `json:"days_remaining,omitempty"`
-	GraceMode     bool       `json:"grace_mode"`
-	Features      []string   `json:"features"`
-	HardwareID    string     `json:"hardware_id,omitempty"`
+	Licensed       bool       `json:"licensed"`
+	Status         string     `json:"status"`
+	CustomerName   string     `json:"customer_name,omitempty"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	DaysRemaining  int        `json:"days_remaining,omitempty"`
+	GraceMode      bool       `json:"grace_mode"`
+	Features       []string   `json:"features"`
+	HardwareID     string     `json:"hardware_id,omitempty"`
+	// v3.0: Firewall binding info
+	BindingVersion string `json:"binding_version,omitempty"` // VX2 or VX3
+	FirewallSerial string `json:"firewall_serial,omitempty"`
+	FirewallModel  string `json:"firewall_model,omitempty"`
+	FirewallName   string `json:"firewall_name,omitempty"`
+	SecureBinding  bool   `json:"secure_binding"` // true if VX3 binding is active
 }
 
 // LicenseConfig holds the configuration for the license client
 type LicenseConfig struct {
-	ServerURL     string
-	LicenseKey    string // For auto-activation
-	HeartbeatInt  time.Duration
-	GracePeriod   time.Duration
-	Enabled       bool
-	StorePath     string
+	ServerURL    string
+	LicenseKey   string // For auto-activation
+	HeartbeatInt time.Duration
+	GracePeriod  time.Duration
+	Enabled      bool
+	StorePath    string
+	// v3.0: Database info for firewall binding
+	Database     string     // ClickHouse database name
+	DBConnection DBQuerier  // ClickHouse connection (optional)
 }
 
 // Client manages license validation and heartbeat
@@ -62,6 +71,9 @@ type Client struct {
 type ActivateRequest struct {
 	LicenseKey string `json:"license_key"`
 	HardwareID string `json:"hardware_id"`
+	// v3.0: Include firewall info for server-side validation
+	FirewallSerial string `json:"firewall_serial,omitempty"`
+	FirewallModel  string `json:"firewall_model,omitempty"`
 }
 
 // ActivateResponse is received from the license server
@@ -75,6 +87,8 @@ type ActivateResponse struct {
 type ValidateRequest struct {
 	LicenseKey string `json:"license_key"`
 	HardwareID string `json:"hardware_id"`
+	// v3.0: Include firewall info for server-side verification
+	FirewallSerial string `json:"firewall_serial,omitempty"`
 }
 
 // ValidateResponse is received from validation
@@ -86,7 +100,7 @@ type ValidateResponse struct {
 	Error     string    `json:"error,omitempty"`
 }
 
-// NewClient creates a new license client
+// NewClient creates a new license client (legacy - without firewall binding)
 func NewClient(cfg LicenseConfig) (*Client, error) {
 	// Create store
 	storePath := cfg.StorePath
@@ -101,11 +115,71 @@ func NewClient(cfg LicenseConfig) (*Client, error) {
 
 	gracePeriod := cfg.GracePeriod
 	if gracePeriod == 0 {
-		gracePeriod = 72 * time.Hour
+		gracePeriod = 168 * time.Hour // v3.0: Default to 7 days
 	}
 
 	hwid := store.GetHardwareID()
-	slog.Info("License client initialized", "hardware_id", hwid)
+	slog.Info("License client initialized (legacy VX2)",
+		"hardware_id", hwid[:16]+"...",
+		"binding", "VX2")
+
+	client := &Client{
+		serverURL: cfg.ServerURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		store:       store,
+		gracePeriod: gracePeriod,
+		hardwareID:  hwid,
+	}
+
+	return client, nil
+}
+
+// NewClientWithFirewall creates a license client with firewall binding (v3.0)
+func NewClientWithFirewall(ctx context.Context, cfg LicenseConfig) (*Client, error) {
+	storePath := cfg.StorePath
+	if storePath == "" {
+		storePath = "/app/data/license.json"
+	}
+
+	database := cfg.Database
+	if database == "" {
+		database = "vigilance_x"
+	}
+
+	// Create store with firewall binding
+	store, err := NewLicenseStoreWithFirewall(ctx, storePath, cfg.DBConnection, database)
+	if err != nil {
+		// Fall back to legacy store if firewall binding fails
+		slog.Warn("Failed to create store with firewall binding, falling back to legacy",
+			"error", err)
+		return NewClient(cfg)
+	}
+
+	gracePeriod := cfg.GracePeriod
+	if gracePeriod == 0 {
+		gracePeriod = 168 * time.Hour // v3.0: Default to 7 days
+	}
+
+	hwid := store.GetHardwareID()
+	bindingType := "VX2"
+	if store.HasSecureBinding() {
+		bindingType = "VX3"
+	}
+
+	fwInfo := store.GetFirewallInfo()
+	if fwInfo != nil {
+		slog.Info("License client initialized with firewall binding",
+			"hardware_id", hwid[:16]+"...",
+			"binding", bindingType,
+			"firewall_serial", fwInfo.Serial,
+			"firewall_model", fwInfo.Model)
+	} else {
+		slog.Info("License client initialized (no firewall detected yet)",
+			"hardware_id", hwid[:16]+"...",
+			"binding", bindingType)
+	}
 
 	client := &Client{
 		serverURL: cfg.ServerURL,
@@ -153,19 +227,33 @@ func (c *Client) LoadFromStore() error {
 		c.inGrace = time.Since(stored.GraceStart) < c.gracePeriod
 	}
 
+	bindingInfo := ""
+	if stored.BindingVersion == "VX3" {
+		bindingInfo = fmt.Sprintf(" (VX3: %s)", stored.FirewallSerial)
+	}
+
 	slog.Info("License loaded from store",
 		"customer", c.license.CustomerName,
 		"expires", c.license.ExpiresAt,
-		"status", c.license.Status)
+		"status", c.license.Status,
+		"binding", stored.BindingVersion+bindingInfo)
 
 	return nil
 }
 
 // Activate activates a license key with the server
 func (c *Client) Activate(ctx context.Context, licenseKey string) error {
+	fwInfo := c.store.GetFirewallInfo()
+
 	req := ActivateRequest{
 		LicenseKey: licenseKey,
 		HardwareID: c.hardwareID,
+	}
+
+	// v3.0: Include firewall info if available
+	if fwInfo != nil {
+		req.FirewallSerial = fwInfo.Serial
+		req.FirewallModel = fwInfo.Model
 	}
 
 	body, err := json.Marshal(req)
@@ -198,8 +286,8 @@ func (c *Client) Activate(ctx context.Context, licenseKey string) error {
 	// Store the license
 	c.mu.Lock()
 	c.license = activateResp.License
-	c.license.LicenseKey = licenseKey // Store the license key (not echoed by server for security)
-	c.license.IsValid = true          // Ensure license is marked as valid after successful activation
+	c.license.LicenseKey = licenseKey
+	c.license.IsValid = true
 	c.lastCheck = time.Now()
 	c.inGrace = false
 	c.graceStart = time.Time{}
@@ -210,9 +298,15 @@ func (c *Client) Activate(ctx context.Context, licenseKey string) error {
 		slog.Error("Failed to persist license", "error", err)
 	}
 
+	bindingType := "VX2"
+	if c.store.HasSecureBinding() {
+		bindingType = "VX3"
+	}
+
 	slog.Info("License activated successfully",
 		"customer", c.license.CustomerName,
-		"expires", c.license.ExpiresAt)
+		"expires", c.license.ExpiresAt,
+		"binding", bindingType)
 
 	return nil
 }
@@ -230,9 +324,16 @@ func (c *Client) Validate(ctx context.Context) (*LicenseStatus, error) {
 	licenseKey := c.license.LicenseKey
 	c.mu.RUnlock()
 
+	fwInfo := c.store.GetFirewallInfo()
+
 	req := ValidateRequest{
 		LicenseKey: licenseKey,
 		HardwareID: c.hardwareID,
+	}
+
+	// v3.0: Include firewall serial for verification
+	if fwInfo != nil {
+		req.FirewallSerial = fwInfo.Serial
 	}
 
 	body, err := json.Marshal(req)
@@ -313,11 +414,13 @@ func (c *Client) GetStatus() *LicenseStatus {
 // getStatusLocked returns status (must hold lock)
 func (c *Client) getStatusLocked() *LicenseStatus {
 	if c.license == nil {
-		return &LicenseStatus{
+		status := &LicenseStatus{
 			Licensed:   false,
 			Status:     "not_activated",
 			HardwareID: c.hardwareID,
 		}
+		c.addFirewallInfoToStatus(status)
+		return status
 	}
 
 	// Check grace mode expiry
@@ -344,7 +447,26 @@ func (c *Client) getStatusLocked() *LicenseStatus {
 		status.DaysRemaining = int(time.Until(c.license.ExpiresAt).Hours() / 24)
 	}
 
+	// v3.0: Add firewall binding info
+	c.addFirewallInfoToStatus(status)
+
 	return status
+}
+
+// addFirewallInfoToStatus adds firewall binding information to the status
+func (c *Client) addFirewallInfoToStatus(status *LicenseStatus) {
+	if c.store.HasSecureBinding() {
+		status.BindingVersion = "VX3"
+		status.SecureBinding = true
+		if fwInfo := c.store.GetFirewallInfo(); fwInfo != nil {
+			status.FirewallSerial = fwInfo.Serial
+			status.FirewallModel = fwInfo.Model
+			status.FirewallName = fwInfo.Name
+		}
+	} else {
+		status.BindingVersion = "VX2"
+		status.SecureBinding = false
+	}
 }
 
 // IsLicensed returns true if there is a valid license or in grace period
@@ -395,6 +517,16 @@ func (c *Client) GetLicenseKey() string {
 // GetHardwareID returns the hardware ID
 func (c *Client) GetHardwareID() string {
 	return c.hardwareID
+}
+
+// HasSecureBinding returns true if using VX3 firewall binding
+func (c *Client) HasSecureBinding() bool {
+	return c.store.HasSecureBinding()
+}
+
+// GetFirewallInfo returns the bound firewall information
+func (c *Client) GetFirewallInfo() *FirewallInfo {
+	return c.store.GetFirewallInfo()
 }
 
 // enterGraceMode handles network failures by entering grace mode

@@ -346,7 +346,7 @@ func setDefaults() {
 	// License defaults
 	viper.SetDefault("LICENSE_SERVER_URL", "http://10.56.126.126")
 	viper.SetDefault("LICENSE_HEARTBEAT_INTERVAL", 12*time.Hour)
-	viper.SetDefault("LICENSE_GRACE_PERIOD", 72*time.Hour)
+	viper.SetDefault("LICENSE_GRACE_PERIOD", 168*time.Hour) // v3.0: 7 days grace period
 	viper.SetDefault("LICENSE_ENABLED", true)
 	viper.SetDefault("LICENSE_STORE_PATH", "/app/data/license.json")
 

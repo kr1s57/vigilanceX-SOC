@@ -69,18 +69,26 @@ func main() {
 	geoblockingRepo := clickhouse.NewGeoblockingRepository(chConn) // v2.0: Geoblocking
 	usersRepo := clickhouse.NewUsersRepository(chConn)             // v2.6: Authentication
 
-	// v2.9: Initialize License Client
+	// v3.0: Initialize License Client with Firewall Binding
 	var licenseClient *license.Client
 	var heartbeatService *license.HeartbeatService
 	if cfg.License.Enabled {
 		var err error
-		licenseClient, err = license.NewClient(license.LicenseConfig{
+		// v3.0: Create ClickHouse adapter for license system (wraps QueryRow to implement DBQuerier)
+		chAdapter := license.NewClickHouseAdapter(func(ctx context.Context, query string, args ...interface{}) license.RowScanner {
+			return chConn.QueryRow(ctx, query, args...)
+		})
+
+		// v3.0: Use NewClientWithFirewall for secure VM+Firewall binding
+		licenseClient, err = license.NewClientWithFirewall(context.Background(), license.LicenseConfig{
 			ServerURL:    cfg.License.ServerURL,
 			LicenseKey:   cfg.License.LicenseKey,
 			HeartbeatInt: cfg.License.HeartbeatInt,
 			GracePeriod:  cfg.License.GracePeriod,
 			Enabled:      cfg.License.Enabled,
 			StorePath:    cfg.License.StorePath,
+			Database:     cfg.ClickHouse.Database,
+			DBConnection: chAdapter, // Pass ClickHouse adapter for firewall detection
 		})
 		if err != nil {
 			logger.Error("Failed to initialize license client", "error", err)

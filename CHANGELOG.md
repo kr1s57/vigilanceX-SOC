@@ -4,6 +4,142 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.0.0] - 2026-01-08
+
+### VX3 Secure Firewall Binding
+
+Version majeure introduisant un nouveau système de liaison matérielle sécurisé combinant l'identité de la VM et du firewall connecté.
+
+---
+
+### 🔐 VX3 Hardware Binding
+
+Nouveau système de binding double couche pour une protection renforcée contre la copie de licence.
+
+#### Architecture Binding
+
+| Version | Format | Éléments |
+|---------|--------|----------|
+| **VX2** (legacy) | `SHA256("VX2:" + machine_id + ":" + product_uuid)` | VM uniquement |
+| **VX3** (nouveau) | `SHA256("VX3:" + machine_id + ":" + firewall_serial)` | VM + Firewall |
+
+#### Sécurité Renforcée
+
+| Menace | VX2 | VX3 |
+|--------|-----|-----|
+| Copie VM vers autre hyperviseur | ⚠️ Possible si machine-id identique | ✅ Bloqué (firewall différent) |
+| Clone VM avec même firewall | ⚠️ Fonctionnel | ✅ Bloqué (machine-id différent) |
+| Transfert licence entre clients | ⚠️ Contournable | ✅ Impossible |
+
+#### Extraction Firewall Serial
+
+Le serial du firewall est extrait automatiquement des logs syslog stockés dans ClickHouse :
+
+```sql
+SELECT
+    extractAll(raw_log, 'device_serial_id="([^"]+)"')[1] as serial,
+    extractAll(raw_log, 'device_model="([^"]+)"')[1] as model,
+    extractAll(raw_log, 'device_name="([^"]+)"')[1] as name
+FROM vigilance.events
+WHERE raw_log LIKE '%device_serial_id%'
+```
+
+#### Données Firewall Capturées
+
+| Champ | Exemple | Source |
+|-------|---------|--------|
+| `firewall_serial` | `X21006DP4YWT63A` | Sophos XGS syslog |
+| `firewall_model` | `XGS2100` | Sophos XGS syslog |
+| `firewall_name` | `xgkrs.cloudcomputing.lu` | Sophos XGS syslog |
+
+---
+
+### ⏰ Grace Period Étendu
+
+| Paramètre | Ancienne valeur | Nouvelle valeur |
+|-----------|-----------------|-----------------|
+| `LICENSE_GRACE_PERIOD` | 72h (3 jours) | 168h (7 jours) |
+
+Permet un fonctionnement hors-ligne prolongé en cas de panne réseau ou maintenance du serveur de licence.
+
+---
+
+### 🔄 Migration Automatique VX2 → VX3
+
+Le système migre automatiquement les licences existantes lors de la première connexion :
+
+1. Détection licence VX2 existante
+2. Extraction du firewall serial depuis ClickHouse
+3. Régénération du hash avec binding VX3
+4. Re-chiffrement du fichier licence local
+5. Mise à jour sur vigilanceKey
+
+#### Compatibilité
+
+- Les nouvelles installations utilisent directement VX3
+- Les installations existantes migrent automatiquement
+- Fallback vers VX2 si aucun log firewall disponible
+
+---
+
+### 📡 API Response Enrichie
+
+Le endpoint `/api/v1/license/status` retourne maintenant les informations de binding :
+
+```json
+{
+    "licensed": true,
+    "status": "active",
+    "customer_name": "VigilanceX Production",
+    "expires_at": "2027-01-08T13:50:24Z",
+    "days_remaining": 364,
+    "grace_mode": false,
+    "features": ["osint", "reports", "geoblocking"],
+    "hardware_id": "5eed64c4192c28ba...",
+    "binding_version": "VX3",
+    "firewall_serial": "X21006DP4YWT63A",
+    "firewall_model": "XGS2100",
+    "firewall_name": "xgkrs.cloudcomputing.lu",
+    "secure_binding": true
+}
+```
+
+---
+
+### 🔧 Fichiers Modifiés
+
+| Fichier | Modification |
+|---------|--------------|
+| `internal/license/hwid.go` | Interfaces DBQuerier/RowScanner, ClickHouseAdapter, firewall extraction |
+| `internal/license/store.go` | Support VX3, migration automatique, firewall fields |
+| `internal/license/client.go` | NewClientWithFirewall(), firewall info dans LicenseStatus |
+| `internal/config/config.go` | Grace period 168h |
+| `cmd/api/main.go` | ClickHouseAdapter, NewClientWithFirewall() |
+| `handlers/license.go` | Firewall binding fields dans API response |
+
+---
+
+### ⚙️ Variables d'Environnement
+
+```bash
+# Grace Period (défaut: 168h = 7 jours)
+LICENSE_GRACE_PERIOD=168h
+```
+
+---
+
+### 🛡️ Prérequis VX3
+
+Pour activer le binding VX3, le système nécessite :
+
+1. **Logs syslog** : Au moins un log contenant `device_serial_id` dans ClickHouse
+2. **Firewall Sophos XGS** : Les logs doivent provenir d'un firewall Sophos XGS
+3. **Connexion ClickHouse** : Accès à la base de données pour extraire le serial
+
+Si ces conditions ne sont pas remplies, le système utilise le binding VX2 en fallback.
+
+---
+
 ## [2.9.7] - 2026-01-08
 
 ### License Sync & Grace Mode
