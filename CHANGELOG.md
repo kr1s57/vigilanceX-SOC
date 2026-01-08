@@ -92,7 +92,39 @@ Tier 3 (Limited - Score≥60):
 # .env - CrowdSec CTI API Key
 # Obtenir sur https://app.crowdsec.net/cti
 CROWDSEC_API_KEY=your_api_key_here
+
+# Cache TTL (défaut: 24h) - évite les requêtes répétées
+THREAT_INTEL_CACHE_TTL=24h
 ```
+
+---
+
+### 🛡️ Optimisation des Quotas API
+
+CrowdSec étant limité à **50 requêtes/jour**, plusieurs mécanismes protègent le quota :
+
+#### 1. Cache 24 heures
+- Une IP checkée n'est **jamais re-checkée pendant 24h**
+- Le cache est partagé entre tous les providers
+- Configurable via `THREAT_INTEL_CACHE_TTL`
+
+#### 2. Système de Cascade (Tier 2)
+- CrowdSec n'est interrogé que si le **score Tier 1 ≥ 30**
+- Les IPs "propres" ne consomment pas de quota CrowdSec
+- Seules les IPs suspectes déclenchent Tier 2
+
+#### 3. Cas d'Usage Recommandés
+| Contexte | CrowdSec Utilisé | Raison |
+|----------|------------------|--------|
+| Advanced Threat (OSINT) | ✅ Oui | Analyse approfondie |
+| IP bloquée par WAF | ✅ Oui | Score Tier 1 élevé |
+| Logs normaux | ⚠️ Si suspect | Seulement si score ≥ 30 |
+| IP déjà en cache | ❌ Non | Cache 24h actif |
+
+#### Estimation de Consommation
+- ~10-20 IPs suspectes/jour = ~10-20 requêtes CrowdSec
+- Marge confortable avec limite de 50/jour
+- Le cache évite les doublons même en cas de multiples checks UI
 
 ---
 
