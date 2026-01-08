@@ -4,6 +4,91 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [2.9.7] - 2026-01-08
+
+### License Sync & Grace Mode
+
+Amélioration du système de licence avec synchronisation manuelle et mode grace testé.
+
+---
+
+### 🔄 Sync License Status
+
+Nouveau bouton "Sync License Status" sur la page d'activation de licence permettant de forcer la synchronisation avec le serveur vigilanceKey.
+
+#### Fonctionnalités
+| Feature | Description |
+|---------|-------------|
+| **Bouton Sync** | Toujours visible sur `/license` |
+| **Feedback visuel** | Animation pendant le sync, badge succès |
+| **Mise à jour instantanée** | Status, expiration, jours restants |
+| **Gestion erreurs** | Message d'erreur si serveur injoignable |
+
+#### Cas d'usage
+- Vérifier manuellement le status de licence après modification sur vigilanceKey
+- Forcer la mise à jour après revoke/reactivate/renew/extend
+- Débugger les problèmes de licence
+
+---
+
+### 🛡️ Grace Mode (Testé & Validé)
+
+Mode de fonctionnement hors-ligne quand vigilanceKey est injoignable.
+
+#### Comportement validé
+| Condition | Status | Grace Mode | Accès |
+|-----------|--------|------------|-------|
+| Serveur accessible | `active` | `false` | ✅ Normal |
+| Serveur injoignable | `grace` | `true` | ✅ Maintenu (72h) |
+| Grace expirée | `expired` | `false` | ❌ Bloqué |
+| Serveur revient | `active` | `false` | ✅ Restauré |
+
+#### Indicateurs UI
+- **Sidebar** : Badge jaune "Grace Mode" avec "Server unreachable"
+- **Page License** : Message d'avertissement avec durée restante
+
+---
+
+### 🔗 Intégration vigilanceKey v1.2
+
+Compatibilité complète avec vigilanceKey v1.2 et ses nouvelles fonctionnalités.
+
+#### Endpoints supportés
+| Endpoint vigilanceKey | Action vigilanceX |
+|-----------------------|-------------------|
+| `POST /license/validate` | Sync manuel & heartbeat |
+| `POST /admin/licenses/{id}/revoke` | Détection révocation |
+| `POST /admin/licenses/{id}/reactivate` | Restauration accès |
+| `POST /admin/licenses/{id}/renew` | Mise à jour expiration |
+| `POST /admin/licenses/{id}/extend` | Extension personnalisée |
+
+#### Cycle de vie testé
+```
+vigilanceKey                    vigilanceX
+     │                              │
+     │◄── Heartbeat (12h) ──────────│
+     │                              │
+  [revoke]                          │
+     │                              │
+     │◄── Sync (bouton) ────────────│
+     │                              │
+     └──────► status: revoked ──────┘
+                   │
+              Accès bloqué
+```
+
+---
+
+### 🔧 Fichiers Modifiés
+
+| Fichier | Modification |
+|---------|--------------|
+| `frontend/src/pages/LicenseActivation.tsx` | Bouton Sync toujours visible |
+| `frontend/src/contexts/LicenseContext.tsx` | Fonction `syncWithServer()` |
+| `docs/VIGILANCEKEY_SERVER.md` | Documentation v1.2 complète |
+
+---
+
 ## [2.9.6] - 2026-01-08
 
 ### CrowdSec CTI Integration
