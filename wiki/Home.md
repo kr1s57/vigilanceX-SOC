@@ -7,6 +7,7 @@ Welcome to the VIGILANCE X documentation. This wiki provides comprehensive guide
 - [Architecture Overview](Architecture.md)
 - [Installation Guide](Installation-Guide.md)
 - [Configuration Reference](Configuration.md)
+- [Risk Scoring Engine](Risk-Scoring.md)
 - [Security & Hardening](Security-Hardening.md)
 - [Administration Guide](Administration.md)
 - [Troubleshooting](Troubleshooting.md)
@@ -15,10 +16,10 @@ Welcome to the VIGILANCE X documentation. This wiki provides comprehensive guide
 
 VIGILANCE X is a real-time Security Operations Center (SOC) platform that:
 
-- **Collects** logs from Sophos XGS firewalls via Syslog
-- **Analyzes** threats using 11 Threat Intelligence providers
-- **Bans** malicious IPs automatically via Sophos XML API
-- **Provides** a modern web dashboard for security operators
+- **Debug WAF en 30 secondes** : Identifiez instantanément les règles ModSec bloquantes
+- **Risk Scoring intelligent** : Score contextuel basé sur 11 providers + vos policies
+- **Active Response** : Ban automatique des IPs malveillantes sur Sophos XGS
+- **Syslog nouvelle génération** : Extraction des IDs ModSecurity (unique sur le marché)
 
 ## Features
 
