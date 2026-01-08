@@ -1,0 +1,64 @@
+# ============================================
+# VIGILANCE X - Configuration
+# Version: 3.0.0
+# ============================================
+# Copy this file to .env and fill in the values
+
+# ============================================
+# DATABASE - ClickHouse
+# ============================================
+CLICKHOUSE_USER=vigilance
+CLICKHOUSE_PASSWORD=CHANGE_ME_CLICKHOUSE_PASSWORD
+
+# ============================================
+# CACHE - Redis
+# ============================================
+REDIS_PASSWORD=CHANGE_ME_REDIS_PASSWORD
+
+# ============================================
+# AUTHENTICATION
+# ============================================
+# JWT secret (minimum 32 characters, generate with: openssl rand -hex 32)
+JWT_SECRET=CHANGE_ME_JWT_SECRET_MIN_32_CHARS
+
+# Default admin credentials (change after first login!)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=VigilanceX2024!
+
+# ============================================
+# SOPHOS XGS INTEGRATION
+# ============================================
+# Sophos Firewall API (XML API)
+SOPHOS_HOST=10.x.x.x
+SOPHOS_PORT=4444
+SOPHOS_USER=admin
+SOPHOS_PASSWORD=CHANGE_ME_SOPHOS_PASSWORD
+
+# Sophos SSH (for ModSecurity log sync, optional)
+SOPHOS_SSH_HOST=
+SOPHOS_SSH_USER=admin
+
+# ============================================
+# LICENSE
+# ============================================
+# Your license key (provided by VigilanceX support)
+LICENSE_KEY=
+
+# ============================================
+# THREAT INTELLIGENCE (Optional)
+# Phase 1: You can use your own API keys
+# These are optional - leave empty to skip providers
+# ============================================
+
+# Tier 2 Providers (moderate rate limits)
+ABUSEIPDB_API_KEY=
+GREYNOISE_API_KEY=
+CROWDSEC_API_KEY=
+
+# Tier 3 Providers (limited rate limits)
+VIRUSTOTAL_API_KEY=
+CRIMINALIP_API_KEY=
+PULSEDIVE_API_KEY=
+
+# Tier 1 Provider (AlienVault OTX - free)
+ALIENVAULT_API_KEY=

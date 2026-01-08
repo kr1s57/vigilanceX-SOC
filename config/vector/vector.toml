@@ -1,0 +1,395 @@
+# ============================================
+# VIGILANCE X - Vector Configuration
+# Parser pour logs Sophos XGS (Vector 0.34.x+)
+# ============================================
+
+data_dir = "/var/lib/vector"
+
+[api]
+enabled = true
+address = "0.0.0.0:8686"
+
+# ============================================
+# SOURCES - Socket brut pour Sophos XGS
+# ============================================
+
+[sources.sophos_syslog_udp]
+type = "socket"
+address = "0.0.0.0:514"
+mode = "udp"
+max_length = 102400
+decoding.codec = "bytes"
+
+[sources.sophos_syslog_tcp]
+type = "socket"
+address = "0.0.0.0:1514"
+mode = "tcp"
+max_length = 102400
+decoding.codec = "bytes"
+
+# ============================================
+# TRANSFORMS - Parsing Sophos Logs
+# ============================================
+
+[transforms.parse_sophos]
+type = "remap"
+inputs = ["sophos_syslog_udp", "sophos_syslog_tcp"]
+source = '''
+# Convertir bytes en string et nettoyer
+raw_message = string(.message) ?? ""
+
+# Supprimer le header syslog si present (ex: <134>Jan  6 10:00:00 hostname)
+raw_message = replace(raw_message, r'^<\d+>', "")
+raw_message = replace(raw_message, r'^[A-Za-z]{3}\s+\d+\s+\d+:\d+:\d+\s+\S+\s*', "")
+raw_message = strip_whitespace(raw_message)
+
+# Conserver le log brut
+.raw_log = raw_message
+
+# Parser key=value pairs (format Sophos standard)
+parsed = parse_key_value(raw_message, key_value_delimiter: "=", field_delimiter: " ") ?? {}
+. = merge(., parsed)
+
+# Generer un event_id unique
+.event_id = uuid_v4()
+.ingested_at = now()
+.timestamp = now()
+
+# Determiner le type de log - check multiple fields for accurate categorization
+log_type_raw = string(.log_type) ?? "unknown"
+log_component_raw = string(.log_component) ?? ""
+log_subtype_raw = string(.log_subtype) ?? ""
+
+log_type_upper = upcase(log_type_raw)
+log_component_upper = upcase(log_component_raw)
+log_subtype_upper = upcase(log_subtype_raw)
+
+# Check for specific Sophos log types
+# IMPORTANT: Check IPSec BEFORE IPS (IPSec contains "IPS" substring)
+if contains(log_type_upper, "WAF") || contains(log_component_upper, "WEB APPLICATION FIREWALL") || contains(log_component_upper, "REVERSEPROXY") {
+    .log_type = "WAF"
+} else if contains(log_type_upper, "SSL VPN") || contains(log_component_upper, "SSL VPN") || contains(log_subtype_upper, "SSL VPN") {
+    .log_type = "VPN"
+} else if contains(log_component_upper, "IPSEC") || contains(log_subtype_upper, "IPSEC") {
+    .log_type = "VPN"
+} else if contains(log_type_upper, "VPN") || contains(log_component_upper, "VPN") {
+    .log_type = "VPN"
+} else if contains(log_type_upper, "IPS") || contains(log_component_upper, "IDP") || contains(log_subtype_upper, "INTRUSION") {
+    .log_type = "IPS"
+} else if contains(log_type_upper, "ATP") || contains(log_component_upper, "SANDSTORM") || contains(log_component_upper, "ATP") {
+    .log_type = "ATP"
+} else if contains(log_type_upper, "ANTI-VIRUS") || contains(log_component_upper, "ANTI-VIRUS") || contains(log_component_upper, "ANTIVIRUS") {
+    .log_type = "Anti-Virus"
+} else if contains(log_type_upper, "FIREWALL") || contains(log_component_upper, "FIREWALL RULE") {
+    .log_type = "Firewall"
+} else if log_type_upper == "EVENT" && (contains(log_subtype_upper, "ADMIN") || contains(log_component_upper, "GUI") || contains(log_component_upper, "CLI")) {
+    .log_type = "Admin"
+} else if log_type_upper == "EVENT" && contains(log_subtype_upper, "AUTHENTICATION") {
+    .log_type = "Authentication"
+} else if contains(log_type_upper, "HEARTBEAT") || contains(log_component_upper, "ENDPOINT") {
+    .log_type = "Heartbeat"
+} else {
+    .log_type = "Unknown"
+}
+
+# Normaliser les IPs
+src_ip_val = string(.src_ip) ?? string(.srcip) ?? string(.sourceip) ?? string(.client_ip) ?? "0.0.0.0"
+dst_ip_val = string(.dst_ip) ?? string(.dstip) ?? string(.destip) ?? string(.server_ip) ?? "0.0.0.0"
+.src_ip = src_ip_val
+.dst_ip = dst_ip_val
+
+# Valider les IPs
+if !is_ipv4(.src_ip) { .src_ip = "0.0.0.0" }
+if !is_ipv4(.dst_ip) { .dst_ip = "0.0.0.0" }
+
+# Ports
+.src_port = int(.src_port) ?? int(.srcport) ?? 0
+.dst_port = int(.dst_port) ?? int(.dstport) ?? int(.port) ?? 0
+
+# Protocol
+proto_val = string(.protocol) ?? string(.proto) ?? "TCP"
+.protocol = upcase(proto_val)
+
+# Action
+action_raw = downcase(string(.action) ?? string(.fw_rule_action) ?? "unknown")
+if contains(action_raw, "drop") || contains(action_raw, "deny") || contains(action_raw, "block") {
+    .action = "drop"
+} else if contains(action_raw, "allow") || contains(action_raw, "accept") || contains(action_raw, "pass") {
+    .action = "allow"
+} else if contains(action_raw, "reject") {
+    .action = "reject"
+} else if contains(action_raw, "quarantine") {
+    .action = "quarantine"
+} else {
+    .action = action_raw
+}
+
+# WAF-specific action detection based on http_status
+# For WAF logs without explicit action, use http_status to determine if blocked
+log_type_check = upcase(.log_type)
+if log_type_check == "WAF" && (.action == "" || .action == "unknown") {
+    http_status_val = int(.http_status) ?? 0
+    if http_status_val >= 400 {
+        .action = "drop"
+    } else if http_status_val > 0 {
+        .action = "allow"
+    }
+}
+
+# Severity
+severity_raw = downcase(string(.severity) ?? string(.priority) ?? "info")
+if contains(severity_raw, "critical") || contains(severity_raw, "crit") || severity_raw == "0" || severity_raw == "1" {
+    .severity = "critical"
+} else if contains(severity_raw, "high") || contains(severity_raw, "major") || severity_raw == "2" || severity_raw == "3" {
+    .severity = "high"
+} else if contains(severity_raw, "medium") || contains(severity_raw, "minor") || severity_raw == "4" || severity_raw == "5" {
+    .severity = "medium"
+} else if contains(severity_raw, "low") || severity_raw == "6" {
+    .severity = "low"
+} else {
+    .severity = "info"
+}
+
+# Rule fields
+.rule_id = string(.fw_rule_id) ?? string(.rule_id) ?? string(.ruleid) ?? ""
+.rule_name = string(.fw_rule_name) ?? string(.rule_name) ?? string(.rulename) ?? ""
+
+# Hostname extraction - prioritize domain (FQDN) over fw_rule_name
+domain_val = string(.domain) ?? ""
+rule_name_val = string(.fw_rule_name) ?? ""
+
+# Remove port from domain if present
+domain_clean = replace(domain_val, r':\d+$', "")
+
+# Use domain if it's a valid FQDN, otherwise fall back to fw_rule_name
+hostname_tmp = ""
+if domain_clean != "" && domain_clean != "-" && contains(domain_clean, ".") && !match(domain_clean, r'^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$') {
+    hostname_tmp = domain_clean
+} else if rule_name_val != "" && rule_name_val != "-" {
+    hostname_tmp = rule_name_val
+} else {
+    hostname_tmp = string(.hostname) ?? ""
+}
+.hostname = hostname_tmp
+
+.user_name = string(.user_name) ?? string(.username) ?? string(.user) ?? ""
+.url = string(.url) ?? string(.uri) ?? string(.request_url) ?? ""
+http_method_val = string(.http_method) ?? string(.method) ?? ""
+.http_method = upcase(http_method_val)
+
+# WAF reason (ModSec blocking reason)
+.reason = if is_string(.reason) && .reason != null { .reason } else { "" }
+.http_status = int(.http_status) ?? int(.status_code) ?? 0
+
+# User agent
+.user_agent = if is_string(.http_user_agent) && .http_user_agent != null { .http_user_agent } else if is_string(.user_agent) && .user_agent != null { .user_agent } else { "" }
+
+# Message
+msg_val = if is_string(.message) && .message != null && .message != "-" { .message } else { "" }
+if msg_val == "" {
+    msg_val = if is_string(.reason) && .reason != null && .reason != "-" { .reason } else { "" }
+}
+.message = msg_val
+
+# Sophos ID
+.sophos_id = if is_string(.log_id) && .log_id != null { .log_id } else if is_string(.id) && .id != null { .id } else { "" }
+
+# Geo from Sophos
+.geo_country = if is_string(.src_country) && .src_country != null { .src_country } else { "" }
+
+# Default categories
+.category = ""
+.sub_category = ""
+'''
+
+# ============================================
+# TRANSFORM - Categorize attacks
+# ============================================
+
+[transforms.categorize_attacks]
+type = "remap"
+inputs = ["parse_sophos"]
+source = '''
+msg_lower = downcase(string(.message) ?? "")
+rule_lower = downcase(string(.rule_name) ?? "")
+
+# Categorisation basee sur log_type
+if .log_type == "WAF" {
+    if contains(msg_lower, "sql") || contains(rule_lower, "sql") {
+        .category = "SQL Injection"
+    } else if contains(msg_lower, "xss") || contains(rule_lower, "xss") || contains(msg_lower, "cross-site") {
+        .category = "XSS"
+    } else if contains(msg_lower, "rce") || contains(msg_lower, "command") || contains(msg_lower, "exec") {
+        .category = "RCE"
+    } else if contains(msg_lower, "lfi") || contains(msg_lower, "path traversal") || contains(msg_lower, "../") {
+        .category = "LFI"
+    } else if contains(msg_lower, "rfi") || contains(msg_lower, "remote file") {
+        .category = "RFI"
+    } else if contains(msg_lower, "scanner") || contains(msg_lower, "nikto") || contains(msg_lower, "nmap") {
+        .category = "Scanner"
+    } else if contains(msg_lower, "bot") {
+        .category = "Bot"
+    } else {
+        .category = "WAF Attack"
+    }
+} else if .log_type == "IPS" {
+    if contains(msg_lower, "scan") || contains(msg_lower, "probe") {
+        .category = "Network Scan"
+    } else if contains(msg_lower, "exploit") {
+        .category = "Exploit"
+    } else if contains(msg_lower, "dos") || contains(msg_lower, "flood") {
+        .category = "DoS"
+    } else if contains(msg_lower, "brute") {
+        .category = "Brute Force"
+    } else {
+        .category = "IPS Alert"
+    }
+} else if .log_type == "ATP" {
+    if contains(msg_lower, "c2") || contains(msg_lower, "command and control") {
+        .category = "C2 Communication"
+    } else if contains(msg_lower, "malware") {
+        .category = "Malware"
+    } else if contains(msg_lower, "phish") {
+        .category = "Phishing"
+    } else {
+        .category = "ATP Threat"
+    }
+} else if .log_type == "Anti-Virus" {
+    .category = "Malware"
+} else if .log_type == "Firewall" {
+    if .action == "drop" || .action == "reject" {
+        .category = "Blocked"
+    } else {
+        .category = "Allowed"
+    }
+} else if .log_type == "VPN" {
+    # Check raw_log for IPSec-specific patterns
+    raw_lower = downcase(string(.raw_log) ?? "")
+
+    if contains(msg_lower, "bad encapsulated") || contains(msg_lower, "bad packet") || contains(msg_lower, "malformed") {
+        .category = "VPN Attack"
+    } else if contains(msg_lower, "fail") || contains(msg_lower, "denied") || contains(msg_lower, "authentication failed") {
+        .category = "Auth Failure"
+    } else if contains(msg_lower, "established") || contains(raw_lower, "status=\"established\"") {
+        .category = "Connection"
+    } else if contains(msg_lower, "terminated") || contains(raw_lower, "status=\"terminated\"") {
+        .category = "Disconnection"
+    } else if contains(msg_lower, "attack") || contains(msg_lower, "warning") || contains(msg_lower, "invalid") {
+        .category = "VPN Attack"
+    } else if contains(msg_lower, "connect") {
+        .category = "Connection"
+    } else if contains(msg_lower, "disconnect") {
+        .category = "Disconnection"
+    } else {
+        .category = "VPN Event"
+    }
+} else if .log_type == "Admin" {
+    if contains(msg_lower, "login") || contains(msg_lower, "logged in") {
+        .category = "Admin Login"
+    } else if contains(msg_lower, "logout") || contains(msg_lower, "logged out") {
+        .category = "Admin Logout"
+    } else if contains(msg_lower, "changed") || contains(msg_lower, "modified") {
+        .category = "Config Change"
+    } else {
+        .category = "Admin Event"
+    }
+} else if .log_type == "Authentication" {
+    status_lower = downcase(string(.status) ?? "")
+    if contains(status_lower, "fail") || contains(msg_lower, "fail") {
+        .category = "Auth Failure"
+    } else if contains(status_lower, "success") || contains(msg_lower, "success") {
+        .category = "Auth Success"
+    } else {
+        .category = "Auth Event"
+    }
+} else {
+    .category = "Other"
+}
+'''
+
+# ============================================
+# TRANSFORM - Prepare pour ClickHouse
+# ============================================
+
+[transforms.prepare_events]
+type = "remap"
+inputs = ["categorize_attacks"]
+source = '''
+# Convertir timestamp en format compatible ClickHouse
+ts_formatted = format_timestamp!(.timestamp, format: "%Y-%m-%d %H:%M:%S")
+ingest_formatted = format_timestamp!(.ingested_at, format: "%Y-%m-%d %H:%M:%S")
+
+. = {
+    "timestamp": ts_formatted,
+    "log_type": .log_type,
+    "category": .category,
+    "sub_category": .sub_category,
+    "severity": .severity,
+    "src_ip": .src_ip,
+    "dst_ip": .dst_ip,
+    "src_port": .src_port,
+    "dst_port": .dst_port,
+    "protocol": .protocol,
+    "action": .action,
+    "rule_id": .rule_id,
+    "rule_name": .rule_name,
+    "hostname": .hostname,
+    "user_name": .user_name,
+    "url": .url,
+    "http_method": .http_method,
+    "http_status": .http_status,
+    "user_agent": .user_agent,
+    "geo_country": .geo_country,
+    "geo_city": "",
+    "geo_asn": 0,
+    "geo_org": "",
+    "message": .message,
+    "reason": .reason,
+    "raw_log": .raw_log,
+    "sophos_id": .sophos_id,
+    "ingested_at": ingest_formatted
+}
+'''
+
+# ============================================
+# SINKS - ClickHouse
+# ============================================
+
+[sinks.clickhouse_events]
+type = "clickhouse"
+inputs = ["prepare_events"]
+endpoint = "http://clickhouse:8123"
+database = "vigilance_x"
+table = "events"
+compression = "gzip"
+skip_unknown_fields = true
+
+batch.max_events = 5000
+batch.timeout_secs = 5
+
+healthcheck.enabled = true
+
+[sinks.clickhouse_events.auth]
+strategy = "basic"
+user = "${CLICKHOUSE_USER}"
+password = "${CLICKHOUSE_PASSWORD}"
+
+# ============================================
+# SINK - Console (debug logs bruts)
+# ============================================
+
+[sinks.console_raw]
+type = "console"
+inputs = ["sophos_syslog_udp", "sophos_syslog_tcp"]
+encoding.codec = "json"
+target = "stdout"
+
+# ============================================
+# SINK - Console (events parses)
+# ============================================
+
+[sinks.console_debug]
+type = "console"
+inputs = ["prepare_events"]
+encoding.codec = "json"
+target = "stdout"
