@@ -17,6 +17,7 @@ import {
   Search,
   X,
   Eye,
+  Calendar,
 } from 'lucide-react'
 import { Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { StatCard } from '@/components/dashboard/StatCard'
@@ -203,6 +204,7 @@ export function VpnNetwork() {
   const [vpnFilter, setVpnFilter] = useState('')
   const [networkFilter, setNetworkFilter] = useState('')
   const [loading, setLoading] = useState(true)
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
   const [detailModal, setDetailModal] = useState<{
     type: 'vpn' | 'firewall' | 'ips' | null
     title: string
@@ -324,6 +326,45 @@ export function VpnNetwork() {
       s.country.toLowerCase().includes(lower)
     )
   }, [vpnSessions, vpnFilter])
+
+  // Group VPN sessions by day
+  const vpnSessionsByDay = useMemo(() => {
+    const grouped: Record<string, VPNSession[]> = {}
+    filteredVPNSessions.forEach(session => {
+      const date = new Date(session.start_time)
+      const dayKey = date.toISOString().split('T')[0] // YYYY-MM-DD
+      if (!grouped[dayKey]) {
+        grouped[dayKey] = []
+      }
+      grouped[dayKey].push(session)
+    })
+    // Sort days descending (most recent first)
+    return Object.entries(grouped)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([date, sessions]) => ({
+        date,
+        sessions,
+        label: new Date(date).toLocaleDateString('fr-FR', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        })
+      }))
+  }, [filteredVPNSessions])
+
+  // Toggle day expansion
+  const toggleDay = (date: string) => {
+    setExpandedDays(prev => {
+      const next = new Set(prev)
+      if (next.has(date)) {
+        next.delete(date)
+      } else {
+        next.add(date)
+      }
+      return next
+    })
+  }
 
   // Filter network events (Firewall + IPS)
   const networkEvents = useMemo(() => {
@@ -567,11 +608,11 @@ export function VpnNetwork() {
         </button>
 
         {expandedSection === 'vpn' && (
-          <div className="border-t p-4">
+          <div className="border-t">
             {stats.vpnSessions > 0 ? (
               <>
                 {/* Search */}
-                <div className="mb-4">
+                <div className="p-4 border-b">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
@@ -584,56 +625,102 @@ export function VpnNetwork() {
                   </div>
                 </div>
 
-                {/* Sessions Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="text-left text-sm text-muted-foreground border-b">
-                        <th className="pb-2 font-medium">User</th>
-                        <th className="pb-2 font-medium">Source IP</th>
-                        <th className="pb-2 font-medium">Status</th>
-                        <th className="pb-2 font-medium">Category</th>
-                        <th className="pb-2 font-medium">Country</th>
-                        <th className="pb-2 font-medium">Time</th>
-                        <th className="pb-2 font-medium">Message</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {filteredVPNSessions.slice(0, 20).map((session, idx) => (
-                        <tr key={idx} className="hover:bg-muted/50">
-                          <td className="py-3">
-                            <div className="flex items-center gap-2">
-                              <Users className="w-4 h-4 text-muted-foreground" />
-                              <span className="font-mono text-sm">{session.user}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 font-mono text-sm">{session.src_ip}</td>
-                          <td className="py-3">{getStatusBadge(session.status)}</td>
-                          <td className="py-3">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              session.category.includes('Failure') ? 'bg-red-500/10 text-red-500' :
-                              session.category.includes('Success') || session.category.includes('Connection') ? 'bg-green-500/10 text-green-500' :
-                              'bg-gray-500/10 text-gray-400'
-                            }`}>
-                              {session.category || '-'}
-                            </span>
-                          </td>
-                          <td className="py-3">
-                            <span className="inline-flex items-center gap-1">
-                              <Globe className="w-3 h-3 text-muted-foreground" />
-                              {session.country}
-                            </span>
-                          </td>
-                          <td className="py-3 text-sm text-muted-foreground whitespace-nowrap">
-                            {formatTime(session.start_time)}
-                          </td>
-                          <td className="py-3 text-sm text-muted-foreground max-w-xs truncate" title={session.message}>
-                            {session.message || '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                {/* Sessions grouped by day */}
+                <div className="divide-y max-h-[600px] overflow-y-auto">
+                  {vpnSessionsByDay.map(({ date, sessions, label }) => (
+                    <div key={date}>
+                      {/* Day Header - Clickable */}
+                      <button
+                        onClick={() => toggleDay(date)}
+                        className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Calendar className="w-4 h-4 text-green-500" />
+                          <span className="font-medium capitalize">{label}</span>
+                          <span className="text-sm text-muted-foreground">
+                            ({sessions.length} sessions)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Quick stats for the day */}
+                          <span className="text-xs px-2 py-0.5 bg-green-500/10 text-green-500 rounded-full">
+                            {sessions.filter(s => s.status === 'connected').length} connected
+                          </span>
+                          <span className="text-xs px-2 py-0.5 bg-red-500/10 text-red-500 rounded-full">
+                            {sessions.filter(s => s.status === 'failed').length} failed
+                          </span>
+                          {expandedDays.has(date) ? (
+                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Sessions for this day */}
+                      {expandedDays.has(date) && (
+                        <div className="bg-muted/30">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50">
+                              <tr className="text-left text-muted-foreground">
+                                <th className="py-2 px-4 font-medium">User</th>
+                                <th className="py-2 px-4 font-medium">Source IP</th>
+                                <th className="py-2 px-4 font-medium">Status</th>
+                                <th className="py-2 px-4 font-medium">Category</th>
+                                <th className="py-2 px-4 font-medium">Country</th>
+                                <th className="py-2 px-4 font-medium">Time</th>
+                                <th className="py-2 px-4 font-medium">Message</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-muted">
+                              {sessions.map((session, idx) => (
+                                <tr key={idx} className="hover:bg-muted/50">
+                                  <td className="py-2 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <Users className="w-4 h-4 text-muted-foreground" />
+                                      <span className="font-mono">{session.user}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-4 font-mono">{session.src_ip}</td>
+                                  <td className="py-2 px-4">{getStatusBadge(session.status)}</td>
+                                  <td className="py-2 px-4">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      session.category.includes('Failure') ? 'bg-red-500/10 text-red-500' :
+                                      session.category.includes('Success') || session.category.includes('Connection') ? 'bg-green-500/10 text-green-500' :
+                                      'bg-gray-500/10 text-gray-400'
+                                    }`}>
+                                      {session.category || '-'}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-4">
+                                    <span className="inline-flex items-center gap-1">
+                                      <Globe className="w-3 h-3 text-muted-foreground" />
+                                      {session.country}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-4 text-muted-foreground whitespace-nowrap">
+                                    {new Date(session.start_time).toLocaleTimeString('fr-FR', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit'
+                                    })}
+                                  </td>
+                                  <td className="py-2 px-4 text-muted-foreground max-w-xs truncate" title={session.message}>
+                                    {session.message || '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {vpnSessionsByDay.length === 0 && vpnFilter && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No sessions matching "{vpnFilter}"
+                    </div>
+                  )}
                 </div>
               </>
             ) : (

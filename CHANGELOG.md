@@ -4,6 +4,84 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.0.1] - 2026-01-09
+
+### Maintenance & UI Improvements
+
+---
+
+### 🔧 Maintenance Automatique Docker
+
+Ajout d'un script de maintenance pour nettoyer automatiquement le build cache Docker qui peut saturer le disque.
+
+#### Script de Maintenance
+
+```bash
+# Emplacement
+/opt/vigilanceX/scripts/maintenance.sh
+
+# Installation cron (nettoyage hebdomadaire dimanche 3h)
+0 3 * * 0 /opt/vigilanceX/scripts/maintenance.sh >> /var/log/vigilancex-maintenance.log 2>&1
+```
+
+#### Actions du Script
+
+| Action | Description |
+|--------|-------------|
+| Build cache cleanup | `docker builder prune -a -f --filter "until=168h"` |
+| System cleanup | Suppression des images/conteneurs non utilisés |
+| Logs truncation | Troncature des logs conteneurs > 100MB |
+
+---
+
+### 📊 Page VPN & Network - Filtrage par Jour
+
+Refactoring de la section VPN Sessions pour grouper les événements par jour avec un système d'accordéon.
+
+#### Fonctionnalités
+
+| Feature | Description |
+|---------|-------------|
+| Groupement par jour | Sessions organisées par date |
+| Accordéon | Clic sur un jour pour déplier/replier |
+| Stats rapides | Compteurs "connected" / "failed" par jour |
+| Recherche | Filtre par user, IP ou pays |
+
+---
+
+### 🌍 Page Geoblocking - Top 10 Pays Attaquants
+
+Nouvelle section affichant les 10 pays avec le plus d'événements d'attaque sur le XGS.
+
+#### Interface
+
+| Élément | Description |
+|---------|-------------|
+| Top 10 Liste | Pays triés par nombre d'attaques |
+| Sélecteur période | 24h, 7d, 30d |
+| Stats par pays | Nombre d'events + IPs uniques |
+| Modal détails | Clic sur un pays affiche la liste des IPs attaquantes |
+
+#### Données Affichées (Modal)
+
+| Colonne | Description |
+|---------|-------------|
+| IP Address | Adresse IP avec badge "High Risk" si score > 50 |
+| Attacks | Nombre total d'attaques |
+| Blocked | Nombre d'attaques bloquées |
+| Unique Rules | Règles déclenchées |
+| Categories | Types d'attaques (sqli, xss, scanner...) |
+
+---
+
+### 📝 Notes de Versioning
+
+Rappel important pour les futures versions :
+- **Mettre à jour la version** dans `frontend/src/pages/Settings.tsx` à chaque release
+- Suivre le Semantic Versioning : PATCH pour bugfixes, MAJOR pour nouvelles fonctionnalités
+
+---
+
 ## [3.0.0] - 2026-01-08
 
 ### VX3 Secure Firewall Binding

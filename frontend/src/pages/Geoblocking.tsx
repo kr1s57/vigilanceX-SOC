@@ -1,8 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Globe, Shield, Eye, AlertTriangle, Plus, Trash2, Search, RefreshCw, MapPin } from 'lucide-react'
-import { geoblockingApi } from '@/lib/api'
+import { Globe, Shield, Eye, AlertTriangle, Plus, Trash2, Search, RefreshCw, MapPin, TrendingUp, X, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { geoblockingApi, geoApi, statsApi } from '@/lib/api'
 import { getCountryFlag, getCountryName } from '@/lib/utils'
-import type { GeoBlockRule, GeoBlockStats, GeoCheckResult, HighRiskCountry, GeoLocation } from '@/types'
+import type { GeoBlockRule, GeoBlockStats, GeoCheckResult, HighRiskCountry, GeoLocation, TopAttacker } from '@/types'
+
+// Top country with attack stats
+interface TopCountry {
+  country: string
+  count: number
+  unique_ips: number
+}
 
 export function Geoblocking() {
   const [stats, setStats] = useState<GeoBlockStats | null>(null)
@@ -33,17 +40,31 @@ export function Geoblocking() {
   const [geoLookupResult, setGeoLookupResult] = useState<GeoLocation | null>(null)
   const [geoLookupLoading, setGeoLookupLoading] = useState(false)
 
+  // Top attacking countries states
+  const [topCountries, setTopCountries] = useState<TopCountry[]>([])
+  const [topCountriesExpanded, setTopCountriesExpanded] = useState(true)
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
+  const [countryAttackers, setCountryAttackers] = useState<TopAttacker[]>([])
+  const [countryAttackersLoading, setCountryAttackersLoading] = useState(false)
+  const [period, setPeriod] = useState('7d')
+
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [statsRes, rulesRes, highRiskRes] = await Promise.all([
+      const [statsRes, rulesRes, highRiskRes, heatmapRes] = await Promise.all([
         geoblockingApi.getStats(),
         geoblockingApi.listRules(),
-        geoblockingApi.getHighRiskCountries()
+        geoblockingApi.getHighRiskCountries(),
+        geoApi.heatmap(period)
       ])
       setStats(statsRes)
       setRules(rulesRes.data || [])
       setHighRiskCountries(highRiskRes.high_risk_countries || [])
+      // Sort by count descending and take top 10
+      const sortedCountries = (heatmapRes || [])
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10)
+      setTopCountries(sortedCountries)
       setError(null)
     } catch (err) {
       setError('Failed to load geoblocking data')
@@ -53,9 +74,34 @@ export function Geoblocking() {
     }
   }
 
+  // Fetch top countries when period changes
+  useEffect(() => {
+    geoApi.heatmap(period).then(res => {
+      const sorted = (res || []).sort((a, b) => b.count - a.count).slice(0, 10)
+      setTopCountries(sorted)
+    }).catch(console.error)
+  }, [period])
+
   useEffect(() => {
     fetchData()
   }, [])
+
+  // Fetch attackers for a specific country
+  const handleCountryClick = async (countryCode: string) => {
+    setSelectedCountry(countryCode)
+    setCountryAttackersLoading(true)
+    try {
+      // Fetch top attackers and filter by country
+      const attackers = await statsApi.topAttackers(period, 100)
+      const filtered = attackers.filter(a => a.country === countryCode)
+      setCountryAttackers(filtered)
+    } catch (err) {
+      console.error('Failed to fetch country attackers:', err)
+      setCountryAttackers([])
+    } finally {
+      setCountryAttackersLoading(false)
+    }
+  }
 
   const handleAddRule = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -267,6 +313,205 @@ export function Geoblocking() {
           </div>
         </div>
       </div>
+
+      {/* Top 10 Attacking Countries */}
+      <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <button
+          onClick={() => setTopCountriesExpanded(!topCountriesExpanded)}
+          className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-red-500/20 rounded-lg">
+              <TrendingUp className="h-5 w-5 text-red-400" />
+            </div>
+            <div className="text-left">
+              <h2 className="text-lg font-semibold text-white">Top 10 Attacking Countries</h2>
+              <p className="text-gray-400 text-sm">Countries with most attack events on XGS</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Period selector */}
+            <div className="flex gap-1 bg-gray-700 rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
+              {['24h', '7d', '30d'].map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                    period === p
+                      ? 'bg-gray-600 text-white'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            {topCountriesExpanded ? (
+              <ChevronUp className="h-5 w-5 text-gray-400" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-gray-400" />
+            )}
+          </div>
+        </button>
+
+        {topCountriesExpanded && (
+          <div className="border-t border-gray-700">
+            {topCountries.length > 0 ? (
+              <div className="divide-y divide-gray-700">
+                {topCountries.map((country, index) => (
+                  <button
+                    key={country.country}
+                    onClick={() => handleCountryClick(country.country)}
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-4">
+                      <span className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${
+                        index === 0 ? 'bg-red-500/20 text-red-400' :
+                        index === 1 ? 'bg-orange-500/20 text-orange-400' :
+                        index === 2 ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-gray-700 text-gray-400'
+                      }`}>
+                        {index + 1}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{getCountryFlag(country.country)}</span>
+                        <div>
+                          <span className="text-white font-medium">{getCountryName(country.country)}</span>
+                          <span className="text-gray-500 text-sm ml-2">({country.country})</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <p className="text-white font-semibold">{country.count.toLocaleString()}</p>
+                        <p className="text-gray-400 text-xs">events</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-blue-400 font-semibold">{country.unique_ips.toLocaleString()}</p>
+                        <p className="text-gray-400 text-xs">unique IPs</p>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-400">
+                <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No attack data available for this period</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Country Details Modal */}
+      {selectedCountry && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[80vh] overflow-hidden border border-gray-700 m-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">{getCountryFlag(selectedCountry)}</span>
+                <div>
+                  <h3 className="text-xl font-bold text-white">{getCountryName(selectedCountry)}</h3>
+                  <p className="text-gray-400 text-sm">
+                    Attacking IPs from this country ({period})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedCountry(null)}
+                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[calc(80vh-120px)]">
+              {countryAttackersLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                </div>
+              ) : countryAttackers.length > 0 ? (
+                <table className="w-full">
+                  <thead className="bg-gray-700/50">
+                    <tr className="text-left text-sm text-gray-400">
+                      <th className="py-3 px-4 font-medium">IP Address</th>
+                      <th className="py-3 px-4 font-medium text-right">Attacks</th>
+                      <th className="py-3 px-4 font-medium text-right">Blocked</th>
+                      <th className="py-3 px-4 font-medium text-right">Unique Rules</th>
+                      <th className="py-3 px-4 font-medium">Categories</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {countryAttackers.map((attacker) => (
+                      <tr key={attacker.ip} className="hover:bg-gray-700/30">
+                        <td className="py-3 px-4">
+                          <span className="font-mono text-white">{attacker.ip}</span>
+                          {attacker.threat_score && attacker.threat_score > 50 && (
+                            <span className="ml-2 px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">
+                              High Risk
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <span className="text-orange-400 font-medium">{attacker.attack_count.toLocaleString()}</span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <span className={attacker.blocked_count > 0 ? 'text-red-400' : 'text-green-400'}>
+                            {attacker.blocked_count.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right text-gray-400">
+                          {attacker.unique_rules}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap gap-1">
+                            {attacker.categories.slice(0, 3).map((cat, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 bg-gray-700 rounded text-xs text-gray-300"
+                              >
+                                {cat}
+                              </span>
+                            ))}
+                            {attacker.categories.length > 3 && (
+                              <span className="text-xs text-gray-500">
+                                +{attacker.categories.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-center py-12 text-gray-400">
+                  <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No detailed attacker data available for this country</p>
+                  <p className="text-sm mt-2">Try selecting a different time period</p>
+                </div>
+              )}
+            </div>
+
+            {countryAttackers.length > 0 && (
+              <div className="p-4 border-t border-gray-700 bg-gray-700/30">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">
+                    {countryAttackers.length} IPs found from {getCountryName(selectedCountry)}
+                  </span>
+                  <span className="text-gray-400">
+                    Total attacks: <span className="text-orange-400 font-medium">
+                      {countryAttackers.reduce((sum, a) => sum + a.attack_count, 0).toLocaleString()}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

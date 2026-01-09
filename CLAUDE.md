@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.0.0 | **Derniere mise a jour**: 2026-01-08
+> **Version**: 3.0.1 | **Derniere mise a jour**: 2026-01-09
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -388,7 +388,10 @@ Les projets **VigilanceX** et **VigilanceKey** suivent une numerotation stricte 
 - Changements d'architecture
 - Modifications cassant la compatibilite
 
-> **Important**: Toujours mettre a jour le numero de version dans CHANGELOG.md ET dans les fichiers concernes (package.json, version.go, etc.)
+> **Important**: A chaque release, mettre a jour:
+> - `CHANGELOG.md` - Historique des versions
+> - `frontend/src/pages/Settings.tsx` - Version affichee dans l'interface (ligne ~966)
+> - `CLAUDE.md` - Header du fichier (version et date)
 
 ### Commandes Frequentes
 
@@ -594,6 +597,11 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.0.1 (2026-01-09)
+- Script de maintenance Docker (nettoyage build cache)
+- VPN Sessions: Groupement par jour avec accordeon
+- Geoblocking: Top 10 pays attaquants avec modal details
 
 ### v3.0.0 (2026-01-08)
 - VX3 Secure Firewall Binding (VM + Firewall serial)
