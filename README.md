@@ -2,7 +2,7 @@
 
 **La plateforme SOC temps réel conçue pour Sophos XGS**
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.0.1-blue.svg)]()
 [![License](https://img.shields.io/badge/license-Commercial-green.svg)]()
 [![Sophos](https://img.shields.io/badge/Sophos-XGS%20Ready-red.svg)]()
 
@@ -206,7 +206,7 @@ nano deploy/.env
 
 ## Support
 
-- **Email** : support@it-secure.lu
+- **Email** : support@vigilancex.io
 - **Documentation** : wiki/
 - **Licence** : Settings → License dans le dashboard
 
