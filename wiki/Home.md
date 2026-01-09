@@ -7,6 +7,7 @@ Welcome to the VIGILANCE X documentation. This wiki provides comprehensive guide
 - [Architecture Overview](Architecture.md)
 - [Installation Guide](Installation-Guide.md)
 - [Configuration Reference](Configuration.md)
+- [Upgrade Guide](Upgrade-Guide.md) *(v3.1.0)*
 - [Risk Scoring Engine](Risk-Scoring.md)
 - [Security & Hardening](Security-Hardening.md)
 - [Administration Guide](Administration.md)
@@ -32,6 +33,7 @@ VIGILANCE X is a real-time Security Operations Center (SOC) platform that:
 - **Active Bans**: IP ban management with Sophos sync
 - **Geoblocking**: Country/ASN-based blocking rules
 - **Soft Whitelist**: Graduated whitelist (hard/soft/monitor)
+- **XGS Parser Engine**: Native Sophos log parser (104 fields, 74 rules, 23 MITRE techniques) *(v3.1)*
 
 ### Technical Stack
 | Component | Technology |
@@ -50,4 +52,4 @@ VIGILANCE X is a real-time Security Operations Center (SOC) platform that:
 
 ---
 
-*VIGILANCE X v3.0.0 - SOC Platform for Sophos XGS*
+*VIGILANCE X v3.1.0 - SOC Platform for Sophos XGS*
