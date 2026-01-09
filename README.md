@@ -2,7 +2,7 @@
 
 **La plateforme SOC temps réel conçue pour Sophos XGS**
 
-[![Version](https://img.shields.io/badge/version-3.0.1-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)]()
 [![License](https://img.shields.io/badge/license-Commercial-green.svg)]()
 [![Sophos](https://img.shields.io/badge/Sophos-XGS%20Ready-red.svg)]()
 
@@ -92,6 +92,46 @@ Detect2Ban va au-delà de la simple détection. C'est un système **Active/Respo
 - Intégration native API XML Sophos
 - Synchronisation bidirectionnelle des blocklists
 - Policies personnalisables par criticité d'asset
+
+---
+
+### XGS Parser Engine (v3.1) - *Nouveau*
+
+> *"Parsing natif des logs Sophos XGS avec 104 champs et 74 règles de détection"*
+
+Notre moteur de parsing propriétaire analyse en profondeur chaque log Sophos XGS.
+
+**Architecture XML :**
+
+| Fichier | Description |
+|---------|-------------|
+| `vigilanceX_XGS_decoders.xml` | 104 champs extraits dans 17 groupes |
+| `vigilanceX_XGS_rules.xml` | 74 règles de détection dans 10 catégories |
+
+**Groupes de champs extraits :**
+- **Device Identity** : Serial firewall (binding VX3), modèle, nom
+- **Network Layer** : IPs source/destination, ports, protocoles, zones
+- **TLS Analysis** : Version TLS, cipher suite, SNI
+- **Threat Intel** : Threatfeeds, malware détecté, classification
+- **VPN Session** : Connexions, tunnels, bytes in/out
+- **Endpoint Health** : Synchronized Security, heartbeat status
+- **WAF/ModSec** : Raison blocage, IDs règles, sévérité
+
+**Règles de détection par catégorie :**
+
+| Catégorie | Règles | Description |
+|-----------|--------|-------------|
+| WAF Attacks | 15 | SQL injection, XSS, RCE, LFI, scanners |
+| ATP Threats | 8 | C2, malware, zero-day |
+| IPS Alerts | 8 | Intrusion, exploits |
+| VPN Security | 10 | Auth failures, brute force |
+| Firewall | 8 | Zone violations, port scanning |
+| Sandstorm | 6 | Sandbox analysis, APT |
+| Authentication | 8 | Login failures |
+
+**MITRE ATT&CK Coverage : 23 techniques mappées**
+- Initial Access, Credential Access, Command & Control
+- Defense Evasion, Discovery, Exfiltration, Impact
 
 ---
 
