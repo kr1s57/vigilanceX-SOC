@@ -184,18 +184,14 @@ VIGILANCE X ingère et structure **tous** vos logs Sophos XGS :
 git clone https://github.com/kr1s57/vigilanceX-SOC.git
 cd vigilanceX-SOC
 
-# 2. Se connecter au registry Docker
-echo "VOTRE_TOKEN" | docker login ghcr.io -u kr1s57 --password-stdin
-
-# 3. Configurer
+# 2. Configurer
 cp deploy/config.template deploy/.env
 nano deploy/.env
 
-# 4. Installer et démarrer
+# 3. Installer et démarrer
 ./vigilance.sh install
-./vigilance.sh start
 
-# 5. Accéder au dashboard
+# 4. Accéder au dashboard
 # https://VOTRE_IP (admin / VigilanceX2024!)
 ```
 
