@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # VIGILANCE X - Management Script
-# Version: 3.1.0
+# Version: 3.1.1
 # Copyright (c) 2024-2026 VigilanceX. All rights reserved.
 #
 
@@ -33,7 +33,7 @@ show_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════╗"
     echo "║           VIGILANCE X - SOC Platform                      ║"
-    echo "║           Management Script v3.1.0                        ║"
+    echo "║           Management Script v3.1.1                        ║"
     echo "╚═══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -115,6 +115,68 @@ load_env() {
 }
 
 # ============================================
+# Generate SSL Certificate (36 months validity)
+# ============================================
+generate_ssl_certificate() {
+    local SSL_DIR="${CONFIG_DIR}/nginx/ssl"
+    local SSL_CERT="${SSL_DIR}/vigilance.crt"
+    local SSL_KEY="${SSL_DIR}/vigilance.key"
+
+    # Skip if certificates already exist
+    if [ -f "${SSL_CERT}" ] && [ -f "${SSL_KEY}" ]; then
+        log_info "SSL certificates already exist, skipping generation."
+        return 0
+    fi
+
+    log_info "Generating self-signed SSL certificate (valid 36 months)..."
+
+    # Create ssl directory
+    mkdir -p "${SSL_DIR}"
+
+    # Generate private key and certificate (36 months = 1095 days)
+    openssl req -x509 -nodes -days 1095 -newkey rsa:2048 \
+        -keyout "${SSL_KEY}" \
+        -out "${SSL_CERT}" \
+        -subj "/C=LU/ST=Luxembourg/L=Luxembourg/O=VigilanceX/OU=Security/CN=vigilancex.local" \
+        -addext "subjectAltName=DNS:localhost,DNS:vigilancex.local,IP:127.0.0.1" \
+        2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        chmod 600 "${SSL_KEY}"
+        chmod 644 "${SSL_CERT}"
+        log_success "SSL certificate generated successfully."
+        log_info "Certificate location: ${SSL_CERT}"
+        log_info "Private key location: ${SSL_KEY}"
+        log_info "Validity: 36 months (1095 days)"
+        log_warn "This is a self-signed certificate. Browsers will show a security warning."
+        log_info "For production with custom domain, replace with Let's Encrypt or commercial certificate."
+    else
+        log_error "Failed to generate SSL certificate."
+        log_info "Please install openssl and try again, or manually create certificates."
+        exit 1
+    fi
+}
+
+# ============================================
+# Setup SSH key for Sophos XGS (optional)
+# ============================================
+setup_ssh_key() {
+    local SSH_DIR="${DEPLOY_DIR}/ssh"
+    local SSH_KEY="${SSH_DIR}/id_rsa_xgs"
+
+    # Create ssh directory
+    mkdir -p "${SSH_DIR}"
+
+    # Create empty SSH key file if it doesn't exist (placeholder)
+    if [ ! -f "${SSH_KEY}" ]; then
+        log_info "Creating placeholder SSH key for Sophos XGS integration..."
+        touch "${SSH_KEY}"
+        chmod 600 "${SSH_KEY}"
+        log_warn "SSH key placeholder created. Replace with actual key if using ModSec sync."
+    fi
+}
+
+# ============================================
 # INSTALL Command
 # ============================================
 cmd_install() {
@@ -124,6 +186,12 @@ cmd_install() {
     check_prerequisites
     check_env_file
     load_env
+
+    # Generate SSL certificate if not exists
+    generate_ssl_certificate
+
+    # Setup SSH key placeholder
+    setup_ssh_key
 
     local compose_cmd=$(get_compose_cmd)
 
@@ -394,6 +462,39 @@ cmd_verify() {
 }
 
 # ============================================
+# SSL-RENEW Command
+# ============================================
+cmd_ssl_renew() {
+    log_info "Regenerating SSL certificate..."
+
+    local SSL_DIR="${CONFIG_DIR}/nginx/ssl"
+    local SSL_CERT="${SSL_DIR}/vigilance.crt"
+    local SSL_KEY="${SSL_DIR}/vigilance.key"
+
+    # Backup existing certificates
+    if [ -f "${SSL_CERT}" ]; then
+        local TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        log_info "Backing up existing certificate..."
+        mv "${SSL_CERT}" "${SSL_CERT}.backup.${TIMESTAMP}"
+        mv "${SSL_KEY}" "${SSL_KEY}.backup.${TIMESTAMP}"
+    fi
+
+    # Force regeneration by removing existing files
+    rm -f "${SSL_CERT}" "${SSL_KEY}"
+
+    # Generate new certificate
+    generate_ssl_certificate
+
+    # Restart nginx to apply new certificate
+    log_info "Restarting nginx to apply new certificate..."
+    local compose_cmd=$(get_compose_cmd)
+    cd "${DEPLOY_DIR}"
+    $compose_cmd restart nginx
+
+    log_success "SSL certificate renewed successfully."
+}
+
+# ============================================
 # HELP Command
 # ============================================
 cmd_help() {
@@ -411,6 +512,7 @@ Commands:
   restart       Restart all services
   status        Show service status
   logs [svc]    Show logs (optionally for specific service)
+  ssl-renew     Regenerate self-signed SSL certificate (36 months)
   verify        Verify Docker image signatures
   help          Show this help message
 
@@ -441,16 +543,17 @@ EOF
 # Main
 # ============================================
 case "${1:-help}" in
-    install)  cmd_install ;;
-    update)   cmd_update ;;
-    backup)   cmd_backup ;;
-    restore)  cmd_restore "${2:-}" ;;
-    start)    cmd_start ;;
-    stop)     cmd_stop ;;
-    restart)  cmd_restart ;;
-    status)   cmd_status ;;
-    logs)     cmd_logs "${2:-}" ;;
-    verify)   cmd_verify ;;
+    install)    cmd_install ;;
+    update)     cmd_update ;;
+    backup)     cmd_backup ;;
+    restore)    cmd_restore "${2:-}" ;;
+    start)      cmd_start ;;
+    stop)       cmd_stop ;;
+    restart)    cmd_restart ;;
+    status)     cmd_status ;;
+    logs)       cmd_logs "${2:-}" ;;
+    ssl-renew)  cmd_ssl_renew ;;
+    verify)     cmd_verify ;;
     help|--help|-h|*)
         cmd_help
         ;;
