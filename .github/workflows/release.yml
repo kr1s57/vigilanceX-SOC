@@ -13,7 +13,7 @@ env:
 
 jobs:
   # ============================================
-  # Build Backend with Garble + UPX
+  # Build Backend with Garble Obfuscation
   # ============================================
   build-backend:
     runs-on: ubuntu-latest
@@ -33,16 +33,11 @@ jobs:
       - name: Install Garble
         run: go install mvdan.cc/garble@v0.12.1
 
-      - name: Install UPX
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y upx
-
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Build with Garble + UPX
+      - name: Build with Garble obfuscation
         working-directory: ./backend
         run: |
           mkdir -p ../build
@@ -71,18 +66,10 @@ jobs:
             -o ../build/reset-password-linux-amd64 \
             ./cmd/reset-password
 
-          # Show binary sizes before UPX
-          echo "Binary sizes before UPX:"
-          ls -lh ../build/
-
-          # Apply UPX compression (maximum)
-          echo "Applying UPX compression..."
-          upx --best --lzma ../build/vigilancex-api-linux-amd64 || true
-          upx --best --lzma ../build/vigilancex-detect2ban-linux-amd64 || true
-          upx --best --lzma ../build/reset-password-linux-amd64 || true
-
-          # Show final binary sizes
-          echo "Binary sizes after UPX:"
+          # Show final binary sizes (Garble obfuscated, no UPX)
+          # Note: UPX compression removed - causes "fatal: bad g in signal handler"
+          # crash due to incompatibility with Go's runtime signal handling
+          echo "Binary sizes (Garble obfuscated):"
           ls -lh ../build/
 
       - name: Upload build artifacts
@@ -341,7 +328,6 @@ jobs:
 
             ### Security
             - Binaries obfuscated with Garble
-            - Compressed with UPX
             - Docker images signed with Cosign
           files: |
             release-artifacts/*
