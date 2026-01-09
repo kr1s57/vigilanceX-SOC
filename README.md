@@ -1,6 +1,6 @@
 # VIGILANCE X - Live Active Response
 
-> **Version 2.6.0** | Security Operations Center pour Sophos XGS
+> **Version 3.1.0** | Security Operations Center pour Sophos XGS
 
 Solution de supervision de sécurité et de réponse active automatisée pour **Sophos XGS**.
 
@@ -32,6 +32,7 @@ Solution de supervision de sécurité et de réponse active automatisée pour **
 - **Icon Style** : Personnalisation des icônes sidebar (Monochrome/Color) *(v2.5)*
 - **Authentication** : Portail de connexion JWT avec RBAC (admin/audit) *(v2.6)*
 - **User Management** : Gestion des utilisateurs et rôles (admin) *(v2.6)*
+- **XGS Parser Engine** : Moteur de parsing natif pour logs Sophos XGS *(v3.1)*
 - **Reports** : Génération de rapports PDF/XML (journalier, hebdomadaire, mensuel)
 - **Settings** : Configuration complète (thème, langue, notifications, intégrations)
 
@@ -162,6 +163,79 @@ Système d'authentification complet avec contrôle d'accès basé sur les rôles
 - **User Management** : CRUD utilisateurs (admin)
 - **Password Reset CLI** : Outil de récupération d'urgence
 - **WebSocket Auth** : Connexions temps réel authentifiées
+
+### XGS Parser Engine (v3.1)
+
+Moteur de parsing propriétaire pour les logs Sophos XGS avec décodeurs XML et règles de détection.
+
+#### Architecture XML
+
+| Fichier | Description | Contenu |
+|---------|-------------|---------|
+| `vigilanceX_XGS_decoders.xml` | Définition des champs | 104 champs, 17 groupes |
+| `vigilanceX_XGS_rules.xml` | Règles de détection | 74 règles, 10 catégories |
+
+#### Groupes de Champs (Decoders)
+
+| Groupe | Champs | Description |
+|--------|--------|-------------|
+| `device_identity` | 3 | Identification firewall (serial, model, name) |
+| `log_metadata` | 5 | Métadonnées log (log_id, timestamp, type) |
+| `network_layer` | 8 | Couche réseau (IPs, ports, protocol, zones) |
+| `user_identity` | 5 | Identité utilisateur |
+| `http_request` | 8 | Requêtes HTTP (method, url, status) |
+| `tls_analysis` | 4 | Analyse TLS (version, cipher_suite, sni) |
+| `threat_intel` | 6 | Threat intelligence (threatfeed, malware) |
+| `waf_modsec` | 6 | WAF/ModSecurity (reason, rule_id) |
+| `vpn_session` | 8 | Sessions VPN |
+| `endpoint_health` | 5 | Synchronized Security |
+| `email_fields` | 6 | Anti-spam |
+| `firewall_action` | 5 | Actions firewall |
+| `atp_sandbox` | 5 | ATP/Sandstorm |
+| `antivirus` | 4 | Anti-virus |
+| `nat_translation` | 4 | NAT |
+| `bandwidth` | 4 | Bande passante |
+| `custom` | 2 | Champs personnalisés |
+
+#### Catégories de Règles
+
+| Catégorie | Règles | ID Range | Description |
+|-----------|--------|----------|-------------|
+| WAF Attack Detection | 15 | 100xxx | SQL injection, XSS, RCE, LFI |
+| ATP Threats | 8 | 200xxx | C2, malware, zero-day |
+| IPS Alerts | 8 | 300xxx | Intrusion, exploit |
+| VPN Security | 10 | 400xxx | Auth failure, brute force |
+| Firewall Violations | 8 | 500xxx | Zone violations, scanning |
+| Sandstorm Analysis | 6 | 600xxx | Sandbox results, APT |
+| Authentication | 8 | 700xxx | Login failures |
+| Endpoint Health | 4 | 800xxx | Heartbeat status |
+| Email Threats | 4 | 900xxx | Spam, phishing |
+| Custom Rules | 3 | 990xxx | Règles personnalisées |
+
+#### MITRE ATT&CK Coverage
+
+23 techniques MITRE ATT&CK mappées :
+
+| Tactique | Techniques |
+|----------|------------|
+| Initial Access | T1190, T1133 |
+| Execution | T1059 |
+| Defense Evasion | T1070, T1562 |
+| Credential Access | T1110, T1003 |
+| Discovery | T1046, T1018 |
+| Command & Control | T1071, T1573, T1095 |
+| Exfiltration | T1041, T1567 |
+| Impact | T1499, T1486 |
+
+#### API Endpoints Parser
+
+| Endpoint | Méthode | Description |
+|----------|---------|-------------|
+| `/api/v1/parser/stats` | GET | Statistiques du parser |
+| `/api/v1/parser/fields` | GET | Définitions des champs |
+| `/api/v1/parser/rules` | GET | Règles par catégorie |
+| `/api/v1/parser/mitre` | GET | Couverture MITRE ATT&CK |
+| `/api/v1/parser/test` | POST | Test de parsing d'un log |
 
 ### Moteur Detect2Ban
 
