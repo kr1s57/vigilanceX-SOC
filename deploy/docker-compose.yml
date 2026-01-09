@@ -2,7 +2,7 @@ version: '3.8'
 
 # ============================================
 # VIGILANCE X - Client Deployment
-# Version: 3.0.0
+# Version: 3.1.1
 # ============================================
 
 services:
@@ -80,7 +80,7 @@ services:
   # Backend API - VIGILANCE X
   # ============================================
   backend:
-    image: ghcr.io/kr1s57/vigilancex-api:3.1.0
+    image: ghcr.io/kr1s57/vigilancex-api:3.1.1
     container_name: vigilance_backend
     volumes:
       - backend_data:/app/data
@@ -142,7 +142,7 @@ services:
   # Detection Engine - Detect2Ban
   # ============================================
   detect2ban:
-    image: ghcr.io/kr1s57/vigilancex-detect2ban:3.1.0
+    image: ghcr.io/kr1s57/vigilancex-detect2ban:3.1.1
     container_name: vigilance_detect2ban
     environment:
       APP_ENV: production
@@ -168,7 +168,7 @@ services:
   # Frontend - Web Dashboard
   # ============================================
   frontend:
-    image: ghcr.io/kr1s57/vigilancex-frontend:3.1.0
+    image: ghcr.io/kr1s57/vigilancex-frontend:3.1.1
     container_name: vigilance_frontend
     depends_on:
       - backend
