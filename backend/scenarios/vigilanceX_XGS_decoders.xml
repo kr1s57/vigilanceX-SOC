@@ -1,0 +1,974 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  VIGILANCE X - Sophos XGS Log Decoders
+  Version: 3.0.1
+  Date: 2026-01-09
+
+  Ce fichier definit tous les champs extractibles des logs Sophos XGS.
+  Utilise par le pipeline Vector.dev et le backend Go pour le parsing.
+
+  Format des logs Sophos XGS: Key-Value Pairs (KVP)
+  Exemple: device_name="XGS" timestamp="2026-01-09T10:00:00+0000" src_ip="1.2.3.4" ...
+
+  Reference: Sophos Firewall 20.0 Syslog Guide
+  Inspire de: https://github.com/JoernSchoenyan/Sophos-Wazuh-SOC
+  License: Proprietary - VigilanceX
+-->
+<vigilancex_decoders version="3.0.1">
+
+  <!-- ============================================================
+       METADATA - Informations sur le decoder
+       ============================================================ -->
+  <metadata>
+    <name>Sophos XGS Firewall Decoders</name>
+    <description>Extraction complete des champs logs Sophos XGS pour VigilanceX</description>
+    <author>VigilanceX Team</author>
+    <sophos_version>20.0</sophos_version>
+    <log_formats>
+      <format>Standard Syslog Protocol</format>
+      <format>Central Reporting Format</format>
+    </log_formats>
+    <total_fields>99</total_fields>
+  </metadata>
+
+  <!-- ============================================================
+       PREMATCH - Pattern de reconnaissance des logs Sophos
+       ============================================================ -->
+  <prematch>
+    <pattern>^device_name="[^"]+"\s+timestamp=</pattern>
+    <description>Identifie un log Sophos XGS par son header standard</description>
+  </prematch>
+
+  <!-- ============================================================
+       FIELD GROUPS - Champs organises par categorie
+       ============================================================ -->
+
+  <!-- === GROUPE 1: Identification Equipement === -->
+  <field_group name="device_identification" priority="1">
+    <description>Identification du firewall source</description>
+
+    <field name="device_name" required="true">
+      <type>string</type>
+      <regex>device_name="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Nom du firewall Sophos</description>
+      <example>XGS-PROD-01</example>
+    </field>
+
+    <field name="device_serial_id" required="true">
+      <type>string</type>
+      <regex>device_serial_id="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Numero de serie du firewall (utilise pour licence VX3)</description>
+      <example>X1234567890ABCD</example>
+      <vx_binding>true</vx_binding>
+    </field>
+
+    <field name="device_model" required="false">
+      <type>string</type>
+      <regex>device_model="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Modele du firewall</description>
+      <example>XGS 4300</example>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 2: Timestamp et Metadata Log === -->
+  <field_group name="log_metadata" priority="2">
+    <description>Metadata du log (timing, classification)</description>
+
+    <field name="timestamp" required="true">
+      <type>datetime</type>
+      <regex>timestamp="(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{4})"</regex>
+      <clickhouse_type>DateTime</clickhouse_type>
+      <format>ISO8601</format>
+      <description>Timestamp de l'evenement sur le firewall</description>
+      <example>2026-01-09T10:30:45+0100</example>
+    </field>
+
+    <field name="log_id" required="true">
+      <type>string</type>
+      <regex>log_id="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Identifiant unique du log (deduplication)</description>
+      <example>010101600001</example>
+      <index>bloom_filter</index>
+    </field>
+
+    <field name="log_type" required="true">
+      <type>string</type>
+      <regex>log_type="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Type principal du log</description>
+      <allowed_values>
+        <value>Firewall</value>
+        <value>Content Filtering</value>
+        <value>Anti-Virus</value>
+        <value>Anti-Spam</value>
+        <value>IPS</value>
+        <value>ATP</value>
+        <value>Sandstorm</value>
+        <value>SSL VPN</value>
+        <value>IPSec</value>
+        <value>WAF</value>
+        <value>Authentication</value>
+        <value>Admin</value>
+        <value>Event</value>
+        <value>Wireless</value>
+        <value>System Health</value>
+      </allowed_values>
+    </field>
+
+    <field name="log_component" required="false">
+      <type>string</type>
+      <regex>log_component="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Composant Sophos generant le log</description>
+      <example>Firewall Rule</example>
+    </field>
+
+    <field name="log_subtype" required="false">
+      <type>string</type>
+      <regex>log_subtype="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Sous-type du log</description>
+      <example>Denied</example>
+    </field>
+
+    <field name="log_version" required="false">
+      <type>integer</type>
+      <regex>log_version=(\d+)</regex>
+      <clickhouse_type>UInt8</clickhouse_type>
+      <description>Version du format de log</description>
+    </field>
+
+    <field name="priority" required="false">
+      <type>string</type>
+      <regex>priority="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Priorite Sophos du log</description>
+      <allowed_values>
+        <value>Emergency</value>
+        <value>Alert</value>
+        <value>Critical</value>
+        <value>Error</value>
+        <value>Warning</value>
+        <value>Notice</value>
+        <value>Information</value>
+        <value>Debug</value>
+      </allowed_values>
+    </field>
+
+    <field name="severity" required="true">
+      <type>string</type>
+      <regex>severity="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Severite normalisee VigilanceX</description>
+      <normalization>
+        <map from="0,1" to="critical"/>
+        <map from="2,3" to="high"/>
+        <map from="4,5" to="medium"/>
+        <map from="6" to="low"/>
+        <map from="7" to="info"/>
+      </normalization>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 3: Reseau Source === -->
+  <field_group name="network_source" priority="3">
+    <description>Informations reseau de la source</description>
+
+    <field name="src_ip" required="true">
+      <type>ipv4</type>
+      <regex>src_ip="([^"]+)"</regex>
+      <alternatives>srcip,sourceip,client_ip</alternatives>
+      <clickhouse_type>IPv4</clickhouse_type>
+      <description>Adresse IP source</description>
+      <index>bloom_filter</index>
+      <validation>^(\d{1,3}\.){3}\d{1,3}$</validation>
+      <default>0.0.0.0</default>
+    </field>
+
+    <field name="src_port" required="false">
+      <type>port</type>
+      <regex>src_port=(\d+)</regex>
+      <alternatives>srcport,sourceport</alternatives>
+      <clickhouse_type>UInt16</clickhouse_type>
+      <description>Port source</description>
+    </field>
+
+    <field name="src_mac" required="false">
+      <type>mac</type>
+      <regex>src_mac="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Adresse MAC source</description>
+      <validation>^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$</validation>
+    </field>
+
+    <field name="src_zone" required="false">
+      <type>string</type>
+      <regex>src_zone="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Zone firewall source</description>
+      <example>LAN</example>
+    </field>
+
+    <field name="src_zone_type" required="false">
+      <type>string</type>
+      <regex>src_zone_type="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Type de zone source</description>
+    </field>
+
+    <field name="src_country" required="false">
+      <type>string</type>
+      <regex>src_country="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Code pays ISO source (geo)</description>
+      <example>FR</example>
+      <vx_mapping>geo_country</vx_mapping>
+    </field>
+
+    <field name="src_host" required="false">
+      <type>string</type>
+      <regex>src_host="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Hostname source (DNS reverse)</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 4: Reseau Destination === -->
+  <field_group name="network_destination" priority="4">
+    <description>Informations reseau de la destination</description>
+
+    <field name="dst_ip" required="false">
+      <type>ipv4</type>
+      <regex>dst_ip="([^"]+)"</regex>
+      <alternatives>dstip,destip,server_ip</alternatives>
+      <clickhouse_type>IPv4</clickhouse_type>
+      <description>Adresse IP destination</description>
+      <validation>^(\d{1,3}\.){3}\d{1,3}$</validation>
+      <default>0.0.0.0</default>
+    </field>
+
+    <field name="dst_port" required="false">
+      <type>port</type>
+      <regex>dst_port=(\d+)</regex>
+      <alternatives>dstport,destport</alternatives>
+      <clickhouse_type>UInt16</clickhouse_type>
+      <description>Port destination</description>
+    </field>
+
+    <field name="dst_zone" required="false">
+      <type>string</type>
+      <regex>dst_zone="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Zone firewall destination</description>
+      <example>WAN</example>
+    </field>
+
+    <field name="dst_zone_type" required="false">
+      <type>string</type>
+      <regex>dst_zone_type="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Type de zone destination</description>
+    </field>
+
+    <field name="dst_country" required="false">
+      <type>string</type>
+      <regex>dst_country="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Code pays ISO destination</description>
+    </field>
+
+    <field name="dst_host" required="false">
+      <type>string</type>
+      <regex>dst_host="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Hostname destination</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 5: Protocole et Connexion === -->
+  <field_group name="connection" priority="5">
+    <description>Details de connexion et protocole</description>
+
+    <field name="protocol" required="false">
+      <type>string</type>
+      <regex>protocol="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Protocole reseau</description>
+      <normalization>uppercase</normalization>
+      <allowed_values>
+        <value>TCP</value>
+        <value>UDP</value>
+        <value>ICMP</value>
+        <value>GRE</value>
+        <value>ESP</value>
+        <value>AH</value>
+      </allowed_values>
+    </field>
+
+    <field name="con_id" required="false">
+      <type>string</type>
+      <regex>con_id="(\d+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>ID de connexion (tracking session)</description>
+      <index>bloom_filter</index>
+    </field>
+
+    <field name="action" required="true">
+      <type>string</type>
+      <regex>action="([^"]+)"</regex>
+      <alternatives>fw_rule_action</alternatives>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Action appliquee</description>
+      <normalization>lowercase</normalization>
+      <allowed_values>
+        <value>allow</value>
+        <value>drop</value>
+        <value>deny</value>
+        <value>reject</value>
+        <value>quarantine</value>
+        <value>block</value>
+        <value>accept</value>
+      </allowed_values>
+    </field>
+
+    <field name="status" required="false">
+      <type>string</type>
+      <regex>status="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <vx_mapping>sophos_fw_status</vx_mapping>
+      <description>Statut de l'operation</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 6: Regles Firewall === -->
+  <field_group name="firewall_rules" priority="6">
+    <description>Informations sur les regles appliquees</description>
+
+    <field name="rule_id" required="false">
+      <type>string</type>
+      <regex>rule_id=(\d+)</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>ID de la regle firewall</description>
+      <index>bloom_filter</index>
+    </field>
+
+    <field name="rule_name" required="false">
+      <type>string</type>
+      <regex>rule_name="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom de la regle firewall</description>
+    </field>
+
+    <field name="profile_id" required="false">
+      <type>integer</type>
+      <regex>profile_id=(\d+)</regex>
+      <clickhouse_type>UInt32</clickhouse_type>
+      <description>ID du profil de securite</description>
+    </field>
+
+    <field name="profile_name" required="false">
+      <type>string</type>
+      <regex>profile_name="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom du profil de securite</description>
+    </field>
+
+    <field name="reason" required="false">
+      <type>string</type>
+      <regex>reason="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Raison de l'action (blocage, etc.)</description>
+    </field>
+
+    <field name="message" required="false">
+      <type>string</type>
+      <regex>message="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Message descriptif du log</description>
+    </field>
+
+    <field name="category" required="false">
+      <type>string</type>
+      <regex>category="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Categorie de filtrage/classification</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 7: HTTP/Web === -->
+  <field_group name="http_web" priority="7">
+    <description>Champs specifiques HTTP et Web</description>
+
+    <field name="url" required="false">
+      <type>string</type>
+      <regex>url="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>URL de la requete</description>
+    </field>
+
+    <field name="hostname" required="false">
+      <type>string</type>
+      <regex>hostname="([^"]+)"</regex>
+      <alternatives>host,domain</alternatives>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Hostname/domaine cible</description>
+      <index>bloom_filter</index>
+    </field>
+
+    <field name="http_method" required="false">
+      <type>string</type>
+      <regex>http_method="([^"]+)"</regex>
+      <alternatives>method</alternatives>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Methode HTTP</description>
+      <allowed_values>
+        <value>GET</value>
+        <value>POST</value>
+        <value>PUT</value>
+        <value>DELETE</value>
+        <value>PATCH</value>
+        <value>HEAD</value>
+        <value>OPTIONS</value>
+      </allowed_values>
+    </field>
+
+    <field name="http_status" required="false">
+      <type>integer</type>
+      <regex>http_status=(\d+)</regex>
+      <alternatives>status_code,httpstatus</alternatives>
+      <clickhouse_type>UInt16</clickhouse_type>
+      <description>Code de reponse HTTP</description>
+    </field>
+
+    <field name="user_agent" required="false">
+      <type>string</type>
+      <regex>user_agent="([^"]+)"</regex>
+      <alternatives>useragent</alternatives>
+      <clickhouse_type>String</clickhouse_type>
+      <description>User-Agent du client</description>
+    </field>
+
+    <field name="referer" required="false">
+      <type>string</type>
+      <regex>referer="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Header Referer HTTP</description>
+    </field>
+
+    <field name="content_type" required="false">
+      <type>string</type>
+      <regex>content_type="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Content-Type de la requete/reponse</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 8: TLS/SSL === -->
+  <field_group name="tls_ssl" priority="8">
+    <description>Champs TLS/SSL pour analyse cryptographique</description>
+
+    <field name="tls_version" required="false">
+      <type>string</type>
+      <regex>tls_version="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Version TLS negociee</description>
+      <allowed_values>
+        <value>TLSv1.0</value>
+        <value>TLSv1.1</value>
+        <value>TLSv1.2</value>
+        <value>TLSv1.3</value>
+        <value>SSLv3</value>
+      </allowed_values>
+      <compliance_check>
+        <deprecated>TLSv1.0,TLSv1.1,SSLv3</deprecated>
+        <recommended>TLSv1.2,TLSv1.3</recommended>
+      </compliance_check>
+    </field>
+
+    <field name="cipher_suite" required="false">
+      <type>string</type>
+      <regex>cipher_suite="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Suite de chiffrement TLS</description>
+    </field>
+
+    <field name="sni" required="false">
+      <type>string</type>
+      <regex>sni="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Server Name Indication (HTTPS)</description>
+      <index>bloom_filter</index>
+    </field>
+
+    <field name="key_type" required="false">
+      <type>string</type>
+      <regex>key_type="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Type de cle (RSA, ECDSA, etc.)</description>
+    </field>
+
+    <field name="fingerprint" required="false">
+      <type>string</type>
+      <regex>fingerprint="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Empreinte du certificat</description>
+    </field>
+
+    <field name="cert_chain_served" required="false">
+      <type>string</type>
+      <regex>cert_chain_served="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Chaine de certificats servie</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 9: Utilisateur et Authentification === -->
+  <field_group name="user_auth" priority="9">
+    <description>Informations utilisateur et authentification</description>
+
+    <field name="user_name" required="false">
+      <type>string</type>
+      <regex>user_name="([^"]+)"</regex>
+      <alternatives>username,user</alternatives>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom d'utilisateur</description>
+    </field>
+
+    <field name="user_group" required="false">
+      <type>string</type>
+      <regex>user_group="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Groupe de l'utilisateur</description>
+    </field>
+
+    <field name="reported_user" required="false">
+      <type>string</type>
+      <regex>reported_user="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Utilisateur rapporte (endpoint)</description>
+    </field>
+
+    <field name="proc_user" required="false">
+      <type>string</type>
+      <regex>proc_user="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Utilisateur du processus</description>
+    </field>
+
+    <field name="auth_mechanism" required="false">
+      <type>string</type>
+      <regex>auth_mechanism="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Mecanisme d'authentification</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 10: VPN === -->
+  <field_group name="vpn" priority="10">
+    <description>Champs specifiques VPN (SSL, IPSec, L2TP, etc.)</description>
+
+    <field name="connectionname" required="false">
+      <type>string</type>
+      <regex>connectionname="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom de la connexion VPN</description>
+      <vx_mapping>connection_name</vx_mapping>
+    </field>
+
+    <field name="remote_network" required="false">
+      <type>string</type>
+      <regex>remote_network="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Reseau distant VPN</description>
+    </field>
+
+    <field name="local_network" required="false">
+      <type>string</type>
+      <regex>local_network="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Reseau local VPN</description>
+    </field>
+
+    <field name="local_ip" required="false">
+      <type>ipv4</type>
+      <regex>local_ip="([^"]+)"</regex>
+      <clickhouse_type>IPv4</clickhouse_type>
+      <description>IP locale VPN</description>
+    </field>
+
+    <field name="tunnel_id" required="false">
+      <type>string</type>
+      <regex>tunnel_id="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>ID du tunnel VPN</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 11: Threat Intelligence === -->
+  <field_group name="threat_intel" priority="11">
+    <description>Champs lies aux menaces et malwares</description>
+
+    <field name="threatfeed" required="false">
+      <type>string</type>
+      <regex>threatfeed="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Source de threat intelligence</description>
+      <example>Sophos Labs</example>
+    </field>
+
+    <field name="malware" required="false">
+      <type>string</type>
+      <regex>malware="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom du malware detecte</description>
+    </field>
+
+    <field name="classification" required="false">
+      <type>string</type>
+      <regex>classification="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Classification de la menace</description>
+    </field>
+
+    <field name="filename" required="false">
+      <type>string</type>
+      <regex>filename="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom du fichier suspect</description>
+    </field>
+
+    <field name="file_path" required="false">
+      <type>string</type>
+      <regex>file_path="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Chemin complet du fichier</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 12: Email/Anti-Spam === -->
+  <field_group name="email" priority="12">
+    <description>Champs specifiques email et anti-spam</description>
+
+    <field name="sender" required="false">
+      <type>string</type>
+      <regex>sender="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Adresse email expediteur</description>
+    </field>
+
+    <field name="recipient" required="false">
+      <type>string</type>
+      <regex>recipient="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Adresse email destinataire</description>
+    </field>
+
+    <field name="subject" required="false">
+      <type>string</type>
+      <regex>subject="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Sujet de l'email</description>
+    </field>
+
+    <field name="antispam_action" required="false">
+      <type>string</type>
+      <regex>action="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Action anti-spam appliquee</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 13: Endpoint Health (Synchronized Security) === -->
+  <field_group name="endpoint_health" priority="13">
+    <description>Sante des endpoints (Sophos Central Heartbeat)</description>
+
+    <field name="ep_name" required="false">
+      <type>string</type>
+      <regex>ep_name="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom de l'endpoint</description>
+    </field>
+
+    <field name="ep_uuid" required="false">
+      <type>string</type>
+      <regex>ep_uuid="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>UUID unique de l'endpoint</description>
+    </field>
+
+    <field name="ep_ip" required="false">
+      <type>string</type>
+      <regex>ep_ip="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>IP de l'endpoint</description>
+    </field>
+
+    <field name="ep_health" required="false">
+      <type>string</type>
+      <regex>ep_health="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Etat de sante de l'endpoint</description>
+      <allowed_values>
+        <value>green</value>
+        <value>yellow</value>
+        <value>red</value>
+      </allowed_values>
+    </field>
+
+    <field name="ep_event_time" required="false">
+      <type>datetime</type>
+      <regex>ep_event_time="([^"]+)"</regex>
+      <clickhouse_type>DateTime</clickhouse_type>
+      <description>Timestamp du heartbeat</description>
+    </field>
+
+    <field name="hb_status" required="false">
+      <type>string</type>
+      <regex>hb_status="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Statut du heartbeat</description>
+    </field>
+
+    <field name="red_endpoint_count" required="false">
+      <type>integer</type>
+      <regex>red_endpoint_count=(\d+)</regex>
+      <clickhouse_type>UInt32</clickhouse_type>
+      <description>Nombre d'endpoints en etat rouge</description>
+    </field>
+
+    <field name="yellow_endpoint_count" required="false">
+      <type>integer</type>
+      <regex>yellow_endpoint_count=(\d+)</regex>
+      <clickhouse_type>UInt32</clickhouse_type>
+      <description>Nombre d'endpoints en etat jaune</description>
+    </field>
+
+    <field name="green_endpoint_count" required="false">
+      <type>integer</type>
+      <regex>green_endpoint_count=(\d+)</regex>
+      <clickhouse_type>UInt32</clickhouse_type>
+      <description>Nombre d'endpoints en etat vert</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 14: System Health === -->
+  <field_group name="system_health" priority="14">
+    <description>Metriques de sante du firewall</description>
+
+    <field name="interface" required="false">
+      <type>string</type>
+      <regex>interface="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Interface reseau</description>
+    </field>
+
+    <field name="display_interface" required="false">
+      <type>string</type>
+      <regex>display_interface="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom affiche de l'interface</description>
+    </field>
+
+    <field name="receivedkbits" required="false">
+      <type>float</type>
+      <regex>receivedkbits=(\d+\.\d+)</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>Kbits recus</description>
+    </field>
+
+    <field name="transmittedkbits" required="false">
+      <type>float</type>
+      <regex>transmittedkbits=(\d+\.\d+)</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>Kbits transmis</description>
+    </field>
+
+    <field name="cpu_system" required="false">
+      <type>float</type>
+      <regex>system=(\d+\.\d+)%</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>CPU systeme (%)</description>
+    </field>
+
+    <field name="cpu_user" required="false">
+      <type>float</type>
+      <regex>user=(\d+\.\d+)%</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>CPU utilisateur (%)</description>
+    </field>
+
+    <field name="cpu_idle" required="false">
+      <type>float</type>
+      <regex>idle=(\d+\.\d+)%</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>CPU idle (%)</description>
+    </field>
+
+    <field name="total_memory" required="false">
+      <type>integer</type>
+      <regex>total_memory=(\d+)</regex>
+      <clickhouse_type>UInt64</clickhouse_type>
+      <description>Memoire totale (bytes)</description>
+    </field>
+
+    <field name="free_memory" required="false">
+      <type>integer</type>
+      <regex>free=(\d+)</regex>
+      <clickhouse_type>UInt64</clickhouse_type>
+      <description>Memoire libre (bytes)</description>
+    </field>
+
+    <field name="used_memory" required="false">
+      <type>integer</type>
+      <regex>used=(\d+)</regex>
+      <clickhouse_type>UInt64</clickhouse_type>
+      <description>Memoire utilisee (bytes)</description>
+    </field>
+
+    <field name="disk_configuration" required="false">
+      <type>float</type>
+      <regex>Configuration=(\d+\.\d+)%</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>Espace disque Configuration (%)</description>
+    </field>
+
+    <field name="disk_reports" required="false">
+      <type>float</type>
+      <regex>Reports=(\d+\.\d+)%</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>Espace disque Reports (%)</description>
+    </field>
+
+    <field name="disk_signature" required="false">
+      <type>float</type>
+      <regex>Signature=(\d+\.\d+)%</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>Espace disque Signatures (%)</description>
+    </field>
+
+    <field name="disk_temp" required="false">
+      <type>float</type>
+      <regex>Temp=(\d+\.\d+)%</regex>
+      <clickhouse_type>Float32</clickhouse_type>
+      <description>Espace disque Temp (%)</description>
+    </field>
+
+    <field name="ssl_count" required="false">
+      <type>integer</type>
+      <regex>\sssl_count=(\d+)</regex>
+      <clickhouse_type>UInt32</clickhouse_type>
+      <description>Nombre de connexions SSL</description>
+    </field>
+
+    <field name="non_ssl_count" required="false">
+      <type>integer</type>
+      <regex>non_ssl_count=(\d+)</regex>
+      <clickhouse_type>UInt32</clickhouse_type>
+      <description>Nombre de connexions non-SSL</description>
+    </field>
+
+    <field name="decrypted_count" required="false">
+      <type>integer</type>
+      <regex>decrypted_count=(\d+)</regex>
+      <clickhouse_type>UInt32</clickhouse_type>
+      <description>Nombre de connexions decryptees</description>
+    </field>
+
+    <field name="users_count" required="false">
+      <type>integer</type>
+      <regex>users=(\d+)</regex>
+      <clickhouse_type>UInt32</clickhouse_type>
+      <description>Nombre d'utilisateurs connectes</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 15: IPS/IDS Specifique === -->
+  <field_group name="ips_ids" priority="15">
+    <description>Champs specifiques IPS/IDS</description>
+
+    <field name="event_id" required="false">
+      <type>string</type>
+      <regex>event_id="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>ID de l'evenement IPS</description>
+    </field>
+
+    <field name="event_type" required="false">
+      <type>string</type>
+      <regex>event_type="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Type d'evenement IPS</description>
+    </field>
+
+    <field name="signature_id" required="false">
+      <type>string</type>
+      <regex>signature_id="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>ID de la signature IPS</description>
+    </field>
+
+    <field name="signature_name" required="false">
+      <type>string</type>
+      <regex>signature_name="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Nom de la signature IPS</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 16: Evenements Admin === -->
+  <field_group name="admin_events" priority="16">
+    <description>Evenements d'administration</description>
+
+    <field name="reported_host" required="false">
+      <type>string</type>
+      <regex>reported_host="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Host rapportant l'evenement</description>
+    </field>
+
+    <field name="reported_id" required="false">
+      <type>string</type>
+      <regex>reported_id="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>ID du rapport</description>
+    </field>
+
+    <field name="source" required="false">
+      <type>string</type>
+      <regex>source="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Source de l'action admin</description>
+    </field>
+
+    <field name="destination" required="false">
+      <type>string</type>
+      <regex>destination="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Destination de l'action admin</description>
+    </field>
+
+    <field name="platform" required="false">
+      <type>string</type>
+      <regex>platform="([^"]+)"</regex>
+      <clickhouse_type>LowCardinality(String)</clickhouse_type>
+      <description>Plateforme d'administration</description>
+    </field>
+  </field_group>
+
+  <!-- === GROUPE 17: DHCP === -->
+  <field_group name="dhcp" priority="17">
+    <description>Evenements DHCP</description>
+
+    <field name="lease_time" required="false">
+      <type>string</type>
+      <regex>lease_time="([^"]+)"</regex>
+      <clickhouse_type>String</clickhouse_type>
+      <description>Duree du bail DHCP</description>
+    </field>
+  </field_group>
+
+</vigilancex_decoders>

@@ -1,0 +1,1072 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  VIGILANCE X - Sophos XGS Detection Rules
+  Version: 3.0.1
+  Date: 2026-01-09
+
+  Ce fichier definit les regles de detection pour les logs Sophos XGS.
+  Complement aux scenarios YAML Detect2Ban avec couverture etendue.
+
+  Structure des regles:
+  - ID 114000-114099: Firewall (traffic)
+  - ID 114100-114199: ATP (Advanced Threat Protection)
+  - ID 114200-114299: Authentication
+  - ID 114300-114399: IPS/IDS
+  - ID 114400-114499: VPN
+  - ID 114500-114599: WAF
+  - ID 114600-114699: Email/Anti-Spam
+  - ID 114700-114799: Sandstorm/Sandbox
+  - ID 114800-114899: SSL/TLS
+  - ID 114900-114999: System Health
+
+  Reference: MITRE ATT&CK Framework v13
+  Inspire de: https://github.com/JoernSchoenyan/Sophos-Wazuh-SOC
+  License: Proprietary - VigilanceX
+-->
+<vigilancex_rules version="3.0.1">
+
+  <!-- ============================================================
+       METADATA
+       ============================================================ -->
+  <metadata>
+    <name>Sophos XGS Detection Rules</name>
+    <description>Regles de detection pour logs Sophos XGS - VigilanceX</description>
+    <author>VigilanceX Team</author>
+    <total_rules>68</total_rules>
+    <mitre_coverage>
+      <technique id="T1078">Valid Accounts</technique>
+      <technique id="T1110">Brute Force</technique>
+      <technique id="T1133">External Remote Services</technique>
+      <technique id="T1190">Exploit Public-Facing Application</technique>
+      <technique id="T1203">Exploitation for Client Execution</technique>
+      <technique id="T1204">User Execution</technique>
+      <technique id="T1566">Phishing</technique>
+      <technique id="T1071">Application Layer Protocol</technique>
+      <technique id="T1059">Command and Scripting Interpreter</technique>
+      <technique id="T1486">Data Encrypted for Impact</technique>
+    </mitre_coverage>
+  </metadata>
+
+  <!-- ============================================================
+       RULE GROUP: FIREWALL (114000-114099)
+       ============================================================ -->
+  <rule_group name="firewall" id_range="114000-114099">
+    <description>Regles de filtrage firewall basiques</description>
+
+    <!-- Regle parent - tous les logs Sophos -->
+    <rule id="114000" level="0">
+      <decoded_as>sophos_xgs</decoded_as>
+      <description>Evenement Sophos XGS detecte</description>
+    </rule>
+
+    <rule id="114001" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">Firewall</field>
+        <field name="action">allow</field>
+      </match>
+      <description>Trafic firewall autorise</description>
+      <vx_category>Allowed</vx_category>
+    </rule>
+
+    <rule id="114002" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">Firewall</field>
+        <field name="action" operator="in">drop,deny,reject</field>
+      </match>
+      <description>Trafic firewall bloque</description>
+      <vx_category>Blocked</vx_category>
+    </rule>
+
+    <rule id="114003" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">Firewall</field>
+        <field name="log_subtype">Close</field>
+      </match>
+      <description>Connexion firewall terminee</description>
+      <vx_category>Connection Closed</vx_category>
+    </rule>
+
+    <!-- Detection de scan de ports -->
+    <rule id="114010" level="8">
+      <if_parent>114002</if_parent>
+      <frequency>20</frequency>
+      <timeframe>60</timeframe>
+      <group_by>src_ip</group_by>
+      <description>Scan de ports detecte - 20+ tentatives bloquees en 1 minute</description>
+      <vx_category>Network Scan</vx_category>
+      <mitre>
+        <technique id="T1046">Network Service Discovery</technique>
+      </mitre>
+      <vx_action>
+        <type>alert</type>
+        <severity>high</severity>
+      </vx_action>
+    </rule>
+
+    <!-- Tentatives de connexion vers ports critiques -->
+    <rule id="114011" level="7">
+      <if_parent>114002</if_parent>
+      <match>
+        <field name="dst_port" operator="in">22,23,3389,5900,445,139</field>
+      </match>
+      <description>Tentative de connexion vers service critique bloquee</description>
+      <vx_category>Critical Port Access</vx_category>
+      <mitre>
+        <technique id="T1021">Remote Services</technique>
+      </mitre>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: ATP (114100-114199)
+       ============================================================ -->
+  <rule_group name="atp" id_range="114100-114199">
+    <description>Advanced Threat Protection - Menaces avancees</description>
+
+    <rule id="114100" level="8">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">ATP</field>
+        <field name="action" operator="in">drop,block</field>
+      </match>
+      <description>ATP: Connexion malveillante bloquee</description>
+      <vx_category>ATP Threat</vx_category>
+      <mitre>
+        <technique id="T1071">Application Layer Protocol (C2)</technique>
+        <technique id="T1203">Exploitation for Client Execution</technique>
+      </mitre>
+      <vx_action>
+        <type>check_threat_intel</type>
+        <type>ban</type>
+        <duration>24h</duration>
+        <severity>high</severity>
+        <sync_sophos>true</sync_sophos>
+      </vx_action>
+    </rule>
+
+    <rule id="114101" level="6">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">ATP</field>
+        <field name="log_subtype">Alert</field>
+      </match>
+      <description>ATP: Alerte de menace levee</description>
+      <vx_category>ATP Alert</vx_category>
+      <mitre>
+        <technique id="T1203">Exploitation for Client Execution</technique>
+      </mitre>
+    </rule>
+
+    <!-- C2 Communication -->
+    <rule id="114102" level="10">
+      <if_parent>114100</if_parent>
+      <match>
+        <field name="message" operator="contains">C2,command and control,callback,beacon</field>
+      </match>
+      <description>ATP: Communication C2 detectee et bloquee</description>
+      <vx_category>C2 Communication</vx_category>
+      <mitre>
+        <technique id="T1071">Application Layer Protocol</technique>
+        <technique id="T1573">Encrypted Channel</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>168h</duration>
+        <severity>critical</severity>
+        <notify>true</notify>
+        <group>VIGILANCE_X_C2</group>
+      </vx_action>
+    </rule>
+
+    <!-- Threatfeed match -->
+    <rule id="114103" level="9">
+      <if_parent>114100</if_parent>
+      <match>
+        <field name="threatfeed" operator="not_empty"/>
+      </match>
+      <description>ATP: IP matchee par threatfeed Sophos Labs</description>
+      <vx_category>Threatfeed Match</vx_category>
+      <vx_action>
+        <type>ban</type>
+        <duration>72h</duration>
+        <severity>high</severity>
+      </vx_action>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: AUTHENTICATION (114200-114299)
+       ============================================================ -->
+  <rule_group name="authentication" id_range="114200-114299">
+    <description>Evenements d'authentification</description>
+
+    <rule id="114200" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">Authentication</field>
+        <field name="log_subtype">Success</field>
+      </match>
+      <description>Authentification reussie</description>
+      <vx_category>Auth Success</vx_category>
+      <mitre>
+        <technique id="T1078">Valid Accounts</technique>
+      </mitre>
+    </rule>
+
+    <rule id="114201" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">Authentication</field>
+        <field name="log_subtype" operator="in">Fail,Failed,Failure</field>
+      </match>
+      <description>Echec d'authentification</description>
+      <vx_category>Auth Failure</vx_category>
+      <mitre>
+        <technique id="T1110">Brute Force</technique>
+      </mitre>
+    </rule>
+
+    <!-- Brute Force Detection -->
+    <rule id="114210" level="8">
+      <if_parent>114201</if_parent>
+      <frequency>5</frequency>
+      <timeframe>300</timeframe>
+      <group_by>src_ip</group_by>
+      <description>Attaque brute-force detectee - 5+ echecs en 5 minutes</description>
+      <vx_category>Brute Force</vx_category>
+      <mitre>
+        <technique id="T1110.001">Password Guessing</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>6h</duration>
+        <progressive>true</progressive>
+        <severity>high</severity>
+      </vx_action>
+    </rule>
+
+    <!-- Credential Stuffing (multi-users) -->
+    <rule id="114211" level="9">
+      <if_parent>114201</if_parent>
+      <frequency>10</frequency>
+      <timeframe>300</timeframe>
+      <group_by>src_ip</group_by>
+      <distinct_users>3</distinct_users>
+      <description>Credential stuffing detecte - attaque multi-utilisateurs</description>
+      <vx_category>Credential Stuffing</vx_category>
+      <mitre>
+        <technique id="T1110.004">Credential Stuffing</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>24h</duration>
+        <severity>critical</severity>
+        <notify>true</notify>
+      </vx_action>
+    </rule>
+
+    <!-- Admin Events -->
+    <rule id="114220" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">Event</field>
+        <field name="log_component" operator="in">CLI,GUI</field>
+      </match>
+      <description>Action d'administration firewall</description>
+      <vx_category>Admin Event</vx_category>
+    </rule>
+
+    <rule id="114221" level="7">
+      <if_parent>114220</if_parent>
+      <match>
+        <field name="message" operator="contains">config change,configuration,modified,deleted,created</field>
+      </match>
+      <description>Changement de configuration firewall</description>
+      <vx_category>Config Change</vx_category>
+      <mitre>
+        <technique id="T1562.001">Disable or Modify Tools</technique>
+      </mitre>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: IPS/IDS (114300-114399)
+       ============================================================ -->
+  <rule_group name="ips_ids" id_range="114300-114399">
+    <description>Intrusion Prevention/Detection System</description>
+
+    <rule id="114300" level="6">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component" operator="in">IPS,IDP,Intrusion Prevention</field>
+        <field name="action" operator="in">detect,alert</field>
+      </match>
+      <description>IPS: Alerte de detection</description>
+      <vx_category>IPS Alert</vx_category>
+    </rule>
+
+    <rule id="114301" level="8">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component" operator="in">IPS,IDP,Intrusion Prevention</field>
+        <field name="action" operator="in">drop,block,deny</field>
+      </match>
+      <description>IPS: Attaque bloquee</description>
+      <vx_category>IPS Block</vx_category>
+      <mitre>
+        <technique id="T1190">Exploit Public-Facing Application</technique>
+      </mitre>
+      <vx_action>
+        <type>check_threat_intel</type>
+        <type>ban</type>
+        <duration>12h</duration>
+        <severity>high</severity>
+      </vx_action>
+    </rule>
+
+    <!-- IPS Severity Critical -->
+    <rule id="114310" level="10">
+      <if_parent>114301</if_parent>
+      <match>
+        <field name="severity" operator="in">critical,Critical,0,1</field>
+      </match>
+      <description>IPS: Exploit critique bloque</description>
+      <vx_category>Critical Exploit</vx_category>
+      <mitre>
+        <technique id="T1190">Exploit Public-Facing Application</technique>
+        <technique id="T1203">Exploitation for Client Execution</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>168h</duration>
+        <severity>critical</severity>
+        <notify>true</notify>
+        <group>VIGILANCE_X_EXPLOITS</group>
+      </vx_action>
+    </rule>
+
+    <!-- Detection de patterns d'attaque specifiques -->
+    <rule id="114311" level="9">
+      <if_parent>114301</if_parent>
+      <match>
+        <field name="message" operator="regex">SQL|SQLi|injection|UNION.*SELECT</field>
+      </match>
+      <description>IPS: Tentative d'injection SQL</description>
+      <vx_category>SQL Injection</vx_category>
+      <mitre>
+        <technique id="T1190">Exploit Public-Facing Application</technique>
+      </mitre>
+    </rule>
+
+    <rule id="114312" level="9">
+      <if_parent>114301</if_parent>
+      <match>
+        <field name="message" operator="regex">buffer.?overflow|heap.?overflow|stack.?overflow</field>
+      </match>
+      <description>IPS: Tentative de buffer overflow</description>
+      <vx_category>Buffer Overflow</vx_category>
+      <mitre>
+        <technique id="T1203">Exploitation for Client Execution</technique>
+      </mitre>
+    </rule>
+
+    <rule id="114313" level="8">
+      <if_parent>114301</if_parent>
+      <match>
+        <field name="message" operator="regex">DoS|denial.?of.?service|flood|syn.?attack</field>
+      </match>
+      <description>IPS: Tentative d'attaque DoS</description>
+      <vx_category>DoS Attack</vx_category>
+      <mitre>
+        <technique id="T1498">Network Denial of Service</technique>
+      </mitre>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: VPN (114400-114499)
+       ============================================================ -->
+  <rule_group name="vpn" id_range="114400-114499">
+    <description>Evenements VPN (SSL, IPSec, L2TP, etc.)</description>
+
+    <!-- SSL VPN -->
+    <rule id="114400" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">SSL VPN</field>
+        <field name="log_subtype">Connect</field>
+      </match>
+      <description>SSL VPN: Connexion etablie</description>
+      <vx_category>VPN Connection</vx_category>
+    </rule>
+
+    <rule id="114401" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">SSL VPN</field>
+        <field name="log_subtype">Disconnect</field>
+      </match>
+      <description>SSL VPN: Deconnexion</description>
+      <vx_category>VPN Disconnection</vx_category>
+    </rule>
+
+    <rule id="114402" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">SSL VPN</field>
+        <field name="log_subtype" operator="in">Fail,Failed,Authentication</field>
+        <field name="message" operator="contains">failed,invalid,denied</field>
+      </match>
+      <description>SSL VPN: Echec d'authentification</description>
+      <vx_category>VPN Auth Failure</vx_category>
+      <mitre>
+        <technique id="T1133">External Remote Services</technique>
+        <technique id="T1110">Brute Force</technique>
+      </mitre>
+    </rule>
+
+    <!-- VPN Brute Force -->
+    <rule id="114410" level="8">
+      <if_parent>114402</if_parent>
+      <frequency>5</frequency>
+      <timeframe>300</timeframe>
+      <group_by>src_ip</group_by>
+      <description>VPN: Attaque brute-force detectee</description>
+      <vx_category>VPN Brute Force</vx_category>
+      <mitre>
+        <technique id="T1110">Brute Force</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>12h</duration>
+        <progressive>true</progressive>
+        <severity>high</severity>
+      </vx_action>
+    </rule>
+
+    <!-- IPSec -->
+    <rule id="114420" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">IPSec</field>
+        <field name="log_subtype">Established</field>
+      </match>
+      <description>IPSec: Tunnel etabli</description>
+      <vx_category>IPSec Established</vx_category>
+    </rule>
+
+    <rule id="114421" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">IPSec</field>
+        <field name="log_subtype">Terminated</field>
+      </match>
+      <description>IPSec: Tunnel termine</description>
+      <vx_category>IPSec Terminated</vx_category>
+    </rule>
+
+    <rule id="114422" level="6">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">IPSec</field>
+        <field name="log_subtype" operator="in">Failed,Error</field>
+      </match>
+      <description>IPSec: Erreur de tunnel</description>
+      <vx_category>IPSec Error</vx_category>
+    </rule>
+
+    <!-- L2TP -->
+    <rule id="114430" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">L2TP</field>
+      </match>
+      <description>L2TP: Evenement tunnel</description>
+      <vx_category>L2TP Event</vx_category>
+    </rule>
+
+    <!-- PPTP -->
+    <rule id="114440" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">PPTP</field>
+      </match>
+      <description>PPTP: Evenement tunnel (protocole obsolete)</description>
+      <vx_category>PPTP Event</vx_category>
+      <compliance_warning>PPTP est considere comme non securise</compliance_warning>
+    </rule>
+
+    <!-- RED (Remote Ethernet Device) -->
+    <rule id="114450" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">RED</field>
+        <field name="log_subtype">Connected</field>
+      </match>
+      <description>RED: Dispositif connecte</description>
+      <vx_category>RED Connected</vx_category>
+    </rule>
+
+    <rule id="114451" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">RED</field>
+        <field name="log_subtype">Disconnected</field>
+      </match>
+      <description>RED: Dispositif deconnecte</description>
+      <vx_category>RED Disconnected</vx_category>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: WAF (114500-114599)
+       ============================================================ -->
+  <rule_group name="waf" id_range="114500-114599">
+    <description>Web Application Firewall</description>
+
+    <rule id="114500" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type" operator="in">WAF,Web Application Firewall,Reverse Proxy</field>
+        <field name="action">allow</field>
+      </match>
+      <description>WAF: Requete autorisee</description>
+      <vx_category>WAF Allowed</vx_category>
+    </rule>
+
+    <rule id="114501" level="6">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type" operator="in">WAF,Web Application Firewall,Reverse Proxy</field>
+        <field name="action" operator="in">drop,block,deny</field>
+      </match>
+      <description>WAF: Requete bloquee</description>
+      <vx_category>WAF Block</vx_category>
+      <mitre>
+        <technique id="T1190">Exploit Public-Facing Application</technique>
+      </mitre>
+    </rule>
+
+    <!-- SQL Injection -->
+    <rule id="114510" level="8">
+      <if_parent>114501</if_parent>
+      <match>
+        <field name="message" operator="regex">SQL|SQLi|injection|UNION|SELECT.*FROM|INSERT.*INTO|DELETE.*FROM|DROP.*TABLE</field>
+      </match>
+      <description>WAF: Injection SQL bloquee</description>
+      <vx_category>SQL Injection</vx_category>
+      <mitre>
+        <technique id="T1190">Exploit Public-Facing Application</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>24h</duration>
+        <severity>high</severity>
+      </vx_action>
+    </rule>
+
+    <!-- XSS -->
+    <rule id="114511" level="7">
+      <if_parent>114501</if_parent>
+      <match>
+        <field name="message" operator="regex">XSS|cross.?site|script|&lt;script|javascript:|onerror=|onload=</field>
+      </match>
+      <description>WAF: Tentative XSS bloquee</description>
+      <vx_category>XSS</vx_category>
+      <mitre>
+        <technique id="T1059.007">JavaScript</technique>
+      </mitre>
+    </rule>
+
+    <!-- RCE -->
+    <rule id="114512" level="9">
+      <if_parent>114501</if_parent>
+      <match>
+        <field name="message" operator="regex">RCE|command.?execution|exec|system|shell|cmd\.exe|/bin/sh|/bin/bash</field>
+      </match>
+      <description>WAF: Tentative RCE bloquee</description>
+      <vx_category>RCE</vx_category>
+      <mitre>
+        <technique id="T1059">Command and Scripting Interpreter</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>72h</duration>
+        <severity>critical</severity>
+        <notify>true</notify>
+      </vx_action>
+    </rule>
+
+    <!-- LFI/RFI -->
+    <rule id="114513" level="8">
+      <if_parent>114501</if_parent>
+      <match>
+        <field name="message" operator="regex">LFI|RFI|local.?file|remote.?file|\.\.\/|\.\.\\|/etc/passwd|/etc/shadow</field>
+      </match>
+      <description>WAF: Tentative LFI/RFI bloquee</description>
+      <vx_category>LFI/RFI</vx_category>
+      <mitre>
+        <technique id="T1083">File and Directory Discovery</technique>
+      </mitre>
+    </rule>
+
+    <!-- Path Traversal -->
+    <rule id="114514" level="7">
+      <if_parent>114501</if_parent>
+      <match>
+        <field name="url" operator="regex">\.\.\/|\.\.\\|%2e%2e|%252e</field>
+      </match>
+      <description>WAF: Tentative de path traversal</description>
+      <vx_category>Path Traversal</vx_category>
+    </rule>
+
+    <!-- Scanner/Bot Detection -->
+    <rule id="114520" level="6">
+      <if_parent>114501</if_parent>
+      <match>
+        <field name="user_agent" operator="regex">nikto|nmap|sqlmap|burp|dirbuster|gobuster|wpscan|acunetix|nessus</field>
+      </match>
+      <description>WAF: Scanner de vulnerabilite detecte</description>
+      <vx_category>Scanner</vx_category>
+      <mitre>
+        <technique id="T1595">Active Scanning</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>6h</duration>
+        <severity>medium</severity>
+      </vx_action>
+    </rule>
+
+    <!-- WAF Attack Burst -->
+    <rule id="114530" level="9">
+      <if_parent>114501</if_parent>
+      <frequency>10</frequency>
+      <timeframe>60</timeframe>
+      <group_by>src_ip</group_by>
+      <description>WAF: Rafale d'attaques detectee - 10+ en 1 minute</description>
+      <vx_category>WAF Attack Burst</vx_category>
+      <vx_action>
+        <type>ban</type>
+        <duration>24h</duration>
+        <progressive>true</progressive>
+        <severity>high</severity>
+      </vx_action>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: EMAIL/ANTI-SPAM (114600-114699)
+       ============================================================ -->
+  <rule_group name="email" id_range="114600-114699">
+    <description>Filtrage email et anti-spam</description>
+
+    <rule id="114600" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type" operator="in">Anti-Spam,Email</field>
+        <field name="action">accept</field>
+      </match>
+      <description>Email: Message accepte</description>
+      <vx_category>Email Accepted</vx_category>
+    </rule>
+
+    <rule id="114601" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type" operator="in">Anti-Spam,Email</field>
+        <field name="action" operator="in">reject,drop,delete</field>
+      </match>
+      <description>Email: Message rejete</description>
+      <vx_category>Email Rejected</vx_category>
+    </rule>
+
+    <rule id="114602" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type" operator="in">Anti-Spam,Email</field>
+        <field name="action">quarantine</field>
+      </match>
+      <description>Email: Message en quarantaine</description>
+      <vx_category>Email Quarantined</vx_category>
+      <mitre>
+        <technique id="T1566">Phishing</technique>
+      </mitre>
+    </rule>
+
+    <!-- Spam Burst -->
+    <rule id="114610" level="7">
+      <if_parent>114601</if_parent>
+      <frequency>50</frequency>
+      <timeframe>300</timeframe>
+      <group_by>src_ip</group_by>
+      <description>Email: Spam burst detecte - 50+ messages rejetes en 5 min</description>
+      <vx_category>Spam Burst</vx_category>
+      <vx_action>
+        <type>ban</type>
+        <duration>24h</duration>
+        <severity>medium</severity>
+      </vx_action>
+    </rule>
+
+    <!-- Phishing Detection -->
+    <rule id="114620" level="8">
+      <if_parent>114602</if_parent>
+      <match>
+        <field name="classification" operator="contains">phishing</field>
+      </match>
+      <description>Email: Tentative de phishing detectee</description>
+      <vx_category>Phishing</vx_category>
+      <mitre>
+        <technique id="T1566.001">Spearphishing Attachment</technique>
+        <technique id="T1566.002">Spearphishing Link</technique>
+      </mitre>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: SANDSTORM/SANDBOX (114700-114799)
+       ============================================================ -->
+  <rule_group name="sandstorm" id_range="114700-114799">
+    <description>Sophos Sandstorm - Analyse sandbox</description>
+
+    <rule id="114700" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type" operator="in">Sandstorm,Sandbox</field>
+        <field name="log_subtype">Pending</field>
+      </match>
+      <description>Sandstorm: Fichier en attente d'analyse</description>
+      <vx_category>Sandbox Pending</vx_category>
+    </rule>
+
+    <rule id="114701" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type" operator="in">Sandstorm,Sandbox</field>
+        <field name="log_subtype">Clean</field>
+      </match>
+      <description>Sandstorm: Fichier propre</description>
+      <vx_category>Sandbox Clean</vx_category>
+    </rule>
+
+    <rule id="114702" level="10">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type" operator="in">Sandstorm,Sandbox</field>
+        <field name="log_subtype" operator="in">Malicious,Infected</field>
+      </match>
+      <description>Sandstorm: MALWARE DETECTE</description>
+      <vx_category>Malware</vx_category>
+      <mitre>
+        <technique id="T1204">User Execution</technique>
+        <technique id="T1059">Command and Scripting Interpreter</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>168h</duration>
+        <severity>critical</severity>
+        <notify>true</notify>
+        <group>VIGILANCE_X_MALWARE</group>
+      </vx_action>
+    </rule>
+
+    <!-- Malware avec nom connu -->
+    <rule id="114710" level="10">
+      <if_parent>114702</if_parent>
+      <match>
+        <field name="malware" operator="not_empty"/>
+      </match>
+      <description>Sandstorm: Malware identifie - ${malware}</description>
+      <vx_category>Known Malware</vx_category>
+      <vx_action>
+        <type>check_threat_intel</type>
+        <providers>VirusTotal,CriminalIP</providers>
+      </vx_action>
+    </rule>
+
+    <!-- Ransomware indicators -->
+    <rule id="114720" level="10">
+      <if_parent>114702</if_parent>
+      <match>
+        <field name="malware" operator="regex">ransom|crypt|locker|wannacry|ryuk|revil|lockbit</field>
+      </match>
+      <description>Sandstorm: RANSOMWARE DETECTE</description>
+      <vx_category>Ransomware</vx_category>
+      <mitre>
+        <technique id="T1486">Data Encrypted for Impact</technique>
+      </mitre>
+      <vx_action>
+        <type>ban</type>
+        <duration>720h</duration>
+        <severity>critical</severity>
+        <notify>true</notify>
+        <isolate_endpoint>true</isolate_endpoint>
+      </vx_action>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: SSL/TLS (114800-114899)
+       ============================================================ -->
+  <rule_group name="ssl_tls" id_range="114800-114899">
+    <description>Inspection SSL/TLS et compliance</description>
+
+    <rule id="114800" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component" operator="in">SSL,TLS,Decryption</field>
+        <field name="action">decrypt</field>
+      </match>
+      <description>SSL: Connexion decryptee pour inspection</description>
+      <vx_category>SSL Decrypted</vx_category>
+    </rule>
+
+    <rule id="114801" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component" operator="in">SSL,TLS</field>
+        <field name="action">bypass</field>
+      </match>
+      <description>SSL: Inspection bypassee</description>
+      <vx_category>SSL Bypass</vx_category>
+    </rule>
+
+    <rule id="114802" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component" operator="in">SSL,TLS</field>
+        <field name="action" operator="in">reject,error</field>
+      </match>
+      <description>SSL: Erreur ou rejet</description>
+      <vx_category>SSL Error</vx_category>
+    </rule>
+
+    <!-- TLS Version Compliance -->
+    <rule id="114810" level="6">
+      <if_parent>114800</if_parent>
+      <match>
+        <field name="tls_version" operator="in">TLSv1.0,TLSv1.1,SSLv3</field>
+      </match>
+      <description>SSL: Version TLS obsolete detectee (${tls_version})</description>
+      <vx_category>TLS Deprecated</vx_category>
+      <compliance_check>PCI-DSS,NIST</compliance_check>
+    </rule>
+
+    <!-- Weak Ciphers -->
+    <rule id="114811" level="5">
+      <if_parent>114800</if_parent>
+      <match>
+        <field name="cipher_suite" operator="regex">RC4|DES|MD5|NULL|EXPORT</field>
+      </match>
+      <description>SSL: Suite de chiffrement faible detectee</description>
+      <vx_category>Weak Cipher</vx_category>
+      <compliance_check>PCI-DSS</compliance_check>
+    </rule>
+  </rule_group>
+
+  <!-- ============================================================
+       RULE GROUP: SYSTEM HEALTH (114900-114999)
+       ============================================================ -->
+  <rule_group name="system_health" id_range="114900-114999">
+    <description>Sante systeme et monitoring</description>
+
+    <!-- DDNS -->
+    <rule id="114900" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">DDNS</field>
+      </match>
+      <description>DDNS: Evenement de mise a jour</description>
+      <vx_category>DDNS Event</vx_category>
+    </rule>
+
+    <!-- DHCP -->
+    <rule id="114901" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">DHCP</field>
+      </match>
+      <description>DHCP: Evenement de bail</description>
+      <vx_category>DHCP Event</vx_category>
+    </rule>
+
+    <!-- Gateway -->
+    <rule id="114902" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">Gateway</field>
+      </match>
+      <description>Gateway: Evenement de routage</description>
+      <vx_category>Gateway Event</vx_category>
+    </rule>
+
+    <!-- High Availability -->
+    <rule id="114910" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">HA</field>
+        <field name="log_subtype">Notification</field>
+      </match>
+      <description>HA: Notification de cluster</description>
+      <vx_category>HA Notification</vx_category>
+    </rule>
+
+    <rule id="114911" level="6">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">HA</field>
+        <field name="log_subtype">Warning</field>
+      </match>
+      <description>HA: Avertissement de cluster</description>
+      <vx_category>HA Warning</vx_category>
+    </rule>
+
+    <rule id="114912" level="8">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">HA</field>
+        <field name="log_subtype" operator="in">Failover,Error</field>
+      </match>
+      <description>HA: Basculement ou erreur de cluster</description>
+      <vx_category>HA Failover</vx_category>
+      <vx_action>
+        <type>notify</type>
+        <severity>high</severity>
+      </vx_action>
+    </rule>
+
+    <!-- Interface Health -->
+    <rule id="114920" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">System Health</field>
+        <field name="log_component">Interface</field>
+      </match>
+      <description>System Health: Metriques interface reseau</description>
+      <vx_category>Interface Metrics</vx_category>
+    </rule>
+
+    <!-- CPU Health -->
+    <rule id="114921" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">System Health</field>
+        <field name="log_component">CPU</field>
+      </match>
+      <description>System Health: Metriques CPU</description>
+      <vx_category>CPU Metrics</vx_category>
+    </rule>
+
+    <rule id="114922" level="6">
+      <if_parent>114921</if_parent>
+      <match>
+        <field name="cpu_system" operator="gte">80</field>
+      </match>
+      <description>System Health: CPU systeme eleve (>80%)</description>
+      <vx_category>High CPU</vx_category>
+    </rule>
+
+    <!-- Memory Health -->
+    <rule id="114930" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">System Health</field>
+        <field name="log_component">Memory</field>
+      </match>
+      <description>System Health: Metriques memoire</description>
+      <vx_category>Memory Metrics</vx_category>
+    </rule>
+
+    <!-- Disk Health -->
+    <rule id="114940" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_type">System Health</field>
+        <field name="log_component">Disk</field>
+      </match>
+      <description>System Health: Metriques disque</description>
+      <vx_category>Disk Metrics</vx_category>
+    </rule>
+
+    <rule id="114941" level="6">
+      <if_parent>114940</if_parent>
+      <match>
+        <field name="disk_configuration" operator="gte">85</field>
+      </match>
+      <description>System Health: Espace disque faible (>85%)</description>
+      <vx_category>Low Disk Space</vx_category>
+      <vx_action>
+        <type>notify</type>
+        <severity>medium</severity>
+      </vx_action>
+    </rule>
+
+    <!-- SD-WAN -->
+    <rule id="114950" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">SD-WAN</field>
+        <field name="log_subtype">Available</field>
+      </match>
+      <description>SD-WAN: Lien disponible</description>
+      <vx_category>SD-WAN Available</vx_category>
+    </rule>
+
+    <rule id="114951" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">SD-WAN</field>
+        <field name="log_subtype">Unavailable</field>
+      </match>
+      <description>SD-WAN: Lien indisponible</description>
+      <vx_category>SD-WAN Unavailable</vx_category>
+      <vx_action>
+        <type>notify</type>
+        <severity>medium</severity>
+      </vx_action>
+    </rule>
+
+    <!-- Heartbeat Endpoint -->
+    <rule id="114960" level="3">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">Heartbeat</field>
+        <field name="ep_health">green</field>
+      </match>
+      <description>Heartbeat: Endpoint en bonne sante</description>
+      <vx_category>Endpoint Healthy</vx_category>
+    </rule>
+
+    <rule id="114961" level="5">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">Heartbeat</field>
+        <field name="ep_health">yellow</field>
+      </match>
+      <description>Heartbeat: Endpoint en avertissement</description>
+      <vx_category>Endpoint Warning</vx_category>
+    </rule>
+
+    <rule id="114962" level="8">
+      <if_parent>114000</if_parent>
+      <match>
+        <field name="log_component">Heartbeat</field>
+        <field name="ep_health">red</field>
+      </match>
+      <description>Heartbeat: Endpoint compromis/isole</description>
+      <vx_category>Endpoint Compromised</vx_category>
+      <mitre>
+        <technique id="T1219">Remote Access Software</technique>
+      </mitre>
+      <vx_action>
+        <type>notify</type>
+        <severity>critical</severity>
+      </vx_action>
+    </rule>
+  </rule_group>
+
+</vigilancex_rules>

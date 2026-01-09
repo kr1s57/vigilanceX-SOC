@@ -18,6 +18,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
+	sophosparser "github.com/kr1s57/vigilancex/internal/adapter/parser/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
 	"github.com/kr1s57/vigilancex/internal/license" // v2.9: License system
@@ -233,6 +234,24 @@ func main() {
 		logger.Warn("ModSec sync service not configured - SSH host not set")
 	}
 
+	// v3.1: Initialize Sophos XGS Parser (XML-based decoders and rules)
+	var xgsParser *sophosparser.Parser
+	scenariosDir := "./scenarios"
+	if _, err := os.Stat(scenariosDir); err == nil {
+		xgsParser = sophosparser.New()
+		if err := xgsParser.LoadFromDir(scenariosDir); err != nil {
+			logger.Warn("Failed to load Sophos XGS parser", "error", err, "dir", scenariosDir)
+		} else {
+			stats := xgsParser.GetStats()
+			logger.Info("Sophos XGS Parser initialized",
+				"fields", stats.TotalFieldsLoaded,
+				"rules", stats.TotalRulesLoaded,
+				"mitre_techniques", len(xgsParser.GetMitreCoverage()))
+		}
+	} else {
+		logger.Info("Sophos XGS Parser not configured - scenarios directory not found", "dir", scenariosDir)
+	}
+
 	// Initialize services
 	eventsService := events.NewService(eventsRepo, logger)
 	eventsService.SetGeoProvider(&geoProviderAdapter{geoService: geoService})
@@ -261,6 +280,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService, logger)              // v2.6: Authentication
 	usersHandler := handlers.NewUsersHandler(authService, logger)            // v2.6: User management
 	licenseHandler := handlers.NewLicenseHandler(licenseClient)              // v2.9: License management
+	parserHandler := handlers.NewParserHandler(xgsParser)                    // v3.1: XGS Parser
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -537,6 +557,15 @@ func main() {
 				// System whitelist (v2.3 - Protected IPs)
 				r.Get("/system-whitelist", configHandler.GetSystemWhitelist)
 				r.Get("/system-whitelist/check/*", configHandler.CheckSystemWhitelist)
+			})
+
+			// Parser (v3.1 - Sophos XGS Parser with XML decoders/rules)
+			r.Route("/parser", func(r chi.Router) {
+				r.Get("/stats", parserHandler.GetStats)
+				r.Get("/fields", parserHandler.GetFields)
+				r.Get("/rules", parserHandler.GetRules)
+				r.Get("/mitre", parserHandler.GetMitreCoverage)
+				r.Post("/test", parserHandler.TestParse)
 			})
 		})
 	})

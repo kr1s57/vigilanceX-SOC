@@ -4,6 +4,187 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.1.0] - 2026-01-09
+
+### XGS Decoders & Rules Engine (Sophos Log Parser)
+
+Version majeure introduisant un moteur de parsing propriétaire pour les logs Sophos XGS avec décodeurs XML et règles de détection.
+
+---
+
+### 📦 Nouveaux Fichiers XML
+
+Deux fichiers XML propriétaires définissent le parsing et la détection :
+
+| Fichier | Description | Contenu |
+|---------|-------------|---------|
+| `vigilanceX_XGS_decoders.xml` | Définition des champs | 104 champs, 17 groupes |
+| `vigilanceX_XGS_rules.xml` | Règles de détection | 74 règles, 10 catégories |
+
+#### Groupes de Champs (Decoders)
+
+| Groupe | Champs | Description |
+|--------|--------|-------------|
+| `device_identity` | 3 | Identification firewall (device_serial_id, device_model, device_name) |
+| `log_metadata` | 5 | Métadonnées log (log_id, timestamp, log_type, etc.) |
+| `network_layer` | 8 | Couche réseau (IPs, ports, protocol, zones) |
+| `user_identity` | 5 | Identité utilisateur (user_name, domain, auth_client) |
+| `http_request` | 8 | Requêtes HTTP (method, url, status, user_agent) |
+| `tls_analysis` | 4 | Analyse TLS (version, cipher_suite, sni) |
+| `threat_intel` | 6 | Threat intelligence (threatfeed, malware, classification) |
+| `waf_modsec` | 6 | WAF/ModSecurity (reason, rule_id, severity) |
+| `vpn_session` | 8 | Sessions VPN (connection_name, tunnel_id, bytes) |
+| `endpoint_health` | 5 | Synchronized Security (ep_uuid, ep_health, hb_status) |
+| `email_fields` | 6 | Anti-spam (sender, recipient, subject, spam_action) |
+| `firewall_action` | 5 | Actions firewall (action, rule_id, rule_name) |
+| `atp_sandbox` | 5 | ATP/Sandstorm (file_name, file_hash, sandbox_status) |
+| `antivirus` | 4 | Anti-virus (malware_name, malware_type, quarantine_status) |
+| `nat_translation` | 4 | NAT (nat_src_ip, nat_dst_ip, nat_rule) |
+| `bandwidth` | 4 | Bande passante (bytes_in, bytes_out, duration) |
+| `custom` | 2 | Champs personnalisés |
+
+#### Catégories de Règles
+
+| Catégorie | Règles | ID Range | Description |
+|-----------|--------|----------|-------------|
+| WAF Attack Detection | 15 | 100xxx | Injection SQL, XSS, RCE, LFI, scanners |
+| ATP Threats | 8 | 200xxx | C2, malware, zero-day, sandstorm |
+| IPS Alerts | 8 | 300xxx | Intrusion, exploit, protocol anomaly |
+| VPN Security | 10 | 400xxx | Auth failure, brute force, tunnel attacks |
+| Firewall Violations | 8 | 500xxx | Zone violations, port scanning |
+| Sandstorm Analysis | 6 | 600xxx | Sandbox results, APT detection |
+| Authentication | 8 | 700xxx | Login failures, privilege escalation |
+| Endpoint Health | 4 | 800xxx | Heartbeat, health status |
+| Email Threats | 4 | 900xxx | Spam, phishing, malware attachment |
+| Custom Rules | 3 | 990xxx | Règles personnalisées |
+
+---
+
+### 🔧 Parser Go Natif
+
+Nouveau package Go pour le parsing des logs Sophos XGS.
+
+#### Fichiers Créés
+
+| Fichier | Description |
+|---------|-------------|
+| `internal/adapter/parser/sophos/types.go` | Structures de données XML |
+| `internal/adapter/parser/sophos/decoder_parser.go` | Parsing des décodeurs |
+| `internal/adapter/parser/sophos/rules_parser.go` | Évaluation des règles |
+| `internal/adapter/parser/sophos/sophos.go` | API unifiée |
+| `internal/adapter/parser/sophos/sophos_test.go` | Tests complets |
+
+#### Fonctionnalités Parser
+
+| Méthode | Description |
+|---------|-------------|
+| `LoadDecodersFromFile()` | Charge les définitions XML des champs |
+| `LoadRulesFromFile()` | Charge les règles de détection |
+| `ParseLog()` | Extrait les champs d'un log brut |
+| `EvaluateLog()` | Évalue les règles sur un log parsé |
+| `ParseAndEvaluate()` | Parsing + évaluation combinés |
+| `GetMitreCoverage()` | Retourne les techniques MITRE couvertes |
+
+#### MITRE ATT&CK Coverage
+
+23 techniques MITRE ATT&CK mappées :
+
+| Tactique | Techniques |
+|----------|------------|
+| Initial Access | T1190, T1133 |
+| Execution | T1059 |
+| Persistence | T1098 |
+| Privilege Escalation | T1068 |
+| Defense Evasion | T1070, T1562 |
+| Credential Access | T1110, T1003 |
+| Discovery | T1046, T1018 |
+| Lateral Movement | T1021 |
+| Collection | T1557 |
+| Command & Control | T1071, T1573, T1095 |
+| Exfiltration | T1041, T1567 |
+| Impact | T1499, T1486 |
+
+---
+
+### 🌐 API Parser Endpoints
+
+5 nouveaux endpoints pour l'API du parser :
+
+| Endpoint | Méthode | Description |
+|----------|---------|-------------|
+| `/api/v1/parser/stats` | GET | Statistiques du parser (champs, règles, MITRE) |
+| `/api/v1/parser/fields` | GET | Liste des groupes et champs définis |
+| `/api/v1/parser/rules` | GET | Liste des règles par catégorie |
+| `/api/v1/parser/mitre` | GET | Couverture MITRE ATT&CK |
+| `/api/v1/parser/test` | POST | Test de parsing d'un log brut |
+
+#### Exemple Réponse `/parser/stats`
+
+```json
+{
+  "loaded": true,
+  "version": "1.0",
+  "total_fields": 104,
+  "total_rules": 74,
+  "total_groups": 17,
+  "mitre_techniques": 23,
+  "decoders_loaded_at": "2026-01-09T10:30:00Z",
+  "rules_loaded_at": "2026-01-09T10:30:00Z",
+  "total_logs_parsed": 15234,
+  "total_rules_triggered": 892
+}
+```
+
+---
+
+### 📊 Vector.toml Extended Fields (v3.1)
+
+27 nouveaux champs extraits et envoyés à ClickHouse :
+
+| Catégorie | Champs |
+|-----------|--------|
+| Device Identity | device_serial_id, device_model, device_name |
+| Log Metadata | log_id, con_id, log_component, log_subtype |
+| TLS Analysis | tls_version, cipher_suite, sni |
+| Threat Intel | threatfeed, malware, classification |
+| VPN Extended | connection_name, remote_network, local_network, local_ip |
+| Endpoint Health | ep_uuid, ep_name, ep_ip, ep_health, hb_status |
+| Email | sender, recipient, subject |
+| Zones | src_zone, dst_zone |
+
+---
+
+### 🗄️ Migration ClickHouse
+
+Nouvelle migration `006_extended_xgs_fields.sql` :
+
+- 27 nouvelles colonnes sur la table `events`
+- 4 nouveaux index (device_serial, tls_version, threatfeed, ep_health)
+- Compatible avec les données existantes (valeurs par défaut)
+
+---
+
+### 📝 Fichiers Modifiés
+
+| Fichier | Modification |
+|---------|--------------|
+| `backend/cmd/api/main.go` | Import parser, initialisation, routes `/parser/*` |
+| `backend/internal/adapter/controller/http/handlers/parser.go` | 5 handlers API |
+| `docker/vector/vector.toml` | 27 nouveaux champs dans prepare_events |
+| `docker/clickhouse/migrations/006_extended_xgs_fields.sql` | Migration schema |
+
+---
+
+### ⚙️ Prérequis
+
+Pour activer le parser XGS :
+
+1. **Fichiers XML** : Présence de `vigilanceX_XGS_decoders.xml` et `vigilanceX_XGS_rules.xml` dans `/backend/scenarios/`
+2. **Migration** : Exécuter `006_extended_xgs_fields.sql` sur ClickHouse
+3. **Restart** : Redémarrer les services Vector et API
+
+---
+
 ## [3.0.1] - 2026-01-09
 
 ### Maintenance & UI Improvements

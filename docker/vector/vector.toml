@@ -1,6 +1,7 @@
 # ============================================
 # VIGILANCE X - Vector Configuration
 # Parser pour logs Sophos XGS (Vector 0.34.x+)
+# v3.1.0 - Extended fields from XML decoders
 # ============================================
 
 data_dir = "/var/lib/vector"
@@ -197,6 +198,51 @@ if msg_val == "" {
 # Geo from Sophos
 .geo_country = if is_string(.src_country) && .src_country != null { .src_country } else { "" }
 
+# === v3.1: Extended Fields from XML Decoders ===
+
+# Device Identification (critical for VX3 binding)
+.device_serial_id = string(.device_serial_id) ?? ""
+.device_model = string(.device_model) ?? ""
+.device_name = string(.device_name) ?? ""
+
+# Log Metadata (deduplication)
+.log_id = string(.log_id) ?? ""
+.con_id = string(.con_id) ?? ""
+.log_component = string(.log_component) ?? ""
+.log_subtype = string(.log_subtype) ?? ""
+
+# TLS/SSL Analysis
+.tls_version = string(.tls_version) ?? ""
+.cipher_suite = string(.cipher_suite) ?? ""
+.sni = string(.sni) ?? ""
+
+# Threat Intelligence
+.threatfeed = string(.threatfeed) ?? ""
+.malware = string(.malware) ?? ""
+.classification = string(.classification) ?? ""
+
+# VPN Extended
+.connection_name = string(.connectionname) ?? ""
+.remote_network = string(.remote_network) ?? ""
+.local_network = string(.local_network) ?? ""
+.local_ip = string(.local_ip) ?? ""
+
+# Endpoint Health (Synchronized Security)
+.ep_uuid = string(.ep_uuid) ?? ""
+.ep_name = string(.ep_name) ?? ""
+.ep_ip = string(.ep_ip) ?? ""
+.ep_health = string(.ep_health) ?? ""
+.hb_status = string(.hb_status) ?? ""
+
+# Email/Anti-Spam
+.sender = string(.sender) ?? ""
+.recipient = string(.recipient) ?? ""
+.subject = string(.subject) ?? ""
+
+# Zones
+.src_zone = string(.src_zone) ?? ""
+.dst_zone = string(.dst_zone) ?? ""
+
 # Default categories
 .category = ""
 .sub_category = ""
@@ -347,7 +393,35 @@ ingest_formatted = format_timestamp!(.ingested_at, format: "%Y-%m-%d %H:%M:%S")
     "reason": .reason,
     "raw_log": .raw_log,
     "sophos_id": .sophos_id,
-    "ingested_at": ingest_formatted
+    "ingested_at": ingest_formatted,
+    # v3.1: Extended XGS fields
+    "device_serial_id": .device_serial_id,
+    "device_model": .device_model,
+    "device_name": .device_name,
+    "log_id": .log_id,
+    "con_id": .con_id,
+    "log_component": .log_component,
+    "log_subtype": .log_subtype,
+    "tls_version": .tls_version,
+    "cipher_suite": .cipher_suite,
+    "sni": .sni,
+    "threatfeed": .threatfeed,
+    "malware": .malware,
+    "classification": .classification,
+    "connection_name": .connection_name,
+    "remote_network": .remote_network,
+    "local_network": .local_network,
+    "local_ip": .local_ip,
+    "ep_uuid": .ep_uuid,
+    "ep_name": .ep_name,
+    "ep_ip": .ep_ip,
+    "ep_health": .ep_health,
+    "hb_status": .hb_status,
+    "sender": .sender,
+    "recipient": .recipient,
+    "subject": .subject,
+    "src_zone": .src_zone,
+    "dst_zone": .dst_zone
 }
 '''
 

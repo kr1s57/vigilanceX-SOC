@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.0.1 | **Derniere mise a jour**: 2026-01-09
+> **Version**: 3.1.0 | **Derniere mise a jour**: 2026-01-09
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -64,6 +64,7 @@ Ces mesures seraient requises uniquement si exposition Internet:
 - Geoblocking
 - Authentication & User Management
 - Systeme de licence VX3
+- XGS Parser (104 champs, 74 regles, 23 techniques MITRE)
 
 ### En Developpement (Coquille)
 - **Policies de bans**: Logique de decision non finalisee
@@ -597,6 +598,14 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.1.0 (2026-01-09)
+- XGS Decoders & Rules Engine (Sophos Log Parser)
+- 104 champs dans 17 groupes (vigilanceX_XGS_decoders.xml)
+- 74 regles dans 10 categories (vigilanceX_XGS_rules.xml)
+- 23 techniques MITRE ATT&CK mappees
+- Parser Go natif avec API endpoints (/parser/stats, /fields, /rules, /mitre, /test)
+- 27 nouveaux champs dans Vector.toml et ClickHouse
 
 ### v3.0.1 (2026-01-09)
 - Script de maintenance Docker (nettoyage build cache)
