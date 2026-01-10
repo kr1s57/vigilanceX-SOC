@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # VIGILANCE X - Management Script
-# Version: 3.1.1
+# Version: 3.1.4
 # Copyright (c) 2024-2026 VigilanceX. All rights reserved.
 #
 
@@ -33,7 +33,7 @@ show_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════╗"
     echo "║           VIGILANCE X - SOC Platform                      ║"
-    echo "║           Management Script v3.1.1                        ║"
+    echo "║           Management Script v3.1.4                        ║"
     echo "╚═══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
