@@ -110,7 +110,7 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 	}
 	defer rows.Close()
 
-	var events []entity.Event
+	events := []entity.Event{}
 	for rows.Next() {
 		var e entity.Event
 		if err := rows.Scan(
@@ -207,7 +207,7 @@ func (r *EventsRepository) GetTimeline(ctx context.Context, period string, inter
 	}
 	defer rows.Close()
 
-	var timeline []entity.TimelinePoint
+	timeline := []entity.TimelinePoint{}
 	for rows.Next() {
 		var point entity.TimelinePoint
 		if err := rows.Scan(&point.Time, &point.TotalEvents, &point.BlockedEvents, &point.UniqueIPs); err != nil {
@@ -309,7 +309,7 @@ func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, l
 	}
 	defer rows.Close()
 
-	var attackers []entity.TopAttacker
+	attackers := []entity.TopAttacker{}
 	for rows.Next() {
 		var a entity.TopAttacker
 		if err := rows.Scan(&a.IP, &a.AttackCount, &a.BlockedCount, &a.UniqueRules, &a.Categories, &a.Country); err != nil {
@@ -357,7 +357,7 @@ func (r *EventsRepository) GetTopTargets(ctx context.Context, period string, lim
 	}
 	defer rows.Close()
 
-	var targets []entity.TopTarget
+	targets := []entity.TopTarget{}
 	for rows.Next() {
 		var t entity.TopTarget
 		if err := rows.Scan(&t.Hostname, &t.AttackCount, &t.UniqueIPs); err != nil {
@@ -448,7 +448,7 @@ func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]
 	}
 	defer rows.Close()
 
-	var result []map[string]interface{}
+	result := []map[string]interface{}{}
 	for rows.Next() {
 		var country string
 		var count, uniqueIPs uint64
@@ -480,7 +480,7 @@ func (r *EventsRepository) GetUniqueHostnames(ctx context.Context, logType strin
 	}
 	defer rows.Close()
 
-	var hostnames []string
+	hostnames := []string{}
 	for rows.Next() {
 		var hostname string
 		if err := rows.Scan(&hostname); err != nil {
@@ -567,7 +567,7 @@ func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int) ([]
 	}
 	defer rows.Close()
 
-	var alerts []entity.CriticalAlert
+	alerts := []entity.CriticalAlert{}
 	for rows.Next() {
 		var a entity.CriticalAlert
 		if err := rows.Scan(
@@ -581,4 +581,99 @@ func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int) ([]
 	}
 
 	return alerts, nil
+}
+
+// GetZoneTraffic returns traffic flow between network zones
+func (r *EventsRepository) GetZoneTraffic(ctx context.Context, period string, limit int) (*entity.ZoneTrafficStats, error) {
+	var startTime time.Time
+	now := time.Now()
+
+	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
+	case "24h":
+		startTime = now.Add(-24 * time.Hour)
+	case "7d":
+		startTime = now.Add(-7 * 24 * time.Hour)
+	case "30d":
+		startTime = now.Add(-30 * 24 * time.Hour)
+	default:
+		startTime = now.Add(-24 * time.Hour)
+	}
+
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+
+	// Query zone traffic flows
+	query := `
+		SELECT
+			src_zone,
+			dst_zone,
+			count() as event_count,
+			countIf(action = 'drop') as blocked_count,
+			countIf(action IN ('allow', 'accept')) as allowed_count,
+			uniqExact(src_ip) as unique_ips,
+			countIf(severity = 'critical') as critical_count,
+			countIf(severity = 'high') as high_count
+		FROM events
+		WHERE timestamp >= ?
+		  AND src_zone != ''
+		  AND dst_zone != ''
+		GROUP BY src_zone, dst_zone
+		ORDER BY event_count DESC
+		LIMIT ?
+	`
+
+	rows, err := r.conn.Query(ctx, query, startTime, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query zone traffic: %w", err)
+	}
+	defer rows.Close()
+
+	var flows []entity.ZoneTraffic
+	for rows.Next() {
+		var f entity.ZoneTraffic
+		if err := rows.Scan(
+			&f.SrcZone, &f.DstZone, &f.EventCount, &f.BlockedCount,
+			&f.AllowedCount, &f.UniqueIPs, &f.CriticalCount, &f.HighCount,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan zone traffic: %w", err)
+		}
+		if f.EventCount > 0 {
+			f.BlockRate = float64(f.BlockedCount) / float64(f.EventCount) * 100
+		}
+		flows = append(flows, f)
+	}
+
+	// Get unique zones
+	zonesQuery := `
+		SELECT DISTINCT zone FROM (
+			SELECT src_zone as zone FROM events WHERE timestamp >= ? AND src_zone != ''
+			UNION ALL
+			SELECT dst_zone as zone FROM events WHERE timestamp >= ? AND dst_zone != ''
+		)
+		ORDER BY zone
+	`
+
+	zoneRows, err := r.conn.Query(ctx, zonesQuery, startTime, startTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unique zones: %w", err)
+	}
+	defer zoneRows.Close()
+
+	var zones []string
+	for zoneRows.Next() {
+		var zone string
+		if err := zoneRows.Scan(&zone); err != nil {
+			return nil, fmt.Errorf("failed to scan zone: %w", err)
+		}
+		zones = append(zones, zone)
+	}
+
+	return &entity.ZoneTrafficStats{
+		Flows:       flows,
+		TotalFlows:  uint64(len(flows)),
+		UniqueZones: zones,
+	}, nil
 }
