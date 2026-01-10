@@ -4,6 +4,35 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.2.102] - 2026-01-10
+
+### WAF Explorer - Amelioration Navigation Temporelle
+
+Amelioration significative de l'experience utilisateur du WAF Explorer avec navigation temporelle avancee.
+
+#### Nouvelles Fonctionnalites
+
+| Feature | Description |
+|---------|-------------|
+| Selecteur de periode | Boutons 7 jours / 14 jours / 30 jours |
+| Date picker | Calendrier pour afficher un jour specifique |
+| Auto-expansion | Tous les jours sont deplies par defaut |
+| Indicateur temps | Affichage de la periode/date selectionnee dans l'entete |
+
+#### Fichiers Modifies
+
+**Frontend:**
+- `src/pages/WafExplorer.tsx` - Selecteur periode, date picker, filtrage temporel via API
+
+#### Details Techniques
+
+- Utilisation des filtres `start_time` et `end_time` de l'API ModSec
+- Helper `getStartTimeFromPeriod()` pour conversion periode → timestamp ISO
+- Helper `getDayBounds()` pour calcul debut/fin de journee
+- Reset automatique des accordeons lors du changement de filtre
+
+---
+
 ## [3.2.101] - 2026-01-10
 
 ### Bug Fix Session - 6 Corrections

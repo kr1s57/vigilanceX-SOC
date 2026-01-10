@@ -1,10 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar } from 'lucide-react'
+import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X } from 'lucide-react'
 import { modsecApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, getCountryName } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
+
+// Period options for WAF logs
+type WafPeriod = '7d' | '14d' | '30d'
 
 // Attack type colors
 const attackTypeColors: Record<string, string> = {
@@ -53,6 +56,28 @@ function getDateKey(timestamp: string): string {
   return new Date(timestamp).toISOString().split('T')[0]
 }
 
+// Helper to get start time from period
+function getStartTimeFromPeriod(period: WafPeriod): string {
+  const now = new Date()
+  const offsets: Record<WafPeriod, number> = {
+    '7d': 7 * 24 * 60 * 60 * 1000,
+    '14d': 14 * 24 * 60 * 60 * 1000,
+    '30d': 30 * 24 * 60 * 60 * 1000,
+  }
+  return new Date(now.getTime() - offsets[period]).toISOString()
+}
+
+// Helper to get start/end of a specific day
+function getDayBounds(dateStr: string): { start: string; end: string } {
+  const date = new Date(dateStr)
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  }
+}
+
 // Group requests by day
 interface DayGroup {
   date: string
@@ -78,6 +103,9 @@ export function WafExplorer() {
   const [syncStatus, setSyncStatus] = useState<{ last_sync: string; is_configured: boolean } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped')
+  // Period and date selection
+  const [period, setPeriod] = useState<WafPeriod>('7d')
+  const [selectedDate, setSelectedDate] = useState<string>('') // YYYY-MM-DD format for single day view
 
   // Fetch sync status
   useEffect(() => {
@@ -96,10 +124,27 @@ export function WafExplorer() {
     async function fetchRequests() {
       setLoading(true)
       try {
+        // Determine time filters based on selectedDate or period
+        let startTime: string | undefined
+        let endTime: string | undefined
+
+        if (selectedDate) {
+          // Single day view - show only that specific day
+          const bounds = getDayBounds(selectedDate)
+          startTime = bounds.start
+          endTime = bounds.end
+        } else {
+          // Period view - show last N days
+          startTime = getStartTimeFromPeriod(period)
+          endTime = undefined
+        }
+
         const filters: ModSecLogFilters = {
           hostname: hostname || undefined,
           attack_type: attackType || undefined,
           search: search || undefined,
+          start_time: startTime,
+          end_time: endTime,
           limit: pagination.limit,
           offset: pagination.offset,
         }
@@ -115,7 +160,7 @@ export function WafExplorer() {
     }
 
     fetchRequests()
-  }, [search, hostname, attackType, pagination.offset])
+  }, [search, hostname, attackType, pagination.offset, period, selectedDate])
 
   // Group requests by day (filtered by system whitelist)
   const dayGroups = useMemo((): DayGroup[] => {
@@ -144,10 +189,12 @@ export function WafExplorer() {
     }))
   }, [requests, shouldShowIP])
 
-  // Auto-expand first day on load
+  // Auto-expand all days on load (up to 7 days)
   useEffect(() => {
     if (dayGroups.length > 0 && expandedDays.size === 0) {
-      setExpandedDays(new Set([dayGroups[0].date]))
+      // Expand all days (or up to 7 most recent)
+      const daysToExpand = dayGroups.slice(0, 7).map(g => g.date)
+      setExpandedDays(new Set(daysToExpand))
     }
   }, [dayGroups])
 
@@ -175,10 +222,22 @@ export function WafExplorer() {
     setSyncing(true)
     try {
       await modsecApi.syncNow()
+      // Determine time filters
+      let startTime: string | undefined
+      let endTime: string | undefined
+      if (selectedDate) {
+        const bounds = getDayBounds(selectedDate)
+        startTime = bounds.start
+        endTime = bounds.end
+      } else {
+        startTime = getStartTimeFromPeriod(period)
+      }
       const filters: ModSecLogFilters = {
         hostname: hostname || undefined,
         attack_type: attackType || undefined,
         search: search || undefined,
+        start_time: startTime,
+        end_time: endTime,
         limit: pagination.limit,
         offset: 0,
       }
@@ -198,10 +257,22 @@ export function WafExplorer() {
     if (!pagination.has_more || loadingMore) return
     setLoadingMore(true)
     try {
+      // Determine time filters
+      let startTime: string | undefined
+      let endTime: string | undefined
+      if (selectedDate) {
+        const bounds = getDayBounds(selectedDate)
+        startTime = bounds.start
+        endTime = bounds.end
+      } else {
+        startTime = getStartTimeFromPeriod(period)
+      }
       const filters: ModSecLogFilters = {
         hostname: hostname || undefined,
         attack_type: attackType || undefined,
         search: search || undefined,
+        start_time: startTime,
+        end_time: endTime,
         limit: pagination.limit,
         offset: pagination.offset + pagination.limit,
       }
@@ -388,8 +459,17 @@ export function WafExplorer() {
             <h1 className="text-2xl font-bold">WAF Explorer - ModSec Rules</h1>
             <p className="text-muted-foreground">
               ModSecurity detection rules from Sophos XGS
-              {syncStatus && (
+              {selectedDate ? (
+                <span className="ml-2 text-xs font-medium text-primary">
+                  Showing: {formatDateDisplay(selectedDate)}
+                </span>
+              ) : (
                 <span className="ml-2 text-xs">
+                  Last {period === '7d' ? '7 days' : period === '14d' ? '14 days' : '30 days'}
+                </span>
+              )}
+              {syncStatus && (
+                <span className="ml-2 text-xs text-muted-foreground">
                   (Last sync: {syncStatus.last_sync ? formatDateTime(syncStatus.last_sync) : 'Never'})
                 </span>
               )}
@@ -437,6 +517,60 @@ export function WafExplorer() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-4 p-4 bg-card rounded-xl border">
+        {/* Period selector */}
+        <div className="flex bg-muted rounded-lg p-1">
+          {(['7d', '14d', '30d'] as WafPeriod[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => {
+                setPeriod(p)
+                setSelectedDate('') // Clear specific date when selecting period
+                setExpandedDays(new Set()) // Reset expanded state to trigger auto-expand
+              }}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                !selectedDate && period === p
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {p === '7d' ? '7 days' : p === '14d' ? '14 days' : '30 days'}
+            </button>
+          ))}
+        </div>
+
+        {/* Date picker */}
+        <div className="relative flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-muted-foreground" />
+          <input
+            type="date"
+            value={selectedDate}
+            max={new Date().toISOString().split('T')[0]}
+            onChange={(e) => {
+              setSelectedDate(e.target.value)
+              setExpandedDays(new Set()) // Reset to trigger auto-expand
+            }}
+            className={`px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm ${
+              selectedDate ? 'border-primary' : ''
+            }`}
+          />
+          {selectedDate && (
+            <button
+              onClick={() => {
+                setSelectedDate('')
+                setExpandedDays(new Set())
+              }}
+              className="p-1 hover:bg-muted rounded-full"
+              title="Clear date filter"
+            >
+              <X className="w-4 h-4 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+
+        {/* Separator */}
+        <div className="h-10 w-px bg-border" />
+
+        {/* Search */}
         <div className="flex-1 min-w-[200px]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
