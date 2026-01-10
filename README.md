@@ -248,6 +248,24 @@ nano deploy/.env
 
 ---
 
+## Versioning
+
+VIGILANCE X utilise un schema de versioning **X.Y.Z** :
+
+```
+X = MAJOR    Montée majeure (sur annonce)
+Y = FEATURE  Nouvelles fonctionnalités
+Z = BUGFIX   Corrections (commence à 100)
+```
+
+| Action | Exemple |
+|--------|---------|
+| Bugfix | `3.2.105` → `3.2.106` |
+| Feature | `3.2.106` → `3.3.100` |
+| Major | `3.10.115` → `4.0.100` |
+
+---
+
 ## Sécurité
 
 - Images Docker signées (Cosign)
