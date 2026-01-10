@@ -496,6 +496,25 @@ export interface CriticalAlert {
   country: string
 }
 
+// Zone Traffic types (v3.1 - XGS Parser)
+export interface ZoneTraffic {
+  src_zone: string
+  dst_zone: string
+  event_count: number
+  blocked_count: number
+  allowed_count: number
+  unique_ips: number
+  critical_count: number
+  high_count: number
+  block_rate: number
+}
+
+export interface ZoneTrafficStats {
+  flows: ZoneTraffic[]
+  total_flows: number
+  unique_zones: string[]
+}
+
 // Geoblocking types (v2.0)
 export interface GeoBlockRule {
   id: string

@@ -26,20 +26,24 @@ type LicenseInfo struct {
 
 // LicenseStatus represents the current license status for API responses
 type LicenseStatus struct {
-	Licensed       bool       `json:"licensed"`
-	Status         string     `json:"status"`
-	CustomerName   string     `json:"customer_name,omitempty"`
-	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
-	DaysRemaining  int        `json:"days_remaining,omitempty"`
-	GraceMode      bool       `json:"grace_mode"`
-	Features       []string   `json:"features"`
-	HardwareID     string     `json:"hardware_id,omitempty"`
+	Licensed      bool       `json:"licensed"`
+	Status        string     `json:"status"`
+	CustomerName  string     `json:"customer_name,omitempty"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+	DaysRemaining int        `json:"days_remaining,omitempty"`
+	GraceMode     bool       `json:"grace_mode"`
+	Features      []string   `json:"features"`
+	HardwareID    string     `json:"hardware_id,omitempty"`
 	// v3.0: Firewall binding info
 	BindingVersion string `json:"binding_version,omitempty"` // VX2 or VX3
 	FirewallSerial string `json:"firewall_serial,omitempty"`
 	FirewallModel  string `json:"firewall_model,omitempty"`
 	FirewallName   string `json:"firewall_name,omitempty"`
 	SecureBinding  bool   `json:"secure_binding"` // true if VX3 binding is active
+	// v3.2: Fresh Deploy info
+	DeploymentType   string `json:"deployment_type,omitempty"` // manual or fresh_deploy
+	FirewallDetected bool   `json:"firewall_detected"`
+	AskProAvailable  bool   `json:"ask_pro_available"`
 }
 
 // LicenseConfig holds the configuration for the license client
@@ -51,8 +55,8 @@ type LicenseConfig struct {
 	Enabled      bool
 	StorePath    string
 	// v3.0: Database info for firewall binding
-	Database     string     // ClickHouse database name
-	DBConnection DBQuerier  // ClickHouse connection (optional)
+	Database     string    // ClickHouse database name
+	DBConnection DBQuerier // ClickHouse connection (optional)
 }
 
 // Client manages license validation and heartbeat
@@ -100,6 +104,69 @@ type ValidateResponse struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	Features  []string  `json:"features"`
 	Error     string    `json:"error,omitempty"`
+}
+
+// FreshDeployRequest is sent to register a trial license (v3.2)
+type FreshDeployRequest struct {
+	Email    string `json:"email"`
+	VMID     string `json:"vmid"`
+	Hostname string `json:"hostname,omitempty"`
+}
+
+// FreshDeployResponse is received from fresh deploy registration
+type FreshDeployResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
+	License *struct {
+		Licensed         bool      `json:"licensed"`
+		Status           string    `json:"status"`
+		CustomerName     string    `json:"customer_name,omitempty"`
+		ExpiresAt        time.Time `json:"expires_at,omitempty"`
+		DaysRemaining    int       `json:"days_remaining,omitempty"`
+		Features         []string  `json:"features,omitempty"`
+		DeploymentType   string    `json:"deployment_type,omitempty"`
+		FirewallDetected bool      `json:"firewall_detected"`
+		AskProAvailable  bool      `json:"ask_pro_available"`
+	} `json:"license,omitempty"`
+}
+
+// FirewallUpdateRequest is sent to update firewall binding (v3.2)
+type FirewallUpdateRequest struct {
+	LicenseKey     string `json:"license_key"`
+	HardwareID     string `json:"hardware_id"`
+	FirewallSerial string `json:"firewall_serial"`
+	FirewallModel  string `json:"firewall_model,omitempty"`
+	FirewallName   string `json:"firewall_name,omitempty"`
+}
+
+// FirewallUpdateResponse is received from firewall update
+type FirewallUpdateResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	License *struct {
+		Status           string `json:"status"`
+		FirewallDetected bool   `json:"firewall_detected"`
+		AskProAvailable  bool   `json:"ask_pro_available"`
+	} `json:"license,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+// AskProRequest is sent to request pro license upgrade (v3.2)
+type AskProRequest struct {
+	LicenseKey string `json:"license_key"`
+	HardwareID string `json:"hardware_id"`
+}
+
+// AskProResponse is received from ask pro request
+type AskProResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	License *struct {
+		Status          string `json:"status"`
+		AskProAvailable bool   `json:"ask_pro_available"`
+	} `json:"license,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // createHTTPClient creates an HTTP client with optional TLS skip verification
@@ -606,4 +673,200 @@ func (c *Client) persistLicense() error {
 	}
 
 	return c.store.Save(stored)
+}
+
+// ==================== v3.2 Fresh Deploy Methods ====================
+
+// NeedsFreshDeploy returns true if no license is configured and fresh deploy is possible
+func (c *Client) NeedsFreshDeploy() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.license == nil
+}
+
+// HasFirewallDetected returns true if a firewall has been detected and bound
+func (c *Client) HasFirewallDetected() bool {
+	return c.store.HasSecureBinding() && c.store.GetFirewallInfo() != nil
+}
+
+// FreshDeploy registers a new trial license with the server
+func (c *Client) FreshDeploy(ctx context.Context, email, hostname string) (*FreshDeployResponse, error) {
+	req := FreshDeployRequest{
+		Email:    email,
+		VMID:     c.hardwareID,
+		Hostname: hostname,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
+		c.serverURL+"/api/v1/license/fresh-deploy", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact license server: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var freshResp FreshDeployResponse
+	if err := json.NewDecoder(resp.Body).Decode(&freshResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !freshResp.Success {
+		return &freshResp, fmt.Errorf("fresh deploy failed: %s", freshResp.Error)
+	}
+
+	// Store the trial license info
+	if freshResp.License != nil {
+		c.mu.Lock()
+		c.license = &LicenseInfo{
+			CustomerName: freshResp.License.CustomerName,
+			ExpiresAt:    freshResp.License.ExpiresAt,
+			Features:     freshResp.License.Features,
+			IsValid:      freshResp.License.Licensed,
+			Status:       freshResp.License.Status,
+		}
+		c.lastCheck = time.Now()
+		c.mu.Unlock()
+
+		// Persist to disk
+		if err := c.persistLicense(); err != nil {
+			slog.Error("Failed to persist trial license", "error", err)
+		}
+
+		slog.Info("Trial license registered",
+			"status", freshResp.License.Status,
+			"days_remaining", freshResp.License.DaysRemaining)
+	}
+
+	return &freshResp, nil
+}
+
+// UpdateFirewallBinding sends firewall information to the license server
+func (c *Client) UpdateFirewallBinding(ctx context.Context) (*FirewallUpdateResponse, error) {
+	c.mu.RLock()
+	if c.license == nil {
+		c.mu.RUnlock()
+		return nil, fmt.Errorf("no license configured")
+	}
+	licenseKey := c.license.LicenseKey
+	c.mu.RUnlock()
+
+	fwInfo := c.store.GetFirewallInfo()
+	if fwInfo == nil {
+		return nil, fmt.Errorf("no firewall detected")
+	}
+
+	req := FirewallUpdateRequest{
+		LicenseKey:     licenseKey,
+		HardwareID:     c.hardwareID,
+		FirewallSerial: fwInfo.Serial,
+		FirewallModel:  fwInfo.Model,
+		FirewallName:   fwInfo.Name,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "PUT",
+		c.serverURL+"/api/v1/license/firewall", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact license server: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var updateResp FirewallUpdateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&updateResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !updateResp.Success {
+		return &updateResp, fmt.Errorf("firewall update failed: %s", updateResp.Error)
+	}
+
+	// Update license status if provided
+	if updateResp.License != nil {
+		c.mu.Lock()
+		c.license.Status = updateResp.License.Status
+		c.mu.Unlock()
+		c.persistLicense()
+
+		slog.Info("Firewall binding updated",
+			"status", updateResp.License.Status,
+			"firewall", fwInfo.Serial)
+	}
+
+	return &updateResp, nil
+}
+
+// AskProLicense requests a pro license upgrade
+func (c *Client) AskProLicense(ctx context.Context) (*AskProResponse, error) {
+	c.mu.RLock()
+	if c.license == nil {
+		c.mu.RUnlock()
+		return nil, fmt.Errorf("no license configured")
+	}
+	licenseKey := c.license.LicenseKey
+	c.mu.RUnlock()
+
+	req := AskProRequest{
+		LicenseKey: licenseKey,
+		HardwareID: c.hardwareID,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
+		c.serverURL+"/api/v1/license/ask-pro", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact license server: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var askResp AskProResponse
+	if err := json.NewDecoder(resp.Body).Decode(&askResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !askResp.Success {
+		return &askResp, fmt.Errorf("ask pro failed: %s", askResp.Error)
+	}
+
+	// Update license status if provided
+	if askResp.License != nil {
+		c.mu.Lock()
+		c.license.Status = askResp.License.Status
+		c.mu.Unlock()
+		c.persistLicense()
+
+		slog.Info("Pro license requested",
+			"status", askResp.License.Status)
+	}
+
+	return &askResp, nil
 }

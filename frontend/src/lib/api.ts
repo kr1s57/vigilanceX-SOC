@@ -7,6 +7,7 @@ import type {
   TimelinePoint,
   TopAttacker,
   TopTarget,
+  ZoneTrafficStats,
   BanStatus,
   BanStats,
   BanHistory,
@@ -118,6 +119,13 @@ export const statsApi = {
       params: { period, limit }
     })
     return response.data.data
+  },
+
+  zoneTraffic: async (period: string = '24h', limit: number = 20) => {
+    const response = await api.get<ZoneTrafficStats>('/stats/zone-traffic', {
+      params: { period, limit }
+    })
+    return response.data
   },
 }
 
@@ -633,7 +641,7 @@ export const usersApi = {
   },
 }
 
-// License Types (v2.9)
+// License Types (v2.9 + v3.2)
 export interface LicenseStatus {
   licensed: boolean
   status: string
@@ -643,6 +651,17 @@ export interface LicenseStatus {
   grace_mode: boolean
   features: string[]
   hardware_id?: string
+  // v3.0: Firewall binding info
+  binding_version?: string
+  firewall_serial?: string
+  firewall_model?: string
+  firewall_name?: string
+  secure_binding?: boolean
+  // v3.2: Fresh Deploy info
+  deployment_type?: 'manual' | 'fresh_deploy'
+  firewall_detected?: boolean
+  ask_pro_available?: boolean
+  needs_fresh_deploy?: boolean
 }
 
 export interface LicenseActivateResponse {
@@ -656,7 +675,51 @@ export interface LicenseInfo extends LicenseStatus {
   max_firewalls?: number
 }
 
-// License API (v2.9)
+// v3.2: Fresh Deploy types
+export interface FreshDeployRequest {
+  email: string
+  hostname?: string
+}
+
+export interface FreshDeployResponse {
+  success: boolean
+  message?: string
+  error?: string
+  license?: {
+    licensed: boolean
+    status: string
+    customer_name?: string
+    expires_at?: string
+    days_remaining?: number
+    features?: string[]
+    deployment_type?: string
+    firewall_detected: boolean
+    ask_pro_available: boolean
+  }
+}
+
+export interface AskProResponse {
+  success: boolean
+  message?: string
+  error?: string
+  license?: {
+    status: string
+    ask_pro_available: boolean
+  }
+}
+
+export interface SyncFirewallResponse {
+  success: boolean
+  message?: string
+  error?: string
+  license?: {
+    status: string
+    firewall_detected: boolean
+    ask_pro_available: boolean
+  }
+}
+
+// License API (v2.9 + v3.2)
 export const licenseApi = {
   getStatus: async (): Promise<LicenseStatus> => {
     const response = await api.get<LicenseStatus>('/license/status')
@@ -677,6 +740,22 @@ export const licenseApi = {
 
   forceValidate: async (): Promise<LicenseActivateResponse> => {
     const response = await api.post<LicenseActivateResponse>('/license/validate')
+    return response.data
+  },
+
+  // v3.2: Fresh Deploy methods
+  freshDeploy: async (request: FreshDeployRequest): Promise<FreshDeployResponse> => {
+    const response = await api.post<FreshDeployResponse>('/license/fresh-deploy', request)
+    return response.data
+  },
+
+  askPro: async (): Promise<AskProResponse> => {
+    const response = await api.post<AskProResponse>('/license/ask-pro')
+    return response.data
+  },
+
+  syncFirewall: async (): Promise<SyncFirewallResponse> => {
+    const response = await api.post<SyncFirewallResponse>('/license/sync-firewall')
     return response.data
   },
 }

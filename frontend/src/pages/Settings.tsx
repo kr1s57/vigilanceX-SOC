@@ -963,7 +963,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.1.0</p>
+        <p>VIGILANCE X v3.2.100</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

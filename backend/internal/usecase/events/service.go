@@ -35,6 +35,7 @@ type Repository interface {
 	GetUniqueHostnames(ctx context.Context, logType string) ([]string, error)
 	GetSyslogStatus(ctx context.Context) (*entity.SyslogStatus, error)
 	GetCriticalAlerts(ctx context.Context, limit int) ([]entity.CriticalAlert, error)
+	GetZoneTraffic(ctx context.Context, period string, limit int) (*entity.ZoneTrafficStats, error)
 }
 
 // Service handles event business logic
@@ -313,4 +314,15 @@ func (s *Service) GetCriticalAlerts(ctx context.Context, limit int) ([]entity.Cr
 		limit = 20
 	}
 	return s.repo.GetCriticalAlerts(ctx, limit)
+}
+
+// GetZoneTraffic retrieves traffic flow between network zones
+func (s *Service) GetZoneTraffic(ctx context.Context, period string, limit int) (*entity.ZoneTrafficStats, error) {
+	if period == "" {
+		period = "24h"
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return s.repo.GetZoneTraffic(ctx, period, limit)
 }

@@ -56,9 +56,9 @@ type HardwareID struct {
 
 // FirewallInfo holds firewall identification data extracted from syslog
 type FirewallInfo struct {
-	Serial    string `json:"serial"`
-	Model     string `json:"model"`
-	Name      string `json:"name"`
+	Serial    string    `json:"serial"`
+	Model     string    `json:"model"`
+	Name      string    `json:"name"`
 	FirstSeen time.Time `json:"first_seen"`
 }
 

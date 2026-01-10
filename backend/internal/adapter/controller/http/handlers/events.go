@@ -253,6 +253,27 @@ func (h *EventsHandler) GetCriticalAlerts(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// GetZoneTraffic handles GET /api/v1/stats/zone-traffic
+func (h *EventsHandler) GetZoneTraffic(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	period := r.URL.Query().Get("period")
+	limit := 20
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			limit = l
+		}
+	}
+
+	zoneTraffic, err := h.service.GetZoneTraffic(ctx, period, limit)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to get zone traffic", err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, zoneTraffic)
+}
+
 // Helper functions
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {

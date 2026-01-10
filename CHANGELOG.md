@@ -4,6 +4,138 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.2.100] - 2026-01-10
+
+### Fresh Deploy System - License "Request & Sync"
+
+Version majeure introduisant le workflow semi-automatise d'onboarding client "Request & Sync".
+
+---
+
+### Nouveau Workflow
+
+```
+Installation -> Login -> Email + Generate Trial (15j) -> FDEPLOY
+                                    |
+                    [Sync auto 12h ou manuel]
+                                    |
+                    XGS detecte -> FWID envoye -> TRIAL valide
+                                    |
+                    "Ask Pro License" -> ASKED -> Admin approuve -> ACTIVE
+```
+
+### Nouveaux Statuts Licence
+
+| Status | Description | Duree |
+|--------|-------------|-------|
+| `FDEPLOY` | Fresh deploy, attente XGS | 15 jours |
+| `TRIAL` | XGS connecte, trial valide | 15 jours |
+| `ASKED` | Demande Pro soumise | Jusqu'a action admin |
+| `ACTIVE` | Pro licence active | Config admin |
+
+### Format Cle Trial
+
+```
+VX3-TRIAL-XXXX-XXXX (genere automatiquement)
+```
+
+### VigilanceKey Server (10.56.126.126)
+
+#### Migration PostgreSQL
+```sql
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS vmid VARCHAR(64);
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS hostname VARCHAR(255);
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS firewall_id VARCHAR(64);
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS firewall_model VARCHAR(64);
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS firewall_name VARCHAR(64);
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS ask_pro_lic BOOLEAN DEFAULT FALSE;
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS ask_pro_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE licenses ADD COLUMN IF NOT EXISTS deployment_type VARCHAR(20) DEFAULT 'manual';
+```
+
+#### Nouveaux Endpoints API VigilanceKey
+- `POST /api/v1/license/fresh-deploy` - Cree licence trial (rate limit 5/h)
+- `PUT /api/v1/license/firewall` - Mise a jour binding firewall
+- `POST /api/v1/license/ask-pro` - Demande upgrade Pro
+- `GET /api/v1/admin/licenses/fresh-deploy` - Liste fresh deploy (admin)
+- `POST /api/v1/admin/licenses/{id}/upgrade-pro` - Upgrade vers Pro (admin)
+
+#### Dashboard Admin
+- Nouvelle section "Fresh Deploy" avec badge compteur
+- Table des licences FDEPLOY/TRIAL/ASKED
+- Actions: Upgrade to Pro, Extend Trial, Revoke
+
+### VigilanceX Client
+
+#### Backend Go
+- `internal/license/client.go` - Nouveaux types et methodes Fresh Deploy
+- `internal/adapter/controller/http/handlers/license.go` - Nouveaux handlers
+- `cmd/api/main.go` - Nouvelles routes avec rate limiting
+
+#### Frontend React
+- `lib/api.ts` - Nouveaux types et fonctions API
+- `contexts/LicenseContext.tsx` - Nouveaux etats et methodes
+- `pages/LicenseActivation.tsx` - Interface completement refaite
+
+### Interface LicenseActivation
+
+1. **Fresh Deploy Section** (si pas de licence)
+   - Champ Email obligatoire
+   - Bouton "Start 15-Day Trial"
+   - Lien "I have a license key" vers mode manuel
+
+2. **Trial Active Section** (si FDEPLOY/TRIAL)
+   - Badge status avec jours restants
+   - Indicateur XGS "Waiting" ou "Connected"
+   - Bouton "Sync License Status"
+   - Bouton "Request Pro License" (si disponible)
+
+3. **Manual Activation Section**
+   - Champ licence key
+   - Bouton Activate
+
+### Fichiers Modifies
+
+#### VigilanceKey
+| Fichier | Action |
+|---------|--------|
+| `migrations/002_fresh_deploy.sql` | Cree |
+| `internal/entity/license.go` | Modifie |
+| `internal/repository/postgres/license_repo.go` | Modifie |
+| `internal/service/license.go` | Modifie |
+| `internal/handler/license.go` | Modifie |
+| `cmd/api/main.go` | Modifie |
+| `frontend/src/App.tsx` | Modifie |
+
+#### VigilanceX
+| Fichier | Action |
+|---------|--------|
+| `backend/internal/license/client.go` | Modifie |
+| `backend/internal/adapter/controller/http/handlers/license.go` | Modifie |
+| `backend/cmd/api/main.go` | Modifie |
+| `frontend/src/lib/api.ts` | Modifie |
+| `frontend/src/contexts/LicenseContext.tsx` | Modifie |
+| `frontend/src/pages/LicenseActivation.tsx` | Refait |
+
+---
+
+## [3.1.6] - 2026-01-10
+
+### Fix: Dashboard Page Blanche
+
+Correction du dashboard qui affichait une page blanche.
+
+#### Probleme
+- Les APIs retournaient `null` au lieu de `[]` pour les slices vides
+- Erreur: `Cannot read properties of null (reading 'slice')`
+
+#### Solution
+- Initialisation des slices avec `[]Type{}` au lieu de `var []Type`
+- Fichiers corriges: `events_repo.go`, `events.go`, `service.go`
+
+---
+
 ## [3.1.5] - 2026-01-10
 
 ### Fix: Nginx proxy_pass & LICENSE_INSECURE_SKIP_VERIFY

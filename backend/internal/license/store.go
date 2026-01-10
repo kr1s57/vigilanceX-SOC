@@ -26,16 +26,16 @@ type LicenseStore struct {
 
 // StoredLicense represents the persisted license data
 type StoredLicense struct {
-	LicenseKey     string    `json:"license_key"`
-	CustomerName   string    `json:"customer_name"`
-	ExpiresAt      time.Time `json:"expires_at"`
-	MaxFirewalls   int       `json:"max_firewalls"`
-	Features       []string  `json:"features"`
-	IsValid        bool      `json:"is_valid"`
-	Status         string    `json:"status"`
-	HardwareID     string    `json:"hardware_id"`
-	LastValidated  time.Time `json:"last_validated"`
-	GraceStart     time.Time `json:"grace_start,omitempty"`
+	LicenseKey    string    `json:"license_key"`
+	CustomerName  string    `json:"customer_name"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	MaxFirewalls  int       `json:"max_firewalls"`
+	Features      []string  `json:"features"`
+	IsValid       bool      `json:"is_valid"`
+	Status        string    `json:"status"`
+	HardwareID    string    `json:"hardware_id"`
+	LastValidated time.Time `json:"last_validated"`
+	GraceStart    time.Time `json:"grace_start,omitempty"`
 	// v3.0: Firewall binding info
 	FirewallSerial string `json:"firewall_serial,omitempty"`
 	FirewallModel  string `json:"firewall_model,omitempty"`

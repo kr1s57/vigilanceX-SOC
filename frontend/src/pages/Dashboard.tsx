@@ -10,6 +10,7 @@ import {
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
 import { SeverityChart } from '@/components/charts/SeverityChart'
+import { ZoneTrafficCard } from '@/components/dashboard/ZoneTrafficCard'
 import { statsApi, eventsApi, alertsApi } from '@/lib/api'
 import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -158,7 +159,7 @@ export function Dashboard() {
       </div>
 
       {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Top Attackers */}
         <div className="bg-card rounded-xl border p-6">
           <h3 className="text-lg font-semibold mb-4">Top Attackers</h3>
@@ -186,6 +187,9 @@ export function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Zone Traffic Flow (v3.1) */}
+        <ZoneTrafficCard period={period} refreshInterval={settings.refreshInterval} />
       </div>
 
       {/* Critical Alerts Modal */}

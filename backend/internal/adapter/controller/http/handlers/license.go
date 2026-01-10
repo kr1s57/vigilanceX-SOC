@@ -51,6 +51,17 @@ type LicenseStatusResponse struct {
 	FirewallModel  string `json:"firewall_model,omitempty"`
 	FirewallName   string `json:"firewall_name,omitempty"`
 	SecureBinding  bool   `json:"secure_binding"`
+	// v3.2: Fresh Deploy info
+	DeploymentType   string `json:"deployment_type,omitempty"`
+	FirewallDetected bool   `json:"firewall_detected"`
+	AskProAvailable  bool   `json:"ask_pro_available"`
+	NeedsFreshDeploy bool   `json:"needs_fresh_deploy"`
+}
+
+// FreshDeployRequest represents a fresh deploy request
+type FreshDeployRequest struct {
+	Email    string `json:"email"`
+	Hostname string `json:"hostname,omitempty"`
 }
 
 // LicenseInfoResponse represents detailed license info (admin only)
@@ -91,6 +102,11 @@ func (h *LicenseHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		FirewallModel:  status.FirewallModel,
 		FirewallName:   status.FirewallName,
 		SecureBinding:  status.SecureBinding,
+		// v3.2: Fresh Deploy info
+		DeploymentType:   status.DeploymentType,
+		FirewallDetected: status.FirewallDetected,
+		AskProAvailable:  status.AskProAvailable,
+		NeedsFreshDeploy: h.client.NeedsFreshDeploy(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -222,4 +238,109 @@ func (h *LicenseHandler) ForceValidate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// ==================== v3.2 Fresh Deploy Handlers ====================
+
+// FreshDeploy registers a trial license
+// POST /api/v1/license/fresh-deploy
+func (h *LicenseHandler) FreshDeploy(w http.ResponseWriter, r *http.Request) {
+	if h.client == nil {
+		http.Error(w, `{"error":"License system not enabled"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	var req FreshDeployRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.Email == "" {
+		http.Error(w, `{"error":"Email is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	resp, err := h.client.FreshDeploy(ctx, req.Email, req.Hostname)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "fresh_deploy_failed",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// AskProLicense requests a pro license upgrade
+// POST /api/v1/license/ask-pro
+func (h *LicenseHandler) AskProLicense(w http.ResponseWriter, r *http.Request) {
+	if h.client == nil {
+		http.Error(w, `{"error":"License system not enabled"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	resp, err := h.client.AskProLicense(ctx)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "ask_pro_failed",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// SyncFirewall syncs firewall binding with the server
+// POST /api/v1/license/sync-firewall
+func (h *LicenseHandler) SyncFirewall(w http.ResponseWriter, r *http.Request) {
+	if h.client == nil {
+		http.Error(w, `{"error":"License system not enabled"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	if !h.client.HasFirewallDetected() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "no_firewall",
+			"message": "No firewall detected yet. Please wait for XGS connection.",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	resp, err := h.client.UpdateFirewallBinding(ctx)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "sync_failed",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

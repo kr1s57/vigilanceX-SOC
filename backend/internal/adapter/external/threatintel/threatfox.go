@@ -20,41 +20,41 @@ type ThreatFoxClient struct {
 
 // ThreatFoxResponse represents the API response
 type ThreatFoxResponse struct {
-	QueryStatus string           `json:"query_status"`
-	Data        []ThreatFoxIOC   `json:"data"`
+	QueryStatus string         `json:"query_status"`
+	Data        []ThreatFoxIOC `json:"data"`
 }
 
 // ThreatFoxIOC represents an indicator of compromise
 type ThreatFoxIOC struct {
-	ID              string   `json:"id"`
-	IOC             string   `json:"ioc"`
-	IOCType         string   `json:"ioc_type"`
-	ThreatType      string   `json:"threat_type"`
-	ThreatTypeDesc  string   `json:"threat_type_desc"`
-	Malware         string   `json:"malware"`
-	MalwarePrintable string  `json:"malware_printable"`
-	MalwareMalpedia string   `json:"malware_malpedia"`
-	Confidence      int      `json:"confidence_level"`
-	FirstSeen       string   `json:"first_seen"`
-	LastSeen        string   `json:"last_seen"`
-	Reporter        string   `json:"reporter"`
-	Reference       string   `json:"reference"`
-	Tags            []string `json:"tags"`
+	ID               string   `json:"id"`
+	IOC              string   `json:"ioc"`
+	IOCType          string   `json:"ioc_type"`
+	ThreatType       string   `json:"threat_type"`
+	ThreatTypeDesc   string   `json:"threat_type_desc"`
+	Malware          string   `json:"malware"`
+	MalwarePrintable string   `json:"malware_printable"`
+	MalwareMalpedia  string   `json:"malware_malpedia"`
+	Confidence       int      `json:"confidence_level"`
+	FirstSeen        string   `json:"first_seen"`
+	LastSeen         string   `json:"last_seen"`
+	Reporter         string   `json:"reporter"`
+	Reference        string   `json:"reference"`
+	Tags             []string `json:"tags"`
 }
 
 // ThreatFoxResult represents the processed result
 type ThreatFoxResult struct {
-	Found           bool     `json:"found"`
-	ThreatType      string   `json:"threat_type,omitempty"`
-	Malware         string   `json:"malware,omitempty"`
-	MalwareFamily   string   `json:"malware_family,omitempty"`
-	Confidence      int      `json:"confidence,omitempty"`
-	FirstSeen       string   `json:"first_seen,omitempty"`
-	LastSeen        string   `json:"last_seen,omitempty"`
-	Tags            []string `json:"tags,omitempty"`
-	IOCCount        int      `json:"ioc_count,omitempty"`
-	Score           int      `json:"score"`
-	Reference       string   `json:"reference,omitempty"`
+	Found         bool     `json:"found"`
+	ThreatType    string   `json:"threat_type,omitempty"`
+	Malware       string   `json:"malware,omitempty"`
+	MalwareFamily string   `json:"malware_family,omitempty"`
+	Confidence    int      `json:"confidence,omitempty"`
+	FirstSeen     string   `json:"first_seen,omitempty"`
+	LastSeen      string   `json:"last_seen,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+	IOCCount      int      `json:"ioc_count,omitempty"`
+	Score         int      `json:"score"`
+	Reference     string   `json:"reference,omitempty"`
 }
 
 // NewThreatFoxClient creates a new ThreatFox client

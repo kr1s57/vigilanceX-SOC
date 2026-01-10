@@ -20,16 +20,16 @@ type ThreatIntelProvider interface {
 // v2.9.6: Added CrowdSec CTI
 type Aggregator struct {
 	// Tier 1 providers (unlimited - always query)
-	ipSum      *IPSumClient            // Aggregated blocklists (no API key)
-	otx        *OTXClient              // AlienVault OTX (generous limits)
-	threatFox  *ThreatFoxClient        // abuse.ch C2/malware IOCs (no API key)
-	urlhaus    *URLhausClient          // abuse.ch malicious URLs (no API key)
-	shodanIDB  *ShodanInternetDBClient // Shodan passive data (no API key)
+	ipSum     *IPSumClient            // Aggregated blocklists (no API key)
+	otx       *OTXClient              // AlienVault OTX (generous limits)
+	threatFox *ThreatFoxClient        // abuse.ch C2/malware IOCs (no API key)
+	urlhaus   *URLhausClient          // abuse.ch malicious URLs (no API key)
+	shodanIDB *ShodanInternetDBClient // Shodan passive data (no API key)
 
 	// Tier 2 providers (moderate limits - query if Tier1 score >= threshold)
-	abuseIPDB *AbuseIPDBClient  // ~1000/day
-	greyNoise *GreyNoiseClient  // ~500/day, reduces false positives
-	crowdSec  *CrowdSecClient   // v2.9.6: ~50/day, community-sourced, subnet reputation
+	abuseIPDB *AbuseIPDBClient // ~1000/day
+	greyNoise *GreyNoiseClient // ~500/day, reduces false positives
+	crowdSec  *CrowdSecClient  // v2.9.6: ~50/day, community-sourced, subnet reputation
 
 	// Tier 3 providers (limited - query only if high suspicion)
 	virusTotal *VirusTotalClient // ~500/day
@@ -97,8 +97,8 @@ func DefaultWeights() AggregationWeights {
 // DefaultCascadeConfig returns default cascade thresholds
 func DefaultCascadeConfig() CascadeConfig {
 	return CascadeConfig{
-		Tier2Threshold: 30,  // Query Tier 2 if Tier 1 score >= 30
-		Tier3Threshold: 60,  // Query Tier 3 if Tier 2 score >= 60
+		Tier2Threshold: 30, // Query Tier 2 if Tier 1 score >= 30
+		Tier3Threshold: 60, // Query Tier 3 if Tier 2 score >= 60
 		EnableCascade:  true,
 	}
 }
@@ -204,7 +204,7 @@ type AggregatedResult struct {
 	ThreatLevel     string         `json:"threat_level"`     // none, low, medium, high, critical
 	Confidence      float64        `json:"confidence"`       // 0-1 based on source availability
 	Sources         []SourceResult `json:"sources"`
-	TiersQueried    []int          `json:"tiers_queried"`    // v2.9.5: Which tiers were queried [1], [1,2], [1,2,3]
+	TiersQueried    []int          `json:"tiers_queried"` // v2.9.5: Which tiers were queried [1], [1,2], [1,2,3]
 
 	// Tier 1 provider results (always queried)
 	IPSum     *IPSumResult            `json:"ipsum,omitempty"`
@@ -224,27 +224,27 @@ type AggregatedResult struct {
 	Pulsedive  *PulsediveResult  `json:"pulsedive,omitempty"`
 
 	// Aggregated metadata
-	Country         string   `json:"country"`
-	ASN             string   `json:"asn"`
-	ISP             string   `json:"isp"`
-	Tags            []string `json:"tags"`
-	MalwareFamilies []string `json:"malware_families,omitempty"`
-	Adversaries     []string `json:"adversaries,omitempty"`
-	Campaigns       []string `json:"campaigns,omitempty"`
-	Vulnerabilities []string `json:"vulnerabilities,omitempty"` // v2.9.5: From ShodanIDB
-	OpenPorts       []int    `json:"open_ports,omitempty"`      // v2.9.5: From ShodanIDB
-	MitreTechniques []string `json:"mitre_techniques,omitempty"` // v2.9.6: From CrowdSec
-	Behaviors       []string `json:"behaviors,omitempty"`        // v2.9.6: From CrowdSec
-	IsTor           bool     `json:"is_tor"`
-	IsVPN           bool     `json:"is_vpn"`
-	IsProxy         bool     `json:"is_proxy"`
-	IsBenign        bool     `json:"is_benign"`                 // GreyNoise benign flag
-	IsC2            bool     `json:"is_c2"`                     // v2.9.5: From ThreatFox
-	InBlocklists    int      `json:"in_blocklists"`             // IPSum count
-	BackgroundNoise int      `json:"background_noise,omitempty"` // v2.9.6: From CrowdSec (0-10)
-	SubnetScore     int      `json:"subnet_score,omitempty"`     // v2.9.6: From CrowdSec IP range score
+	Country         string    `json:"country"`
+	ASN             string    `json:"asn"`
+	ISP             string    `json:"isp"`
+	Tags            []string  `json:"tags"`
+	MalwareFamilies []string  `json:"malware_families,omitempty"`
+	Adversaries     []string  `json:"adversaries,omitempty"`
+	Campaigns       []string  `json:"campaigns,omitempty"`
+	Vulnerabilities []string  `json:"vulnerabilities,omitempty"`  // v2.9.5: From ShodanIDB
+	OpenPorts       []int     `json:"open_ports,omitempty"`       // v2.9.5: From ShodanIDB
+	MitreTechniques []string  `json:"mitre_techniques,omitempty"` // v2.9.6: From CrowdSec
+	Behaviors       []string  `json:"behaviors,omitempty"`        // v2.9.6: From CrowdSec
+	IsTor           bool      `json:"is_tor"`
+	IsVPN           bool      `json:"is_vpn"`
+	IsProxy         bool      `json:"is_proxy"`
+	IsBenign        bool      `json:"is_benign"`                  // GreyNoise benign flag
+	IsC2            bool      `json:"is_c2"`                      // v2.9.5: From ThreatFox
+	InBlocklists    int       `json:"in_blocklists"`              // IPSum count
+	BackgroundNoise int       `json:"background_noise,omitempty"` // v2.9.6: From CrowdSec (0-10)
+	SubnetScore     int       `json:"subnet_score,omitempty"`     // v2.9.6: From CrowdSec IP range score
 	LastChecked     time.Time `json:"last_checked"`
-	CacheHit        bool     `json:"cache_hit"`
+	CacheHit        bool      `json:"cache_hit"`
 }
 
 // SourceResult contains result from a single source
@@ -254,7 +254,7 @@ type SourceResult struct {
 	Weight         float64 `json:"weight"`
 	WeightedScore  float64 `json:"weighted_score"`
 	Available      bool    `json:"available"`
-	Tier           int     `json:"tier"`                       // v2.9.5: Provider tier (1, 2, or 3)
+	Tier           int     `json:"tier"` // v2.9.5: Provider tier (1, 2, or 3)
 	Error          string  `json:"error,omitempty"`
 	IsBenignSource bool    `json:"is_benign_source,omitempty"` // For GreyNoise
 }

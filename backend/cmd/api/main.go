@@ -327,6 +327,9 @@ func main() {
 			// v3.0: Rate limit license activation to prevent brute-force (5 attempts per hour per IP)
 			r.With(httprate.Limit(5, time.Hour, httprate.WithKeyFuncs(httprate.KeyByIP))).
 				Post("/license/activate", licenseHandler.Activate)
+			// v3.2: Fresh Deploy endpoints (public - rate limited)
+			r.With(httprate.Limit(5, time.Hour, httprate.WithKeyFuncs(httprate.KeyByIP))).
+				Post("/license/fresh-deploy", licenseHandler.FreshDeploy)
 		})
 
 		// ==============================================
@@ -340,6 +343,10 @@ func main() {
 			r.Post("/auth/logout", authHandler.Logout)
 			r.Get("/auth/me", authHandler.Me)
 			r.Post("/auth/change-password", authHandler.ChangePassword)
+
+			// v3.2: License management endpoints (authenticated, no license required)
+			r.Post("/license/ask-pro", licenseHandler.AskProLicense)
+			r.Post("/license/sync-firewall", licenseHandler.SyncFirewall)
 
 			// Events (free - core dashboard functionality)
 			r.Route("/events", func(r chi.Router) {
@@ -363,6 +370,7 @@ func main() {
 				r.Get("/trends", handlers.NotImplemented)
 				r.Get("/top-attackers", eventsHandler.GetTopAttackers)
 				r.Get("/top-targets", eventsHandler.GetTopTargets)
+				r.Get("/zone-traffic", eventsHandler.GetZoneTraffic) // v3.1: XGS Zone Traffic Flow
 			})
 
 			// Status endpoints (free - syslog status)

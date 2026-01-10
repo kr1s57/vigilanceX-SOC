@@ -34,7 +34,7 @@ type CrowdSecResponse struct {
 	IPRange24Score       int                    `json:"ip_range_24_score"`
 	ASName               string                 `json:"as_name"`
 	ASNum                int                    `json:"as_num"`
-	Reputation           string                 `json:"reputation"` // malicious, suspicious, unknown, known, safe
+	Reputation           string                 `json:"reputation"`             // malicious, suspicious, unknown, known, safe
 	BackgroundNoiseScore int                    `json:"background_noise_score"` // 0-10
 	BackgroundNoise      string                 `json:"background_noise"`       // low, medium, high, none
 	Confidence           string                 `json:"confidence"`             // low, medium, high
@@ -90,9 +90,9 @@ type CrowdSecClassification struct {
 
 // CrowdSecAttack represents attack details
 type CrowdSecAttack struct {
-	Name        string `json:"name"`
-	Label       string `json:"label"`
-	Description string `json:"description"`
+	Name        string   `json:"name"`
+	Label       string   `json:"label"`
+	Description string   `json:"description"`
 	References  []string `json:"references"`
 }
 
@@ -130,10 +130,10 @@ type CrowdSecReference struct {
 type CrowdSecResult struct {
 	Found                bool     `json:"found"`
 	IP                   string   `json:"ip,omitempty"`
-	Reputation           string   `json:"reputation,omitempty"`           // malicious, suspicious, unknown, safe
-	BackgroundNoiseScore int      `json:"background_noise_score"`         // 0-10 (unique to CrowdSec)
-	BackgroundNoise      string   `json:"background_noise,omitempty"`     // low, medium, high
-	IPRangeScore         int      `json:"ip_range_score"`                 // 0-5 (unique: subnet reputation)
+	Reputation           string   `json:"reputation,omitempty"`       // malicious, suspicious, unknown, safe
+	BackgroundNoiseScore int      `json:"background_noise_score"`     // 0-10 (unique to CrowdSec)
+	BackgroundNoise      string   `json:"background_noise,omitempty"` // low, medium, high
+	IPRangeScore         int      `json:"ip_range_score"`             // 0-5 (unique: subnet reputation)
 	IPRange24Reputation  string   `json:"ip_range_24_reputation,omitempty"`
 	Confidence           string   `json:"confidence,omitempty"`
 	Behaviors            []string `json:"behaviors,omitempty"`

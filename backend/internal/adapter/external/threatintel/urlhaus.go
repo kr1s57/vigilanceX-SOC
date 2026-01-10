@@ -20,19 +20,19 @@ type URLhausClient struct {
 
 // URLhausHostResponse represents the host lookup response
 type URLhausHostResponse struct {
-	QueryStatus     string          `json:"query_status"`
-	Host            string          `json:"host"`
-	FirstSeen       string          `json:"firstseen"`
-	URLCount        int             `json:"url_count"`
-	BlacklistsCount int             `json:"blacklists"`
+	QueryStatus     string            `json:"query_status"`
+	Host            string            `json:"host"`
+	FirstSeen       string            `json:"firstseen"`
+	URLCount        int               `json:"url_count"`
+	BlacklistsCount int               `json:"blacklists"`
 	Blacklists      URLhausBlacklists `json:"blacklists"`
-	URLs            []URLhausURL    `json:"urls"`
+	URLs            []URLhausURL      `json:"urls"`
 }
 
 // URLhausBlacklists contains blacklist status
 type URLhausBlacklists struct {
-	SpamhausDbl  string `json:"spamhaus_dbl"`
-	SurblMulti   string `json:"surbl_multi"`
+	SpamhausDbl string `json:"spamhaus_dbl"`
+	SurblMulti  string `json:"surbl_multi"`
 }
 
 // URLhausURL represents a malicious URL entry
@@ -49,16 +49,16 @@ type URLhausURL struct {
 
 // URLhausResult represents the processed result
 type URLhausResult struct {
-	Found           bool     `json:"found"`
-	Host            string   `json:"host,omitempty"`
-	FirstSeen       string   `json:"first_seen,omitempty"`
-	URLCount        int      `json:"url_count,omitempty"`
-	ActiveURLs      int      `json:"active_urls,omitempty"`
-	ThreatTypes     []string `json:"threat_types,omitempty"`
-	Tags            []string `json:"tags,omitempty"`
-	SpamhausDbl     bool     `json:"spamhaus_dbl"`
-	SurblListed     bool     `json:"surbl_listed"`
-	Score           int      `json:"score"`
+	Found       bool     `json:"found"`
+	Host        string   `json:"host,omitempty"`
+	FirstSeen   string   `json:"first_seen,omitempty"`
+	URLCount    int      `json:"url_count,omitempty"`
+	ActiveURLs  int      `json:"active_urls,omitempty"`
+	ThreatTypes []string `json:"threat_types,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	SpamhausDbl bool     `json:"spamhaus_dbl"`
+	SurblListed bool     `json:"surbl_listed"`
+	Score       int      `json:"score"`
 }
 
 // NewURLhausClient creates a new URLhaus client

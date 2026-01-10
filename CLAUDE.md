@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.1.6 | **Derniere mise a jour**: 2026-01-10
+> **Version**: 3.2.100 | **Derniere mise a jour**: 2026-01-10
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -474,6 +474,31 @@ VX3 Hardware ID = SHA256("VX3:" + machine_id + ":" + firewall_serial)
 - **machine_id**: UUID de la VM (/etc/machine-id)
 - **firewall_serial**: Extrait des logs Sophos XGS
 
+### Workflow Fresh Deploy (v3.2)
+
+Flux semi-automatise "Request & Sync" pour l'onboarding client:
+
+```
+Installation -> Login -> Email + Generate Trial (15j) -> FDEPLOY
+                                    |
+                    [Sync auto 12h ou manuel]
+                                    |
+                    XGS detecte -> FWID envoye -> TRIAL valide
+                                    |
+                    "Ask Pro License" -> ASKED -> Admin approuve -> ACTIVE
+```
+
+### Statuts Licence
+
+| Status | Description | Duree |
+|--------|-------------|-------|
+| `FDEPLOY` | Fresh deploy, attente XGS | 15 jours |
+| `TRIAL` | XGS connecte, trial valide | 15 jours |
+| `ASKED` | Demande Pro soumise | Jusqu'a action admin |
+| `ACTIVE` | Pro licence active | Config admin |
+| `EXPIRED` | Licence expiree | - |
+| `REVOKED` | Revoquee par admin | - |
+
 ### Grace Period
 
 - Duree: 7 jours (168h)
@@ -483,9 +508,13 @@ VX3 Hardware ID = SHA256("VX3:" + machine_id + ":" + firewall_serial)
 ### Endpoints Licence
 
 ```
-GET  /api/v1/license/status    # Status (public)
-POST /api/v1/license/activate  # Activation (public)
-GET  /api/v1/license/info      # Details (admin)
+GET  /api/v1/license/status        # Status (public)
+POST /api/v1/license/activate      # Activation manuelle (public)
+POST /api/v1/license/fresh-deploy  # Trial automatique (public, rate limit 5/h)
+POST /api/v1/license/ask-pro       # Demande upgrade Pro (auth)
+POST /api/v1/license/sync-firewall # Sync firewall binding (auth)
+GET  /api/v1/license/info          # Details (admin)
+POST /api/v1/license/validate      # Force validation (admin)
 ```
 
 ---
@@ -607,6 +636,16 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.2.100 (2026-01-10)
+- **Fresh Deploy System**: Workflow semi-automatise "Request & Sync"
+- Nouveaux statuts licence: FDEPLOY, TRIAL, ASKED
+- Trial automatique 15 jours (format VX3-TRIAL-XXXX-XXXX)
+- Detection et binding XGS automatique
+- Bouton "Ask Pro License" pour demande upgrade
+- Interface LicenseActivation refaite completement
+- Section Fresh Deploy dans dashboard admin VigilanceKey
+- Nouveaux endpoints: /fresh-deploy, /ask-pro, /sync-firewall
 
 ### v3.1.6 (2026-01-10)
 - Fix dashboard page blanche (APIs retournaient null au lieu de [])
