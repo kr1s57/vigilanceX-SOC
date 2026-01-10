@@ -4,6 +4,60 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.1.4] - 2026-01-10
+
+### Fix: Frontend React Build
+
+Correction du build frontend qui causait une page blanche.
+
+#### Problème
+- Terser manglait les propriétés React internes (`__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED`)
+- Erreur console: `Cannot read properties of undefined (reading 'ReactCurrentOwner')`
+
+#### Solution
+- Suppression du property mangling dans `vite.config.ts`
+- Le regex `/^_/` manglait les propriétés commençant par underscore, cassant React
+
+---
+
+## [3.1.3] - 2026-01-10
+
+### Fix: Backend Signal Handler Crash (Garble)
+
+Correction du crash backend avec Garble `-tiny` flag.
+
+#### Problème
+- Flag `-tiny` de Garble supprime les infos runtime nécessaires au signal handling Go
+- Erreur: `fatal: bad g in signal handler` (exit code 139/SIGSEGV)
+
+#### Solution
+- Suppression du flag `-tiny` de toutes les commandes Garble dans `release.yml`
+
+---
+
+## [3.1.2] - 2026-01-10
+
+### Tentative de fix (ineffective)
+
+- Tentative de rebuild sans changement effectif
+
+---
+
+## [3.1.1] - 2026-01-09
+
+### Fix: Backend Signal Handler Crash (UPX)
+
+Première tentative de correction du crash backend.
+
+#### Problème
+- Compression UPX incompatible avec le runtime Go
+- Causait `fatal: bad g in signal handler`
+
+#### Solution
+- Suppression de la compression UPX dans `release.yml`
+
+---
+
 ## [3.1.0] - 2026-01-09
 
 ### XGS Decoders & Rules Engine (Sophos Log Parser)

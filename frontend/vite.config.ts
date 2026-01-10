@@ -41,9 +41,8 @@ export default defineConfig({
       },
       mangle: {
         toplevel: true,          // Mangle top-level variable names
-        properties: {
-          regex: /^_/,           // Mangle properties starting with underscore
-        },
+        // Note: Removed properties mangling - it breaks React internals
+        // (__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentOwner)
       },
       format: {
         comments: false,         // Remove all comments
