@@ -677,11 +677,19 @@ func (c *Client) persistLicense() error {
 
 // ==================== v3.2 Fresh Deploy Methods ====================
 
-// NeedsFreshDeploy returns true if no license is configured and fresh deploy is possible
+// NeedsFreshDeploy returns true if no valid license is configured and fresh deploy is possible
 func (c *Client) NeedsFreshDeploy() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.license == nil
+
+	// No license at all
+	if c.license == nil {
+		return true
+	}
+
+	// License exists but is invalid/expired/revoked - allow fresh deploy
+	status := c.license.Status
+	return status == "invalid" || status == "expired" || status == "revoked" || status == "not_activated" || status == ""
 }
 
 // HasFirewallDetected returns true if a firewall has been detected and bound
