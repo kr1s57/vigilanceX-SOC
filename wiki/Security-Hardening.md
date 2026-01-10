@@ -25,7 +25,7 @@ Docker images are signed using [Sigstore Cosign](https://github.com/sigstore/cos
 ./vigilance.sh verify
 
 # Manual verification
-cosign verify ghcr.io/kr1s57/vigilancex-api:3.0.0
+cosign verify ghcr.io/kr1s57/vigilancex-api:3.1.4
 ```
 
 ## License Security (VX3)
