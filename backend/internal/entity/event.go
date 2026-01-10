@@ -231,3 +231,23 @@ type CriticalAlert struct {
 	Action    string    `json:"action"`
 	Country   string    `json:"country"`
 }
+
+// ZoneTraffic represents traffic flow between network zones
+type ZoneTraffic struct {
+	SrcZone       string  `json:"src_zone"`
+	DstZone       string  `json:"dst_zone"`
+	EventCount    uint64  `json:"event_count"`
+	BlockedCount  uint64  `json:"blocked_count"`
+	AllowedCount  uint64  `json:"allowed_count"`
+	UniqueIPs     uint64  `json:"unique_ips"`
+	CriticalCount uint64  `json:"critical_count"`
+	HighCount     uint64  `json:"high_count"`
+	BlockRate     float64 `json:"block_rate"`
+}
+
+// ZoneTrafficStats represents aggregated zone traffic statistics
+type ZoneTrafficStats struct {
+	Flows       []ZoneTraffic `json:"flows"`
+	TotalFlows  uint64        `json:"total_flows"`
+	UniqueZones []string      `json:"unique_zones"`
+}

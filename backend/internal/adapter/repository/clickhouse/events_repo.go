@@ -631,7 +631,7 @@ func (r *EventsRepository) GetZoneTraffic(ctx context.Context, period string, li
 	}
 	defer rows.Close()
 
-	var flows []entity.ZoneTraffic
+	flows := []entity.ZoneTraffic{}
 	for rows.Next() {
 		var f entity.ZoneTraffic
 		if err := rows.Scan(
@@ -662,7 +662,7 @@ func (r *EventsRepository) GetZoneTraffic(ctx context.Context, period string, li
 	}
 	defer zoneRows.Close()
 
-	var zones []string
+	zones := []string{}
 	for zoneRows.Next() {
 		var zone string
 		if err := zoneRows.Scan(&zone); err != nil {
