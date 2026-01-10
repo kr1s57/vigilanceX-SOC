@@ -4,6 +4,31 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.1.5] - 2026-01-10
+
+### Feature: LICENSE_INSECURE_SKIP_VERIFY
+
+Ajout du support pour les certificats SSL self-signed sur le serveur de licence.
+
+#### Probleme
+- Le backend refusait de se connecter a vigilanceKey via IP si le certificat
+  ne contenait pas l'IP dans les Subject Alternative Names (SAN)
+- Erreur: `x509: cannot validate certificate for IP because it doesn't contain any IP SANs`
+
+#### Solution
+- Nouvelle variable d'environnement `LICENSE_INSECURE_SKIP_VERIFY=true`
+- Permet d'ignorer la verification SSL pour les environnements internes avec certificats self-signed
+- Avertissement log au demarrage si active
+
+#### Usage
+```yaml
+# docker-compose.yml
+environment:
+  LICENSE_INSECURE_SKIP_VERIFY: "true"
+```
+
+---
+
 ## [3.1.4] - 2026-01-10
 
 ### Fix: Frontend React Build

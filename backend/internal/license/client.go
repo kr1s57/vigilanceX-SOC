@@ -3,10 +3,12 @@ package license
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -100,6 +102,24 @@ type ValidateResponse struct {
 	Error     string    `json:"error,omitempty"`
 }
 
+// createHTTPClient creates an HTTP client with optional TLS skip verification
+func createHTTPClient() *http.Client {
+	transport := &http.Transport{}
+
+	// Check for insecure skip verify (for self-signed certs with IP addresses)
+	if os.Getenv("LICENSE_INSECURE_SKIP_VERIFY") == "true" {
+		transport.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+		slog.Warn("License client using InsecureSkipVerify for TLS (self-signed cert mode)")
+	}
+
+	return &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: transport,
+	}
+}
+
 // NewClient creates a new license client (legacy - without firewall binding)
 func NewClient(cfg LicenseConfig) (*Client, error) {
 	// Create store
@@ -124,10 +144,8 @@ func NewClient(cfg LicenseConfig) (*Client, error) {
 		"binding", "VX2")
 
 	client := &Client{
-		serverURL: cfg.ServerURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		serverURL:   cfg.ServerURL,
+		httpClient:  createHTTPClient(),
 		store:       store,
 		gracePeriod: gracePeriod,
 		hardwareID:  hwid,
@@ -182,10 +200,8 @@ func NewClientWithFirewall(ctx context.Context, cfg LicenseConfig) (*Client, err
 	}
 
 	client := &Client{
-		serverURL: cfg.ServerURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		serverURL:   cfg.ServerURL,
+		httpClient:  createHTTPClient(),
 		store:       store,
 		gracePeriod: gracePeriod,
 		hardwareID:  hwid,
