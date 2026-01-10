@@ -436,6 +436,37 @@ Quand l'utilisateur dit "gitgo":
 5. Mettre a jour CHANGELOG.md si nouvelle version
 6. Mettre a jour README.md si nouvelles fonctionnalites
 
+### Workflow Deploiement (3 environnements)
+
+| Environnement | Machine | Description |
+|---------------|---------|-------------|
+| **DEV** | 10.25.72.28 (/opt/vigilanceX) | Code source, builds locaux |
+| **VPS-TEST** | vps-b3a1bf23 (OVH) | Simulation client distant |
+| **vigilanceKey** | 10.56.126.126 | Serveur de licences |
+
+**Deploiement vers VPS-TEST (via GHCR):**
+```bash
+# 1. Sur DEV - Build et push images
+cd /opt/vigilanceX
+echo "TOKEN" | docker login ghcr.io -u kr1s57 --password-stdin
+docker build -t ghcr.io/kr1s57/vigilancex-api:VERSION -f backend/Dockerfile backend/
+docker build -t ghcr.io/kr1s57/vigilancex-frontend:VERSION -f frontend/Dockerfile frontend/
+docker push ghcr.io/kr1s57/vigilancex-api:VERSION
+docker push ghcr.io/kr1s57/vigilancex-frontend:VERSION
+
+# 2. Sur VPS-TEST - Pull et restart
+cd ~/vigilanceX-SOC/deploy
+docker compose pull backend frontend
+docker compose up -d backend frontend --force-recreate
+```
+
+**Synchronisation des 3 repos Git:**
+1. vigilanceX (private): Code source complet
+2. vigilanceX-SOC (public): Deploiement et documentation
+3. vigilanceKey (private): Serveur de licences
+
+A chaque release, creer les GitHub Releases via API pour afficher "Latest".
+
 ---
 
 ## Threat Intelligence Providers
@@ -646,6 +677,7 @@ tail -f /tmp/claude-hooks.log
 - Interface LicenseActivation refaite completement
 - Section Fresh Deploy dans dashboard admin VigilanceKey
 - Nouveaux endpoints: /fresh-deploy, /ask-pro, /sync-firewall
+- **Fix**: NeedsFreshDeploy retourne true pour licences invalid/expired
 
 ### v3.1.6 (2026-01-10)
 - Fix dashboard page blanche (APIs retournaient null au lieu de [])
