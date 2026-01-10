@@ -4,6 +4,69 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.3.100] - 2026-01-10
+
+### SMTP Email Notifications
+
+Nouvelle integration SMTP pour l'envoi d'emails de notifications et rapports de securite.
+
+#### Nouvelles Fonctionnalites
+
+| Feature | Description |
+|---------|-------------|
+| Configuration SMTP | Support TLS/SSL/None, Office365 par defaut |
+| Test Email | Bouton pour tester la configuration SMTP |
+| Rapports Programmes | Daily, Weekly, Monthly avec choix horaire |
+| Alertes Temps-reel | WAF Detection, WAF Blocked, New Bans, Critical Events |
+| Seuil de Severite | Filtre par niveau: Critical, High, Medium, Low |
+| Templates HTML | Emails professionnels avec branding VIGILANCE X |
+
+#### Nouveaux Fichiers Backend
+
+| Fichier | Description |
+|---------|-------------|
+| `entity/notification.go` | Entites SMTP, NotificationSettings, EmailNotification |
+| `adapter/external/smtp/client.go` | Client SMTP avec TLS/SSL support |
+| `adapter/external/smtp/templates.go` | Templates HTML pour emails |
+| `usecase/notifications/service.go` | Service de notification |
+| `usecase/notifications/scheduler.go` | Scheduler pour rapports programmes |
+| `usecase/notifications/triggers.go` | Gestionnaire d'alertes temps-reel |
+| `handlers/notifications.go` | Handlers HTTP |
+
+#### Nouveaux Endpoints API
+
+```
+GET  /api/v1/notifications/settings     - Recuperer les parametres
+PUT  /api/v1/notifications/settings     - Mettre a jour les parametres
+POST /api/v1/notifications/test-email   - Envoyer email test
+GET  /api/v1/notifications/status       - Statut SMTP
+```
+
+#### Variables d'Environnement
+
+```bash
+SMTP_HOST=smtp.office365.com
+SMTP_PORT=587
+SMTP_SECURITY=tls
+SMTP_FROM_EMAIL=vigilancex@company.com
+SMTP_USERNAME=user@company.com
+SMTP_PASSWORD=password
+SMTP_RECIPIENTS=admin@company.com,soc@company.com
+```
+
+#### Fichiers Modifies
+
+**Backend:**
+- `config/config.go` - Ajout SMTPConfig struct et bindings env vars
+- `handlers/config.go` - Ajout test SMTP dans testIntegration()
+- `cmd/api/main.go` - Init SMTP client, notification service, scheduler, routes
+
+**Frontend:**
+- `lib/api.ts` - Ajout notificationsApi et types
+- `pages/Settings.tsx` - Nouvelle section Email Notifications
+
+---
+
 ## [3.2.102] - 2026-01-10
 
 ### WAF Explorer - Amelioration Navigation Temporelle

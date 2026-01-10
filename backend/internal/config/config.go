@@ -19,6 +19,19 @@ type Config struct {
 	Admin       AdminConfig
 	License     LicenseConfig
 	OSINTProxy  OSINTProxyConfig
+	SMTP        SMTPConfig
+}
+
+// SMTPConfig holds SMTP email configuration
+type SMTPConfig struct {
+	Host       string
+	Port       int
+	Security   string // tls, ssl, none
+	FromEmail  string
+	Username   string
+	Password   string
+	Recipients []string
+	Timeout    time.Duration
 }
 
 // LicenseConfig holds license server configuration
@@ -213,6 +226,16 @@ func Load() (*Config, error) {
 			Timeout:   viper.GetDuration("OSINT_PROXY_TIMEOUT"),
 			RateLimit: viper.GetInt("OSINT_PROXY_RATE_LIMIT"),
 		},
+		SMTP: SMTPConfig{
+			Host:       viper.GetString("SMTP_HOST"),
+			Port:       viper.GetInt("SMTP_PORT"),
+			Security:   viper.GetString("SMTP_SECURITY"),
+			FromEmail:  viper.GetString("SMTP_FROM_EMAIL"),
+			Username:   viper.GetString("SMTP_USERNAME"),
+			Password:   viper.GetString("SMTP_PASSWORD"),
+			Recipients: viper.GetStringSlice("SMTP_RECIPIENTS"),
+			Timeout:    viper.GetDuration("SMTP_TIMEOUT"),
+		},
 	}
 
 	return config, nil
@@ -294,6 +317,16 @@ func bindEnvVars() {
 	viper.BindEnv("OSINT_PROXY_URL")
 	viper.BindEnv("OSINT_PROXY_TIMEOUT")
 	viper.BindEnv("OSINT_PROXY_RATE_LIMIT")
+
+	// SMTP
+	viper.BindEnv("SMTP_HOST")
+	viper.BindEnv("SMTP_PORT")
+	viper.BindEnv("SMTP_SECURITY")
+	viper.BindEnv("SMTP_FROM_EMAIL")
+	viper.BindEnv("SMTP_USERNAME")
+	viper.BindEnv("SMTP_PASSWORD")
+	viper.BindEnv("SMTP_RECIPIENTS")
+	viper.BindEnv("SMTP_TIMEOUT")
 }
 
 func setDefaults() {
@@ -354,6 +387,12 @@ func setDefaults() {
 	viper.SetDefault("OSINT_PROXY_ENABLED", false)
 	viper.SetDefault("OSINT_PROXY_TIMEOUT", 30*time.Second)
 	viper.SetDefault("OSINT_PROXY_RATE_LIMIT", 60)
+
+	// SMTP defaults
+	viper.SetDefault("SMTP_HOST", "")
+	viper.SetDefault("SMTP_PORT", 587)
+	viper.SetDefault("SMTP_SECURITY", "tls")
+	viper.SetDefault("SMTP_TIMEOUT", 30*time.Second)
 }
 
 func (c *Config) IsDevelopment() bool {

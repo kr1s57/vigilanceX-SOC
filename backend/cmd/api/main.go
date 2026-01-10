@@ -16,6 +16,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/external/blocklist"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geoip"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
+	"github.com/kr1s57/vigilancex/internal/adapter/external/smtp"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
 	sophosparser "github.com/kr1s57/vigilancex/internal/adapter/parser/sophos"
@@ -28,6 +29,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/events"
 	"github.com/kr1s57/vigilancex/internal/usecase/geoblocking"
 	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
+	"github.com/kr1s57/vigilancex/internal/usecase/notifications"
 	"github.com/kr1s57/vigilancex/internal/usecase/reports"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
 
@@ -252,6 +254,24 @@ func main() {
 		logger.Info("Sophos XGS Parser not configured - scenarios directory not found", "dir", scenariosDir)
 	}
 
+	// Initialize SMTP client for email notifications
+	var smtpClient *smtp.Client
+	if cfg.SMTP.Host != "" {
+		smtpClient = smtp.NewClient(smtp.Config{
+			Host:       cfg.SMTP.Host,
+			Port:       cfg.SMTP.Port,
+			Security:   cfg.SMTP.Security,
+			FromEmail:  cfg.SMTP.FromEmail,
+			Username:   cfg.SMTP.Username,
+			Password:   cfg.SMTP.Password,
+			Recipients: cfg.SMTP.Recipients,
+			Timeout:    cfg.SMTP.Timeout,
+		}, logger)
+		logger.Info("SMTP client initialized", "host", cfg.SMTP.Host, "port", cfg.SMTP.Port)
+	} else {
+		logger.Info("SMTP client not configured - email notifications disabled")
+	}
+
 	// Initialize services
 	eventsService := events.NewService(eventsRepo, logger)
 	eventsService.SetGeoProvider(&geoProviderAdapter{geoService: geoService})
@@ -261,6 +281,12 @@ func main() {
 	blocklistsService := blocklists.NewService(feedIngester)
 	geoblockingService := geoblocking.NewService(geoblockingRepo, geoIPClient) // v2.0: Geoblocking
 	authService := auth.NewService(usersRepo, cfg, logger)                     // v2.6: Authentication
+	notificationService := notifications.NewService(smtpClient, logger)        // v3.3: Email notifications
+
+	// Initialize notification scheduler (for daily/weekly/monthly reports)
+	notificationScheduler := notifications.NewScheduler(notificationService, nil, logger)
+	notificationService.SetScheduler(notificationScheduler)
+	notificationScheduler.Start()
 
 	// Ensure default admin user exists (v2.6)
 	if err := authService.EnsureDefaultAdmin(context.Background()); err != nil {
@@ -281,6 +307,7 @@ func main() {
 	usersHandler := handlers.NewUsersHandler(authService, logger)            // v2.6: User management
 	licenseHandler := handlers.NewLicenseHandler(licenseClient)              // v2.9: License management
 	parserHandler := handlers.NewParserHandler(xgsParser)                    // v3.1: XGS Parser
+	notificationHandler := handlers.NewNotificationHandler(notificationService) // v3.3: Email notifications
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -575,6 +602,14 @@ func main() {
 				r.Get("/mitre", parserHandler.GetMitreCoverage)
 				r.Post("/test", parserHandler.TestParse)
 			})
+
+			// Notifications (v3.3 - Email notifications)
+			r.Route("/notifications", func(r chi.Router) {
+				r.Get("/settings", notificationHandler.GetSettings)
+				r.Put("/settings", notificationHandler.UpdateSettings)
+				r.Post("/test-email", notificationHandler.SendTestEmail)
+				r.Get("/status", notificationHandler.GetStatus)
+			})
 		})
 	})
 
@@ -611,6 +646,12 @@ func main() {
 	if heartbeatService != nil {
 		heartbeatService.Stop()
 		logger.Info("License heartbeat service stopped")
+	}
+
+	// v3.3: Stop notification scheduler
+	if notificationScheduler != nil {
+		notificationScheduler.Stop()
+		logger.Info("Notification scheduler stopped")
 	}
 
 	// Stop Feed Ingester

@@ -760,6 +760,54 @@ export const licenseApi = {
   },
 }
 
+// Notification Settings Types (v3.3)
+export interface NotificationSettings {
+  smtp_configured: boolean
+  daily_report_enabled: boolean
+  daily_report_time: string
+  weekly_report_enabled: boolean
+  weekly_report_day: number
+  weekly_report_time: string
+  monthly_report_enabled: boolean
+  monthly_report_day: number
+  monthly_report_time: string
+  waf_detection_enabled: boolean
+  waf_blocked_enabled: boolean
+  new_ban_enabled: boolean
+  critical_alert_enabled: boolean
+  min_severity_level: string
+  specific_event_ids: string[]
+}
+
+export interface NotificationStatus {
+  configured: boolean
+  status: string
+  host: string
+}
+
+// Notifications API (v3.3 - Email notifications)
+export const notificationsApi = {
+  getSettings: async (): Promise<NotificationSettings> => {
+    const response = await api.get<NotificationSettings>('/notifications/settings')
+    return response.data
+  },
+
+  updateSettings: async (settings: Partial<NotificationSettings>): Promise<{ success: boolean; message: string; settings: NotificationSettings }> => {
+    const response = await api.put<{ success: boolean; message: string; settings: NotificationSettings }>('/notifications/settings', settings)
+    return response.data
+  },
+
+  sendTestEmail: async (recipients?: string[]): Promise<{ success: boolean; message: string }> => {
+    const response = await api.post<{ success: boolean; message: string }>('/notifications/test-email', { recipients })
+    return response.data
+  },
+
+  getStatus: async (): Promise<NotificationStatus> => {
+    const response = await api.get<NotificationStatus>('/notifications/status')
+    return response.data
+  },
+}
+
 // Soft Whitelist API (v2.0)
 export const softWhitelistApi = {
   // List all whitelisted IPs (optional filter by type)

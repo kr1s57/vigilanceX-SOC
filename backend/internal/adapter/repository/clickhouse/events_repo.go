@@ -605,6 +605,18 @@ func (r *EventsRepository) GetZoneTraffic(ctx context.Context, period string, li
 		limit = 20
 	}
 
+	// First check if src_zone column exists (migration 006 may not be applied)
+	checkQuery := `SELECT count() FROM system.columns WHERE database = 'vigilance_x' AND table = 'events' AND name = 'src_zone'`
+	var columnExists uint64
+	if err := r.conn.QueryRow(ctx, checkQuery).Scan(&columnExists); err != nil || columnExists == 0 {
+		// Column doesn't exist - return empty stats instead of error
+		return &entity.ZoneTrafficStats{
+			Flows:       []entity.ZoneTraffic{},
+			TotalFlows:  0,
+			UniqueZones: []string{},
+		}, nil
+	}
+
 	// Query zone traffic flows
 	query := `
 		SELECT

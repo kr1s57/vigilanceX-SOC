@@ -129,6 +129,8 @@ func (h *ConfigHandler) testIntegration(pluginID string, fields map[string]strin
 		return h.testSophosSSH(fields)
 	case "abuseipdb", "virustotal", "alienvault", "greynoise", "criminalip", "pulsedive":
 		return h.testThreatIntelAPI(pluginID, fields)
+	case "smtp":
+		return h.testSMTP(fields)
 	default:
 		return ConfigTestResponse{
 			Success: false,
@@ -287,6 +289,59 @@ func (h *ConfigHandler) testThreatIntelAPI(pluginID string, fields map[string]st
 	return ConfigTestResponse{
 		Success: true,
 		Message: fmt.Sprintf("%s API key configured (format valid)", apiName),
+		Status:  "connected",
+	}
+}
+
+// testSMTP tests SMTP server connection
+func (h *ConfigHandler) testSMTP(fields map[string]string) ConfigTestResponse {
+	host := fields["SMTP_HOST"]
+	port := fields["SMTP_PORT"]
+	security := fields["SMTP_SECURITY"]
+	username := fields["SMTP_USERNAME"]
+	password := fields["SMTP_PASSWORD"]
+
+	if host == "" {
+		return ConfigTestResponse{
+			Success: false,
+			Message: "SMTP host is required",
+			Status:  "invalid",
+		}
+	}
+
+	if port == "" {
+		port = "587"
+	}
+
+	if security == "" {
+		security = "tls"
+	}
+
+	// Test TCP connection first
+	address := fmt.Sprintf("%s:%s", host, port)
+	conn, err := net.DialTimeout("tcp", address, 10*time.Second)
+	if err != nil {
+		return ConfigTestResponse{
+			Success: false,
+			Message: fmt.Sprintf("Cannot connect to SMTP server %s: %v", address, err),
+			Status:  "failed",
+		}
+	}
+	conn.Close()
+
+	// If credentials provided, we could do a full auth test
+	// For now, just verify connectivity
+	if username != "" && password != "" {
+		return ConfigTestResponse{
+			Success: true,
+			Message: fmt.Sprintf("SMTP server %s reachable (credentials configured)", address),
+			Status:  "connected",
+		}
+	}
+
+	return ConfigTestResponse{
+		Success: true,
+		Message: fmt.Sprintf("SMTP server %s reachable (no credentials configured)", address),
 		Status:  "connected",
 	}
 }

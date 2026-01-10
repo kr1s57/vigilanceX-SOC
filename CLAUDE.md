@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.2.102 | **Derniere mise a jour**: 2026-01-10
+> **Version**: 3.3.100 | **Derniere mise a jour**: 2026-01-10
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -704,6 +704,21 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.3.100 (2026-01-10)
+- **SMTP Email Notifications**: Nouvelle integration complete
+- Configuration SMTP avec support TLS/SSL, Office365 par defaut
+- Rapports programmes: Daily, Weekly, Monthly avec choix horaire
+- Alertes temps-reel: WAF Detection/Blocked, New Bans, Critical Events
+- Seuil de severite configurable (Critical/High/Medium/Low)
+- Templates HTML professionnels pour tous les emails
+- Nouvelle section "Email Notifications" dans Settings
+- Nouveaux endpoints: /notifications/settings, /test-email, /status
+
+### v3.2.102 (2026-01-10)
+- WAF Explorer: Selecteur periode (7d/14d/30d) et date picker
+- Auto-expansion de tous les jours par defaut
+- Fix Zone Traffic API 500 (check colonne existence)
 
 ### v3.2.101 (2026-01-10)
 - **Bug Fix Session**: 6 corrections UX et stabilite

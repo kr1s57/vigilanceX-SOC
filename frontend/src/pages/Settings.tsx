@@ -34,10 +34,12 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  Mail,
+  Send,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, type LicenseStatus } from '@/lib/api'
+import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, type LicenseStatus, type NotificationSettings } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ThreatProvider {
@@ -149,6 +151,20 @@ const defaultPluginConfigs: PluginConfig[] = [
       { key: 'PULSEDIVE_API_KEY', label: 'API Key', type: 'password', value: '', placeholder: 'Enter API key...' },
     ],
   },
+  {
+    id: 'smtp',
+    name: 'SMTP Email',
+    type: 'email' as any,
+    fields: [
+      { key: 'SMTP_HOST', label: 'SMTP Server', type: 'text', value: '', placeholder: 'smtp.office365.com' },
+      { key: 'SMTP_PORT', label: 'Port', type: 'number', value: '587', placeholder: '587' },
+      { key: 'SMTP_SECURITY', label: 'Security', type: 'text', value: 'tls', placeholder: 'tls, ssl, or none' },
+      { key: 'SMTP_FROM_EMAIL', label: 'From Email', type: 'text', value: '', placeholder: 'noreply@company.com' },
+      { key: 'SMTP_USERNAME', label: 'Username', type: 'text', value: '', placeholder: 'user@company.com' },
+      { key: 'SMTP_PASSWORD', label: 'Password', type: 'password', value: '', placeholder: '********' },
+      { key: 'SMTP_RECIPIENTS', label: 'Recipients', type: 'text', value: '', placeholder: 'admin@company.com, soc@company.com' },
+    ],
+  },
 ]
 
 export function Settings() {
@@ -162,11 +178,19 @@ export function Settings() {
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [loadingLicense, setLoadingLicense] = useState(true)
 
+  // Email notification settings state
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null)
+  const [loadingNotifSettings, setLoadingNotifSettings] = useState(true)
+  const [savingNotifSettings, setSavingNotifSettings] = useState(false)
+  const [sendingTestEmail, setSendingTestEmail] = useState(false)
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null)
+
   // Collapsible sections state - all collapsed by default
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     display: true,
     dashboard: true,
     notifications: true,
+    email_notifications: true,
     security: true,
     license: true,
     integrations: true,
@@ -180,7 +204,7 @@ export function Settings() {
   }
 
   const toggleAllSections = (collapse: boolean) => {
-    const sections = ['display', 'dashboard', 'notifications', 'security', 'license', 'integrations']
+    const sections = ['display', 'dashboard', 'notifications', 'email_notifications', 'security', 'license', 'integrations']
     setCollapsedSections(
       sections.reduce((acc, section) => ({ ...acc, [section]: collapse }), {})
     )
@@ -259,6 +283,63 @@ export function Settings() {
 
     fetchLicenseStatus()
   }, [])
+
+  // Fetch notification settings
+  useEffect(() => {
+    async function fetchNotificationSettings() {
+      setLoadingNotifSettings(true)
+      try {
+        const settings = await notificationsApi.getSettings()
+        setNotifSettings(settings)
+      } catch (err) {
+        console.error('Failed to fetch notification settings:', err)
+      } finally {
+        setLoadingNotifSettings(false)
+      }
+    }
+
+    fetchNotificationSettings()
+  }, [])
+
+  // Handle notification settings change
+  const handleNotifSettingChange = async <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => {
+    if (!notifSettings) return
+
+    const newSettings = { ...notifSettings, [key]: value }
+    setNotifSettings(newSettings)
+
+    setSavingNotifSettings(true)
+    try {
+      await notificationsApi.updateSettings({ [key]: value })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to update notification setting:', err)
+      // Revert on error
+      setNotifSettings(notifSettings)
+    } finally {
+      setSavingNotifSettings(false)
+    }
+  }
+
+  // Handle send test email
+  const handleSendTestEmail = async () => {
+    setSendingTestEmail(true)
+    setTestEmailResult(null)
+    try {
+      const result = await notificationsApi.sendTestEmail()
+      setTestEmailResult(result)
+      setTimeout(() => setTestEmailResult(null), 5000)
+    } catch (err: any) {
+      setTestEmailResult({
+        success: false,
+        message: err.response?.data?.error || 'Failed to send test email'
+      })
+      setTimeout(() => setTestEmailResult(null), 5000)
+    } finally {
+      setSendingTestEmail(false)
+    }
+  }
 
   // Show saved indicator
   const handleChange = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
@@ -585,6 +666,275 @@ export function Settings() {
             disabled={!settings.notificationsEnabled}
           />
         </SettingRow>
+      </SettingsSection>
+
+      {/* Email Notifications (v3.3) */}
+      <SettingsSection
+        title="Email Notifications"
+        description="SMTP configuration and scheduled email alerts"
+        icon={<Mail className="w-5 h-5" />}
+        isCollapsed={collapsedSections['email_notifications']}
+        onToggle={() => toggleSection('email_notifications')}
+      >
+        {loadingNotifSettings ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            {/* SMTP Status */}
+            <div className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="text-muted-foreground">
+                  <Server className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-medium">SMTP Server</p>
+                  <p className="text-sm text-muted-foreground">
+                    {notifSettings?.smtp_configured ? 'Configured' : 'Not configured'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {isAdmin && (
+                  <button
+                    onClick={() => handleEditPlugin('smtp')}
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                    title="Configure SMTP"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
+                <div
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
+                    notifSettings?.smtp_configured ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+                  )}
+                >
+                  {notifSettings?.smtp_configured ? (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Connected
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      Not configured
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Test Email Button */}
+            {notifSettings?.smtp_configured && (
+              <div className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-muted-foreground">
+                    <Send className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Send Test Email</p>
+                    <p className="text-sm text-muted-foreground">Verify email delivery</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {testEmailResult && (
+                    <span className={cn(
+                      'text-sm',
+                      testEmailResult.success ? 'text-green-500' : 'text-red-500'
+                    )}>
+                      {testEmailResult.message}
+                    </span>
+                  )}
+                  <button
+                    onClick={handleSendTestEmail}
+                    disabled={sendingTestEmail}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {sendingTestEmail ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                    {sendingTestEmail ? 'Sending...' : 'Send Test'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Scheduled Reports Section */}
+            <div className="px-6 py-3 bg-muted/30 border-t border-b">
+              <p className="text-sm font-medium text-muted-foreground">Scheduled Reports</p>
+            </div>
+
+            {/* Daily Report */}
+            <SettingRow
+              label="Daily Report"
+              description={`Send daily summary at ${notifSettings?.daily_report_time || '08:00'}`}
+              icon={<Calendar className="w-4 h-4" />}
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="time"
+                  value={notifSettings?.daily_report_time || '08:00'}
+                  onChange={(e) => handleNotifSettingChange('daily_report_time', e.target.value)}
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                  className="px-2 py-1 bg-background border rounded text-sm disabled:opacity-50"
+                />
+                <ToggleSwitch
+                  checked={notifSettings?.daily_report_enabled || false}
+                  onChange={(v) => handleNotifSettingChange('daily_report_enabled', v)}
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                />
+              </div>
+            </SettingRow>
+
+            {/* Weekly Report */}
+            <SettingRow
+              label="Weekly Report"
+              description="Send weekly summary"
+              icon={<Calendar className="w-4 h-4" />}
+            >
+              <div className="flex items-center gap-3">
+                <select
+                  value={notifSettings?.weekly_report_day ?? 1}
+                  onChange={(e) => handleNotifSettingChange('weekly_report_day', parseInt(e.target.value))}
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                  className="px-2 py-1 bg-background border rounded text-sm disabled:opacity-50"
+                >
+                  <option value={0}>Sunday</option>
+                  <option value={1}>Monday</option>
+                  <option value={2}>Tuesday</option>
+                  <option value={3}>Wednesday</option>
+                  <option value={4}>Thursday</option>
+                  <option value={5}>Friday</option>
+                  <option value={6}>Saturday</option>
+                </select>
+                <input
+                  type="time"
+                  value={notifSettings?.weekly_report_time || '08:00'}
+                  onChange={(e) => handleNotifSettingChange('weekly_report_time', e.target.value)}
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                  className="px-2 py-1 bg-background border rounded text-sm disabled:opacity-50"
+                />
+                <ToggleSwitch
+                  checked={notifSettings?.weekly_report_enabled || false}
+                  onChange={(v) => handleNotifSettingChange('weekly_report_enabled', v)}
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                />
+              </div>
+            </SettingRow>
+
+            {/* Monthly Report */}
+            <SettingRow
+              label="Monthly Report"
+              description="Send monthly summary"
+              icon={<Calendar className="w-4 h-4" />}
+            >
+              <div className="flex items-center gap-3">
+                <select
+                  value={notifSettings?.monthly_report_day ?? 1}
+                  onChange={(e) => handleNotifSettingChange('monthly_report_day', parseInt(e.target.value))}
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                  className="px-2 py-1 bg-background border rounded text-sm disabled:opacity-50"
+                >
+                  {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
+                    <option key={day} value={day}>Day {day}</option>
+                  ))}
+                </select>
+                <input
+                  type="time"
+                  value={notifSettings?.monthly_report_time || '08:00'}
+                  onChange={(e) => handleNotifSettingChange('monthly_report_time', e.target.value)}
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                  className="px-2 py-1 bg-background border rounded text-sm disabled:opacity-50"
+                />
+                <ToggleSwitch
+                  checked={notifSettings?.monthly_report_enabled || false}
+                  onChange={(v) => handleNotifSettingChange('monthly_report_enabled', v)}
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                />
+              </div>
+            </SettingRow>
+
+            {/* Real-time Alerts Section */}
+            <div className="px-6 py-3 bg-muted/30 border-t border-b">
+              <p className="text-sm font-medium text-muted-foreground">Real-time Alerts</p>
+            </div>
+
+            {/* WAF Detection */}
+            <SettingRow
+              label="WAF Detection"
+              description="Alert on WAF threat detection events"
+              icon={<Shield className="w-4 h-4" />}
+            >
+              <ToggleSwitch
+                checked={notifSettings?.waf_detection_enabled || false}
+                onChange={(v) => handleNotifSettingChange('waf_detection_enabled', v)}
+                disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+              />
+            </SettingRow>
+
+            {/* WAF Blocked */}
+            <SettingRow
+              label="WAF Blocked"
+              description="Alert when requests are blocked by WAF"
+              icon={<Shield className="w-4 h-4" />}
+            >
+              <ToggleSwitch
+                checked={notifSettings?.waf_blocked_enabled || false}
+                onChange={(v) => handleNotifSettingChange('waf_blocked_enabled', v)}
+                disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+              />
+            </SettingRow>
+
+            {/* New Bans */}
+            <SettingRow
+              label="New IP Bans"
+              description="Alert when new IPs are banned"
+              icon={<AlertTriangle className="w-4 h-4" />}
+            >
+              <ToggleSwitch
+                checked={notifSettings?.new_ban_enabled || false}
+                onChange={(v) => handleNotifSettingChange('new_ban_enabled', v)}
+                disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+              />
+            </SettingRow>
+
+            {/* Critical Alerts */}
+            <SettingRow
+              label="Critical Alerts"
+              description="Alert on critical security events"
+              icon={<AlertTriangle className="w-4 h-4" />}
+            >
+              <ToggleSwitch
+                checked={notifSettings?.critical_alert_enabled || false}
+                onChange={(v) => handleNotifSettingChange('critical_alert_enabled', v)}
+                disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+              />
+            </SettingRow>
+
+            {/* Severity Threshold */}
+            <SettingRow
+              label="Minimum Severity"
+              description="Only send alerts at or above this level"
+              icon={<Zap className="w-4 h-4" />}
+            >
+              <ToggleGroup
+                value={notifSettings?.min_severity_level || 'critical'}
+                onChange={(v) => handleNotifSettingChange('min_severity_level', v)}
+                options={[
+                  { value: 'critical', label: 'Critical' },
+                  { value: 'high', label: 'High' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'low', label: 'Low' },
+                ]}
+                disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+              />
+            </SettingRow>
+          </>
+        )}
       </SettingsSection>
 
       {/* Security Settings */}
@@ -973,7 +1323,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.2.102</p>
+        <p>VIGILANCE X v3.3.100</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
