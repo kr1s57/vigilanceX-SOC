@@ -446,6 +446,28 @@ Exemple :
 docker exec vigilance_backend /app/reset-password admin Admin12345
 ```
 
+## Versioning
+
+VIGILANCE X utilise un schema de versioning **X.Y.Z** :
+
+| Digit | Nom | Description |
+|-------|-----|-------------|
+| **X** | MAJOR | Montée de version majeure (sur demande explicite) |
+| **Y** | FEATURE | Ajout de fonctionnalités (+1 par feature) |
+| **Z** | BUGFIX | Corrections de bugs (commence à 100) |
+
+**Règles d'incrémentation :**
+
+```
+Bugfix    : X.Y.Z   → X.Y.Z+1     (ex: 3.2.105 → 3.2.106)
+Feature   : X.Y.Z   → X.Y+1.100   (ex: 3.2.106 → 3.3.100)
+Major     : X.Y.Z   → X+1.0.100   (ex: 3.10.115 → 4.0.100)
+```
+
+- Le digit BUGFIX (Z) **commence à 100** et s'incrémente pour chaque correction
+- Le digit BUGFIX **revient à 100** lors d'une montée FEATURE
+- Les digits FEATURE et BUGFIX **reviennent à 0 et 100** lors d'une montée MAJOR
+
 ## Licence
 
 MIT

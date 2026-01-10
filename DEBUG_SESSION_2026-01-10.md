@@ -1,8 +1,8 @@
 # DEBUG SESSION - 2026-01-10
 
-> **Status**: EN COURS
+> **Status**: TERMINEE ✓
 > **VPS**: vps-b3a1bf23 (51.210.4.99)
-> **Version**: 3.1.5
+> **Version**: 3.1.6
 
 ---
 
@@ -124,9 +124,9 @@ location /api/v1/ws {
 ## VERSIONS ACTUELLES SUR VPS
 
 ```yaml
-backend: ghcr.io/kr1s57/vigilancex-api:3.1.5
-frontend: ghcr.io/kr1s57/vigilancex-frontend:3.1.4  # rollback
-detect2ban: ghcr.io/kr1s57/vigilancex-detect2ban:3.1.5
+backend: ghcr.io/kr1s57/vigilancex-api:3.1.6
+frontend: ghcr.io/kr1s57/vigilancex-frontend:3.1.6
+detect2ban: ghcr.io/kr1s57/vigilancex-detect2ban:3.1.6
 ```
 
 ---
@@ -180,4 +180,24 @@ docker compose -f ~/vigilanceX-SOC/deploy/docker-compose.yml down && docker comp
 
 ---
 
-*Derniere mise a jour: 2026-01-10 15:05 UTC*
+## VERIFICATION FINALE (OK)
+
+### Repositories
+- **Git Private (vigilanceX)**: v3.1.6 tag, commit 6d2bb67
+- **Git Public (vigilanceX-SOC)**: v3.1.6 tag, commit 598506c
+- **GitHub Actions**: Build workflows passed
+
+### Servers
+- **VPS (51.210.4.99)**: Deploye v3.1.6, tous services healthy
+- **VigilanceKey (10.56.126.126)**: Operationnel, cert valide jusqu'en 2036
+
+### Tests
+- [x] License activation fonctionnelle
+- [x] WebSocket temps reel operationnel
+- [x] Dashboard affiche correctement
+- [x] APIs retournent [] au lieu de null
+- [x] Authentification persistante
+
+---
+
+*Session terminee: 2026-01-10 16:30 UTC*

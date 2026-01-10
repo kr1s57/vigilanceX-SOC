@@ -368,31 +368,40 @@ GREYNOISE_API_KEY=xxx
 6. **Documenter** les nouveaux endpoints dans README.md
 7. **Mettre a jour** CHANGELOG.md pour chaque version
 
-### Regles de Versioning (Semantic Versioning)
+### Regles de Versioning (X.Y.Z)
 
-Les projets **VigilanceX** et **VigilanceKey** suivent une numerotation stricte des versions:
+Les projets **VigilanceX** et **VigilanceKey** suivent une numerotation stricte des versions.
 
-| Type de changement | Increment | Exemple |
-|--------------------|-----------|---------|
-| **Bugfix / Changement mineur** | PATCH | 2.9.7 → 2.9.8 |
-| **Ajout de module / Modification majeure** | MAJOR | 2.9.7 → 3.0.0 |
+**Format**: `X.Y.Z` (exemple: `3.10.109`)
 
-**Montee PATCH** (X.Y.Z → X.Y.Z+1):
-- Corrections de bugs
-- Ameliorations mineures de code
-- Ajustements de configuration
-- Pack de bugfixes
+| Digit | Nom | Description | Reset |
+|-------|-----|-------------|-------|
+| **X** | MAJOR | Montee de version majeure (sur demande explicite) | - |
+| **Y** | FEATURE | Ajout de fonctionnalites, nouvelles features | → 0 lors d'un bump MAJOR |
+| **Z** | BUGFIX | Corrections de bugs, hotfixes (commence a 100) | → 100 lors d'un bump FEATURE |
 
-**Montee MAJOR** (X.Y.Z → X+1.0.0):
-- Ajout d'un nouveau module ou fonctionnalite majeure
-- Refactoring important du code
-- Changements d'architecture
-- Modifications cassant la compatibilite
+**Montee BUGFIX** (X.Y.Z → X.Y.Z+1):
+- Corrections de bugs et crashs
+- Hotfixes necessitant un rebuild
+- Exemple: `3.2.105` → `3.2.106`
+
+**Montee FEATURE** (X.Y.Z → X.Y+1.100):
+- Ajout de nouvelles fonctionnalites
+- Ameliorations significatives
+- Le digit BUGFIX revient a 100
+- Exemple: `3.2.106` → `3.3.100`
+
+**Montee MAJOR** (X.Y.Z → X+1.0.100):
+- Uniquement sur demande explicite de l'utilisateur
+- Changements majeurs d'architecture
+- Les digits FEATURE et BUGFIX reviennent a 0 et 100
+- Exemple: `3.10.115` → `4.0.100`
 
 > **Important**: A chaque release, mettre a jour:
 > - `CHANGELOG.md` - Historique des versions
 > - `frontend/src/pages/Settings.tsx` - Version affichee dans l'interface (ligne ~966)
 > - `CLAUDE.md` - Header du fichier (version et date)
+> - Tags git: `vX.Y.Z` sur les deux repos (private et public)
 
 ### Commandes Frequentes
 
