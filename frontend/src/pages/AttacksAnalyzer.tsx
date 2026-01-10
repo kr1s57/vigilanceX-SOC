@@ -35,6 +35,7 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import { IPThreatModal } from '@/components/IPThreatModal'
 import { formatNumber, getCountryFlag, cn, formatDateTime } from '@/lib/utils'
 import type { TopAttacker, BanStatus } from '@/types'
+import { useSettings } from '@/contexts/SettingsContext'
 
 interface RuleStats {
   rule_id: string
@@ -539,6 +540,7 @@ function AttackersModal({
 
 export function AttacksAnalyzer() {
   const [searchParams] = useSearchParams()
+  const { shouldShowIP } = useSettings()
   const [period, setPeriod] = useState('24h')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -566,9 +568,9 @@ export function AttacksAnalyzer() {
           modsecApi.getAttackTypeStats(period),
           statsApi.topAttackers(period, 100), // Fetch more for the modal
         ])
-        setRuleStats(rules)
-        setAttackTypeStats(attacks)
-        setTopAttackers(attackersData)
+        setRuleStats(rules || [])
+        setAttackTypeStats(attacks || [])
+        setTopAttackers(attackersData || [])
       } catch (err) {
         setError('Failed to load attack data')
         console.error(err)
@@ -582,13 +584,18 @@ export function AttacksAnalyzer() {
     return () => clearInterval(interval)
   }, [period])
 
+  // Filter attackers based on hideSystemIPs setting (filters 0.0.0.0, etc.)
+  const filteredTopAttackers = useMemo(() => {
+    return topAttackers.filter(a => shouldShowIP(a.ip))
+  }, [topAttackers, shouldShowIP])
+
   // Calculate summary stats
   const summaryStats = useMemo(() => {
     const totalTriggers = ruleStats.reduce((sum, r) => sum + r.trigger_count, 0)
     const uniqueRules = ruleStats.length
     const totalAttackTypes = attackTypeStats.length
     const topAttackType = attackTypeStats.length > 0 ? attackTypeStats[0] : null
-    const totalUniqueIPs = new Set(topAttackers.map(a => a.ip)).size
+    const totalUniqueIPs = new Set(filteredTopAttackers.map(a => a.ip)).size
 
     return {
       totalTriggers,
@@ -597,7 +604,7 @@ export function AttacksAnalyzer() {
       topAttackType,
       totalUniqueIPs,
     }
-  }, [ruleStats, attackTypeStats, topAttackers])
+  }, [ruleStats, attackTypeStats, filteredTopAttackers])
 
   // Prepare chart data
   const pieChartData = useMemo(() => {
@@ -894,7 +901,7 @@ export function AttacksAnalyzer() {
             </button>
           </div>
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {topAttackers.slice(0, 10).map((attacker, index) => (
+            {filteredTopAttackers.slice(0, 10).map((attacker, index) => (
               <div
                 key={attacker.ip}
                 className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
@@ -944,7 +951,7 @@ export function AttacksAnalyzer() {
                 </div>
               </div>
             ))}
-            {topAttackers.length === 0 && (
+            {filteredTopAttackers.length === 0 && (
               <p className="text-muted-foreground text-center py-4">No attacker data available</p>
             )}
           </div>
@@ -1031,7 +1038,7 @@ export function AttacksAnalyzer() {
       <AttackersModal
         isOpen={showAttackersModal}
         onClose={() => setShowAttackersModal(false)}
-        attackers={topAttackers}
+        attackers={filteredTopAttackers}
         period={period}
         onIPLookup={handleIPLookup}
       />

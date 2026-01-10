@@ -167,8 +167,8 @@ func (h *ModSecHandler) GetGroupedLogs(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit <= 0 || limit > 100 {
-		limit = 25
+	if limit <= 0 || limit > 500 {
+		limit = 100
 	}
 	offset, _ := strconv.Atoi(q.Get("offset"))
 

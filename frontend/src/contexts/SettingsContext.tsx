@@ -155,6 +155,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Check if an IP should be shown (based on settings and whitelist)
   const shouldShowIP = useCallback((ip: string): boolean => {
     if (!settings.hideSystemIPs) return true
+    // Filter invalid/system IPs (0.0.0.0, localhost, etc.)
+    if (ip === '0.0.0.0' || ip === '127.0.0.1' || ip === '::1' || ip === '') return false
     return !systemWhitelistIPs.includes(ip)
   }, [settings.hideSystemIPs, systemWhitelistIPs])
 

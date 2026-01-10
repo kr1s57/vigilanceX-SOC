@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.2.100 | **Derniere mise a jour**: 2026-01-10
+> **Version**: 3.2.101 | **Derniere mise a jour**: 2026-01-10
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -367,6 +367,43 @@ GREYNOISE_API_KEY=xxx
 5. **Ne pas ajouter** de nouvelles dependances sans justification
 6. **Documenter** les nouveaux endpoints dans README.md
 7. **Mettre a jour** CHANGELOG.md pour chaque version
+8. **Documenter** les bugs dans `docs/BUGFIX-KB.md` pour la KB
+
+### Gestion des Bugs (BUGFIX-KB)
+
+Apres chaque session de debug, documenter les corrections dans `docs/BUGFIX-KB.md`:
+
+**Structure d'une entree bug:**
+```markdown
+### [BUG-XXXX] Titre court
+
+**Date**: YYYY-MM-DD
+**Version**: vX.Y.Z
+**Severite**: Critical | High | Medium | Low
+**Composant**: Frontend | Backend | Infrastructure
+**Fichiers affectes**: Liste des fichiers
+
+#### Symptome
+Description du comportement observe.
+
+#### Cause Racine
+Explication technique du pourquoi.
+
+#### Solution
+Description de la correction avec code avant/apres.
+
+#### Lecons Apprises
+- Points cles pour eviter ce bug a l'avenir
+
+#### Tags
+`#composant` `#type-bug` `#technologie`
+```
+
+**Patterns recurrents documentes:**
+1. Persistance filtres → `sessionStorage`
+2. Null safety API → `data || []`
+3. Filtrage centralise → `shouldShowIP()` dans Context
+4. Conversion period → `getStartTimeFromPeriod()`
 
 ### Regles de Versioning (X.Y.Z)
 
@@ -667,6 +704,16 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.2.101 (2026-01-10)
+- **Bug Fix Session**: 6 corrections UX et stabilite
+- Dashboard: Persistance filtre temps via sessionStorage
+- Attack Analyzer: Filtrage IPs systeme (0.0.0.0, 127.0.0.1)
+- WAF Explorer: Limite augmentee (500) + bouton "Load More"
+- VPN Page: start_time passe a eventsApi pour filtrage correct
+- Settings: Nouveau plugin Syslog avec bouton edition IP
+- Pages vides: Gestion defensive null sur APIs (serveur test)
+- **Documentation**: Nouveau fichier `docs/BUGFIX-KB.md` pour KB
 
 ### v3.2.100 (2026-01-10)
 - **Fresh Deploy System**: Workflow semi-automatise "Request & Sync"

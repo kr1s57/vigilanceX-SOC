@@ -66,8 +66,9 @@ export function WafExplorer() {
   const { shouldShowIP } = useSettings()
   const [searchParams] = useSearchParams()
   const [requests, setRequests] = useState<ModSecRequestGroup[]>([])
-  const [pagination, setPagination] = useState({ total: 0, limit: 100, offset: 0, has_more: false })
+  const [pagination, setPagination] = useState({ total: 0, limit: 500, offset: 0, has_more: false })
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState(searchParams.get('src_ip') || '')
   const [hostname, setHostname] = useState('')
   const [attackType, setAttackType] = useState('')
@@ -104,7 +105,7 @@ export function WafExplorer() {
         }
         const response = await modsecApi.getGroupedLogs(filters)
         setRequests(response.data || [])
-        setPagination(response.pagination || { total: 0, limit: 100, offset: 0, has_more: false })
+        setPagination(response.pagination || { total: 0, limit: 500, offset: 0, has_more: false })
       } catch (err) {
         console.error('Failed to fetch ModSec logs:', err)
         setRequests([])
@@ -183,13 +184,34 @@ export function WafExplorer() {
       }
       const response = await modsecApi.getGroupedLogs(filters)
       setRequests(response.data || [])
-      setPagination(response.pagination || { total: 0, limit: 100, offset: 0, has_more: false })
+      setPagination(response.pagination || { total: 0, limit: 500, offset: 0, has_more: false })
       const status = await modsecApi.getStats()
       setSyncStatus(status)
     } catch (err) {
       console.error('Sync failed:', err)
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const loadMore = async () => {
+    if (!pagination.has_more || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const filters: ModSecLogFilters = {
+        hostname: hostname || undefined,
+        attack_type: attackType || undefined,
+        search: search || undefined,
+        limit: pagination.limit,
+        offset: pagination.offset + pagination.limit,
+      }
+      const response = await modsecApi.getGroupedLogs(filters)
+      setRequests(prev => [...prev, ...(response.data || [])])
+      setPagination(response.pagination || { total: 0, limit: 500, offset: 0, has_more: false })
+    } catch (err) {
+      console.error('Failed to load more:', err)
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -526,6 +548,25 @@ export function WafExplorer() {
                 )}
               </div>
             ))}
+            {/* Load More button for grouped view */}
+            {pagination.has_more && (
+              <div className="flex justify-center py-4 border-t">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loadingMore ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                      Loading...
+                    </>
+                  ) : (
+                    <>Load older logs ({pagination.total - requests.length} remaining)</>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           /* Flat List View */

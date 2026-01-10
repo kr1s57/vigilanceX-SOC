@@ -90,9 +90,9 @@ export function AdvancedThreat() {
           threatsApi.providers(),
           threatsApi.list(50),
         ])
-        setStats(statsData)
-        setProviders(providersData)
-        setThreats(threatsData)
+        setStats(statsData || null)
+        setProviders(providersData || [])
+        setThreats(threatsData || [])
       } catch (err) {
         setError('Failed to load threat data')
         console.error(err)

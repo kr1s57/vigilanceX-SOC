@@ -23,10 +23,19 @@ export function Dashboard() {
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
   const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlert[]>([])
-  const [period, setPeriod] = useState<Period>(settings.defaultPeriod)
+  // Persist time filter in sessionStorage (resets on new browser session)
+  const [period, setPeriod] = useState<Period>(() => {
+    const stored = sessionStorage.getItem('dashboard_timeRange')
+    return (stored as Period) || settings.defaultPeriod
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAlertsModal, setShowAlertsModal] = useState(false)
+
+  // Save period to sessionStorage when it changes
+  useEffect(() => {
+    sessionStorage.setItem('dashboard_timeRange', period)
+  }, [period])
 
   useEffect(() => {
     async function fetchData() {

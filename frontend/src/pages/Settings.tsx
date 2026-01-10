@@ -63,6 +63,15 @@ interface PluginConfig {
 // Plugin configurations (would come from backend in production)
 const defaultPluginConfigs: PluginConfig[] = [
   {
+    id: 'sophos_syslog',
+    name: 'Sophos XGS - Syslog',
+    type: 'syslog',
+    fields: [
+      { key: 'SYSLOG_SOURCE_IP', label: 'Firewall IP', type: 'text', value: '', placeholder: '10.56.125.254' },
+      { key: 'SYSLOG_PORT', label: 'Syslog Port (TCP)', type: 'number', value: '1514', placeholder: '1514' },
+    ],
+  },
+  {
     id: 'sophos_api',
     name: 'Sophos XGS - API',
     type: 'sophos',
@@ -808,6 +817,7 @@ export function Settings() {
               }
               connected={integrations?.sophosSyslog.connected || false}
               icon={<Server className="w-4 h-4" />}
+              onEdit={isAdmin ? () => handleEditPlugin('sophos_syslog') : undefined}
             />
 
             {/* Sophos XGS SSH */}
@@ -963,7 +973,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.2.100</p>
+        <p>VIGILANCE X v3.2.101</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

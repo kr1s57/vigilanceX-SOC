@@ -4,6 +4,46 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.2.101] - 2026-01-10
+
+### Bug Fix Session - 6 Corrections
+
+Session de debug resolvent 6 bugs UX et stabilite. Voir `/docs/BUGFIX-KB.md` pour details techniques.
+
+#### Bug Fixes
+
+| Bug | Description | Composant |
+|-----|-------------|-----------|
+| BUG-001 | Dashboard: Filtre temps ne persiste pas apres refresh | Frontend |
+| BUG-002 | Attack Analyzer: Affichage IPs 0.0.0.0 (logs firewall) | Frontend |
+| BUG-003 | WAF Explorer: Limite aux 2 derniers jours seulement | Frontend + Backend |
+| BUG-004 | VPN Page: Compteurs statiques (ne changent pas avec filtre) | Frontend |
+| BUG-005 | Settings: Manque bouton edition IP XGS Syslog | Frontend |
+| BUG-006 | Pages vides Attack Analyzer/Adv Threat (serveur test) | Frontend |
+
+#### Fichiers Modifies
+
+**Frontend:**
+- `src/pages/Dashboard.tsx` - sessionStorage pour filtre temps
+- `src/pages/AttacksAnalyzer.tsx` - Filtrage IPs + null safety
+- `src/pages/AdvancedThreat.tsx` - Null safety sur APIs
+- `src/pages/WafExplorer.tsx` - Limite 500, bouton Load More
+- `src/pages/VpnNetwork.tsx` - start_time sur eventsApi
+- `src/pages/Settings.tsx` - Plugin sophos_syslog + bouton edit
+- `src/contexts/SettingsContext.tsx` - Filtrage IPs 0.0.0.0
+
+**Backend:**
+- `internal/adapter/controller/http/handlers/modsec.go` - Limite max 500
+
+#### Patterns Identifies
+
+1. **Persistance filtres**: Utiliser `sessionStorage` pour persistance par session
+2. **Null safety**: Toujours `data || []` pour les reponses API
+3. **Filtrage centralise**: `shouldShowIP()` dans SettingsContext
+4. **Conversion period**: Helper `getStartTimeFromPeriod()` pour APIs
+
+---
+
 ## [3.2.100] - 2026-01-10
 
 ### Fresh Deploy System - License "Request & Sync"

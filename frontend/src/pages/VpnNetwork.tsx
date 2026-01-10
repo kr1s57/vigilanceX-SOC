@@ -36,6 +36,23 @@ const LOG_TYPE_COLORS: Record<string, string> = {
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
+// Helper to convert period to start_time ISO string
+function getStartTimeFromPeriod(period: Period): string {
+  const now = new Date()
+  switch (period) {
+    case '1h':
+      return new Date(now.getTime() - 60 * 60 * 1000).toISOString()
+    case '24h':
+      return new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+    case '7d':
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    case '30d':
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    default:
+      return new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+  }
+}
+
 interface VPNSession {
   user: string
   src_ip: string
@@ -224,12 +241,13 @@ export function VpnNetwork() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
+      const startTime = getStartTimeFromPeriod(period)
       try {
         const [overviewRes, vpnRes, firewallRes, ipsRes, geoRes] = await Promise.all([
           statsApi.overview(period),
-          eventsApi.list({ log_type: 'VPN', limit: 100 }),
-          eventsApi.list({ log_type: 'Firewall', limit: 100 }),
-          eventsApi.list({ log_type: 'IPS', limit: 50 }),
+          eventsApi.list({ log_type: 'VPN', limit: 100, start_time: startTime }),
+          eventsApi.list({ log_type: 'Firewall', limit: 100, start_time: startTime }),
+          eventsApi.list({ log_type: 'IPS', limit: 50, start_time: startTime }),
           geoApi.heatmap(period),
         ])
         setOverview(overviewRes)
