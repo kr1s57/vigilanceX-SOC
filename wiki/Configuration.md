@@ -51,7 +51,7 @@ All configuration is done via the `deploy/.env` file.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LICENSE_KEY` | | Your license key |
-| `LICENSE_SERVER_URL` | https://vigilancexkey.cloudcomputing.lu | License server |
+| `LICENSE_SERVER_URL` | https://vigilancexkey.cloudcomputing.lu:38443 | License server |
 | `LICENSE_GRACE_PERIOD` | 72h | Offline grace period |
 | `LICENSE_HEARTBEAT_INTERVAL` | 12h | License check interval |
 

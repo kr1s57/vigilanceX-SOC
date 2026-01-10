@@ -113,7 +113,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-VigilanceX2024!}
       # License System (v3.0)
       LICENSE_ENABLED: "true"
-      LICENSE_SERVER_URL: https://vigilancexkey.cloudcomputing.lu
+      LICENSE_SERVER_URL: https://vigilancexkey.cloudcomputing.lu:38443
       LICENSE_KEY: ${LICENSE_KEY:-}
       LICENSE_GRACE_PERIOD: 72h
       # Threat Intelligence (Phase 1: Hybrid - client keys optional)
