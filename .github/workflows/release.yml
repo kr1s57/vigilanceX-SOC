@@ -43,8 +43,10 @@ jobs:
           mkdir -p ../build
 
           # Build API with Garble obfuscation
+          # Note: -tiny removed - causes "fatal: bad g in signal handler" due to
+          # stripped runtime info needed for Go's signal handling
           echo "Building API with Garble..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 garble -literals -tiny -seed=random build \
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 garble -literals -seed=random build \
             -ldflags="-w -s -X main.version=${{ steps.version.outputs.VERSION }} -X main.buildTime=$(date -u +%Y%m%d%H%M%S)" \
             -trimpath \
             -o ../build/vigilancex-api-linux-amd64 \
@@ -52,7 +54,7 @@ jobs:
 
           # Build Detect2Ban with Garble
           echo "Building Detect2Ban with Garble..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 garble -literals -tiny -seed=random build \
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 garble -literals -seed=random build \
             -ldflags="-w -s -X main.version=${{ steps.version.outputs.VERSION }}" \
             -trimpath \
             -o ../build/vigilancex-detect2ban-linux-amd64 \
@@ -60,7 +62,7 @@ jobs:
 
           # Build reset-password tool
           echo "Building reset-password..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 garble -literals -tiny build \
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 garble -literals build \
             -ldflags="-w -s" \
             -trimpath \
             -o ../build/reset-password-linux-amd64 \
