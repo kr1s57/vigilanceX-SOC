@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.1.5 | **Derniere mise a jour**: 2026-01-10
+> **Version**: 3.1.6 | **Derniere mise a jour**: 2026-01-10
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -599,11 +599,17 @@ tail -f /tmp/claude-hooks.log
 
 ## Notes de Version Recentes
 
+### v3.1.6 (2026-01-10)
+- Fix dashboard page blanche (APIs retournaient null au lieu de [])
+- Erreur corrigee: `Cannot read properties of null (reading 'slice')`
+- Initialisation des slices avec `[]Type{}` au lieu de `var []Type`
+
 ### v3.1.5 (2026-01-10)
 - Fix nginx proxy_pass: preserve /api prefix for correct routing
 - Ajout `LICENSE_INSECURE_SKIP_VERIFY` pour certificats self-signed
 - Fix: `/api/v1/license/status` retournait 404 (trailing slash dans proxy_pass)
 - Support certificats SSL sans SANs sur serveur de licence interne
+- Fix WebSocket routing `/api/v1/ws`
 
 ### v3.1.4 (2026-01-10)
 - Fix frontend React build (Terser property mangling cassait React internals)
