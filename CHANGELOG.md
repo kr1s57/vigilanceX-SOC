@@ -6,18 +6,27 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ## [3.1.5] - 2026-01-10
 
-### Feature: LICENSE_INSECURE_SKIP_VERIFY
+### Fix: Nginx proxy_pass & LICENSE_INSECURE_SKIP_VERIFY
 
-Ajout du support pour les certificats SSL self-signed sur le serveur de licence.
+Corrections critiques pour le systeme de licence.
 
-#### Probleme
-- Le backend refusait de se connecter a vigilanceKey via IP si le certificat
-  ne contenait pas l'IP dans les Subject Alternative Names (SAN)
-- Erreur: `x509: cannot validate certificate for IP because it doesn't contain any IP SANs`
+#### Probleme 1: API License 404
+- Le frontend appelait `/api/v1/license/status` mais nginx renvoyait 404
+- Cause: `proxy_pass http://backend/;` avec trailing slash strippait le prefixe `/api`
+- Le backend recevait `/v1/license/status` au lieu de `/api/v1/license/status`
 
-#### Solution
+#### Solution 1
+- Modification `docker/nginx/nginx.conf` ligne 102
+- Changement: `proxy_pass http://backend/;` → `proxy_pass http://backend;`
+- Sans trailing slash, le path complet est preserve
+
+#### Probleme 2: Certificat SSL self-signed
+- Le backend refusait de se connecter au serveur de licence avec certificat self-signed
+- Erreur: `x509: certificate signed by unknown authority`
+
+#### Solution 2
 - Nouvelle variable d'environnement `LICENSE_INSECURE_SKIP_VERIFY=true`
-- Permet d'ignorer la verification SSL pour les environnements internes avec certificats self-signed
+- Permet d'ignorer la verification SSL pour les environnements internes
 - Avertissement log au demarrage si active
 
 #### Usage
@@ -26,6 +35,10 @@ Ajout du support pour les certificats SSL self-signed sur le serveur de licence.
 environment:
   LICENSE_INSECURE_SKIP_VERIFY: "true"
 ```
+
+#### Fichiers modifies
+- `docker/nginx/nginx.conf` - Fix proxy_pass
+- `backend/internal/license/client.go` - Support InsecureSkipVerify
 
 ---
 
