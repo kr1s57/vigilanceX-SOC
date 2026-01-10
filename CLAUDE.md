@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.1.0 | **Derniere mise a jour**: 2026-01-09
+> **Version**: 3.1.4 | **Derniere mise a jour**: 2026-01-10
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -598,6 +598,20 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.1.4 (2026-01-10)
+- Fix frontend React build (Terser property mangling cassait React internals)
+- Erreur corrigee: `Cannot read properties of undefined (reading 'ReactCurrentOwner')`
+- Suppression du property mangling `/^_/` dans vite.config.ts
+
+### v3.1.3 (2026-01-10)
+- Fix backend signal handler crash (Garble `-tiny` flag)
+- Suppression du flag `-tiny` de Garble dans release.yml
+- Erreur corrigee: `fatal: bad g in signal handler` (SIGSEGV)
+
+### v3.1.1 (2026-01-09)
+- Fix backend signal handler crash (UPX compression)
+- Suppression de la compression UPX dans release.yml
 
 ### v3.1.0 (2026-01-09)
 - XGS Decoders & Rules Engine (Sophos Log Parser)
