@@ -2,7 +2,7 @@
 
 **La plateforme SOC temps réel conçue pour Sophos XGS**
 
-[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.2.100-blue.svg)]()
 [![License](https://img.shields.io/badge/license-Commercial-green.svg)]()
 [![Sophos](https://img.shields.io/badge/Sophos-XGS%20Ready-red.svg)]()
 
