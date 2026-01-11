@@ -3,6 +3,7 @@ package smtp
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net"
@@ -166,7 +167,7 @@ func (c *Client) SendEmail(ctx context.Context, notif *entity.EmailNotification)
 	}
 
 	// Build email message
-	msg := c.buildMessage(notif.Subject, notif.TextBody, notif.HTMLBody, recipients)
+	msg := c.buildMessage(notif.Subject, notif.TextBody, notif.HTMLBody, recipients, notif.Attachments)
 
 	addr := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
 	security := strings.ToLower(c.config.Security)
@@ -287,9 +288,10 @@ func (c *Client) SendEmail(ctx context.Context, notif *entity.EmailNotification)
 	return client.Quit()
 }
 
-// buildMessage builds a MIME email message
-func (c *Client) buildMessage(subject, textBody, htmlBody string, recipients []string) []byte {
-	boundary := "==VIGILANCEX_BOUNDARY=="
+// buildMessage builds a MIME email message with optional attachments
+func (c *Client) buildMessage(subject, textBody, htmlBody string, recipients []string, attachments []entity.EmailAttachment) []byte {
+	mixedBoundary := "==VIGILANCEX_MIXED=="
+	altBoundary := "==VIGILANCEX_ALT=="
 
 	var msg strings.Builder
 
@@ -299,28 +301,75 @@ func (c *Client) buildMessage(subject, textBody, htmlBody string, recipients []s
 	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
 	msg.WriteString("MIME-Version: 1.0\r\n")
 
-	if htmlBody != "" {
-		// Multipart message with text and HTML
-		msg.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=\"%s\"\r\n", boundary))
+	hasAttachments := len(attachments) > 0
+
+	if hasAttachments {
+		// Mixed multipart for body + attachments
+		msg.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\r\n", mixedBoundary))
+		msg.WriteString("\r\n")
+
+		// Body part
+		msg.WriteString(fmt.Sprintf("--%s\r\n", mixedBoundary))
+
+		if htmlBody != "" {
+			// Alternative multipart for text + HTML
+			msg.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=\"%s\"\r\n", altBoundary))
+			msg.WriteString("\r\n")
+
+			// Text part
+			msg.WriteString(fmt.Sprintf("--%s\r\n", altBoundary))
+			msg.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+			msg.WriteString("\r\n")
+			msg.WriteString(textBody)
+			msg.WriteString("\r\n")
+
+			// HTML part
+			msg.WriteString(fmt.Sprintf("--%s\r\n", altBoundary))
+			msg.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
+			msg.WriteString("\r\n")
+			msg.WriteString(htmlBody)
+			msg.WriteString("\r\n")
+
+			msg.WriteString(fmt.Sprintf("--%s--\r\n", altBoundary))
+		} else {
+			msg.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
+			msg.WriteString("\r\n")
+			msg.WriteString(textBody)
+			msg.WriteString("\r\n")
+		}
+
+		// Attachments
+		for _, att := range attachments {
+			msg.WriteString(fmt.Sprintf("--%s\r\n", mixedBoundary))
+			msg.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", att.ContentType, att.Filename))
+			msg.WriteString("Content-Transfer-Encoding: base64\r\n")
+			msg.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n", att.Filename))
+			msg.WriteString("\r\n")
+			msg.WriteString(encodeBase64(att.Data))
+			msg.WriteString("\r\n")
+		}
+
+		msg.WriteString(fmt.Sprintf("--%s--\r\n", mixedBoundary))
+	} else if htmlBody != "" {
+		// Multipart message with text and HTML (no attachments)
+		msg.WriteString(fmt.Sprintf("Content-Type: multipart/alternative; boundary=\"%s\"\r\n", altBoundary))
 		msg.WriteString("\r\n")
 
 		// Text part
-		msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		msg.WriteString(fmt.Sprintf("--%s\r\n", altBoundary))
 		msg.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
-		msg.WriteString("Content-Transfer-Encoding: quoted-printable\r\n")
 		msg.WriteString("\r\n")
 		msg.WriteString(textBody)
 		msg.WriteString("\r\n")
 
 		// HTML part
-		msg.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+		msg.WriteString(fmt.Sprintf("--%s\r\n", altBoundary))
 		msg.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
-		msg.WriteString("Content-Transfer-Encoding: quoted-printable\r\n")
 		msg.WriteString("\r\n")
 		msg.WriteString(htmlBody)
 		msg.WriteString("\r\n")
 
-		msg.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
+		msg.WriteString(fmt.Sprintf("--%s--\r\n", altBoundary))
 	} else {
 		// Plain text only
 		msg.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
@@ -329,6 +378,21 @@ func (c *Client) buildMessage(subject, textBody, htmlBody string, recipients []s
 	}
 
 	return []byte(msg.String())
+}
+
+// encodeBase64 encodes data to base64 with line breaks every 76 chars
+func encodeBase64(data []byte) string {
+	encoded := base64.StdEncoding.EncodeToString(data)
+	var result strings.Builder
+	for i := 0; i < len(encoded); i += 76 {
+		end := i + 76
+		if end > len(encoded) {
+			end = len(encoded)
+		}
+		result.WriteString(encoded[i:end])
+		result.WriteString("\r\n")
+	}
+	return result.String()
 }
 
 // IsConfigured returns true if SMTP is configured

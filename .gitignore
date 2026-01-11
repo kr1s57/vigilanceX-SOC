@@ -78,3 +78,4 @@ secrets.yaml
 
 # Claude Code
 .claude/
+backups/

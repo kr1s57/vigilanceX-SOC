@@ -60,18 +60,26 @@ func DefaultNotificationSettings() *NotificationSettings {
 	}
 }
 
+// EmailAttachment represents a file attachment
+type EmailAttachment struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Data        []byte `json:"-"` // Binary data, not serialized to JSON
+}
+
 // EmailNotification represents a single notification to send
 type EmailNotification struct {
-	ID         string     `json:"id"`
-	Type       string     `json:"type"` // report_daily, report_weekly, report_monthly, alert_waf, alert_ban, alert_critical
-	Subject    string     `json:"subject"`
-	TextBody   string     `json:"text_body"`
-	HTMLBody   string     `json:"html_body"`
-	Recipients []string   `json:"recipients"`
-	Status     string     `json:"status"` // pending, sent, failed
-	CreatedAt  time.Time  `json:"created_at"`
-	SentAt     *time.Time `json:"sent_at,omitempty"`
-	Error      string     `json:"error,omitempty"`
+	ID          string            `json:"id"`
+	Type        string            `json:"type"` // report_daily, report_weekly, report_monthly, alert_waf, alert_ban, alert_critical
+	Subject     string            `json:"subject"`
+	TextBody    string            `json:"text_body"`
+	HTMLBody    string            `json:"html_body"`
+	Recipients  []string          `json:"recipients"`
+	Attachments []EmailAttachment `json:"attachments,omitempty"`
+	Status      string            `json:"status"` // pending, sent, failed
+	CreatedAt   time.Time         `json:"created_at"`
+	SentAt      *time.Time        `json:"sent_at,omitempty"`
+	Error       string            `json:"error,omitempty"`
 }
 
 // NotificationLog for audit trail (stored in ClickHouse)

@@ -412,6 +412,21 @@ export const reportsApi = {
 
     return { success: true, filename }
   },
+
+  sendByEmail: async (config: ReportConfig & { email: string }) => {
+    const response = await api.post<{ success: boolean; message: string; filename: string }>(
+      '/reports/send-email',
+      {
+        type: config.type,
+        format: config.format,
+        start_date: config.start_date,
+        end_date: config.end_date,
+        modules: config.modules,
+        email: config.email,
+      }
+    )
+    return response.data
+  },
 }
 
 // Status API

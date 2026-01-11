@@ -272,17 +272,20 @@ function AttackersModal({
   onClose,
   attackers,
   period,
+  totalUniqueIPs,
   onIPLookup,
 }: {
   isOpen: boolean
   onClose: () => void
   attackers: TopAttacker[]
   period: string
+  totalUniqueIPs: number
   onIPLookup: (ip: string) => void
 }) {
   const [bans, setBans] = useState<BanStatus[]>([])
   const [loadingBans, setLoadingBans] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [sortMode, setSortMode] = useState<'attacks' | 'blocked'>('attacks')
 
   useEffect(() => {
     if (isOpen) {
@@ -301,14 +304,23 @@ function AttackersModal({
   }, [bans])
 
   const filteredAttackers = useMemo(() => {
-    if (!searchTerm) return attackers
-    const term = searchTerm.toLowerCase()
-    return attackers.filter(a =>
-      a.ip.toLowerCase().includes(term) ||
-      a.country?.toLowerCase().includes(term) ||
-      a.categories.some(c => c.toLowerCase().includes(term))
-    )
-  }, [attackers, searchTerm])
+    let result = attackers
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      result = result.filter(a =>
+        a.ip.toLowerCase().includes(term) ||
+        a.country?.toLowerCase().includes(term) ||
+        a.categories.some(c => c.toLowerCase().includes(term))
+      )
+    }
+    // Sort by selected mode
+    if (sortMode === 'blocked') {
+      result = [...result].sort((a, b) => b.blocked_count - a.blocked_count)
+    } else {
+      result = [...result].sort((a, b) => b.attack_count - a.attack_count)
+    }
+    return result
+  }, [attackers, searchTerm, sortMode])
 
   if (!isOpen) return null
 
@@ -369,7 +381,8 @@ function AttackersModal({
             <div>
               <h2 className="text-lg font-semibold">Unique Attackers</h2>
               <p className="text-sm text-muted-foreground">
-                {attackers.length} distinct IPs in the last {period}
+                {totalUniqueIPs > 0 ? formatNumber(totalUniqueIPs) : attackers.length} total IPs in the last {period}
+                {attackers.length < totalUniqueIPs && ` (showing top ${attackers.length})`}
               </p>
             </div>
           </div>
@@ -379,6 +392,35 @@ function AttackersModal({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Sort Mode Selector */}
+        <div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/30">
+          <span className="text-sm text-muted-foreground">Sort by:</span>
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+            <button
+              onClick={() => setSortMode('attacks')}
+              className={cn(
+                'px-3 py-1 rounded-md text-sm font-medium transition-colors',
+                sortMode === 'attacks'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              Most Attacks
+            </button>
+            <button
+              onClick={() => setSortMode('blocked')}
+              className={cn(
+                'px-3 py-1 rounded-md text-sm font-medium transition-colors',
+                sortMode === 'blocked'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              Most Blocked
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -552,6 +594,7 @@ export function AttacksAnalyzer() {
   const [selectedIP, setSelectedIP] = useState<string | null>(searchParams.get('src_ip'))
   const [showThreatModal, setShowThreatModal] = useState(!!searchParams.get('src_ip'))
   const [attackTypeModal, setAttackTypeModal] = useState<{ attackType: string; attackTypeName: string } | null>(null)
+  const [totalUniqueIPs, setTotalUniqueIPs] = useState(0)
 
   const handleIPLookup = (ip: string) => {
     setSelectedIP(ip)
@@ -563,14 +606,17 @@ export function AttacksAnalyzer() {
       setLoading(true)
       setError(null)
       try {
-        const [rules, attacks, attackersData] = await Promise.all([
+        const [rules, attacks, attackersData, overviewData] = await Promise.all([
           modsecApi.getRuleStats(period),
           modsecApi.getAttackTypeStats(period),
-          statsApi.topAttackers(period, 100), // Fetch more for the modal
+          statsApi.topAttackers(period, 500), // Increased limit for modal
+          statsApi.overview(period),
         ])
         setRuleStats(rules || [])
         setAttackTypeStats(attacks || [])
         setTopAttackers(attackersData || [])
+        // Get real unique IPs count from overview stats
+        setTotalUniqueIPs(overviewData?.stats?.unique_ips || attackersData?.length || 0)
       } catch (err) {
         setError('Failed to load attack data')
         console.error(err)
@@ -595,16 +641,16 @@ export function AttacksAnalyzer() {
     const uniqueRules = ruleStats.length
     const totalAttackTypes = attackTypeStats.length
     const topAttackType = attackTypeStats.length > 0 ? attackTypeStats[0] : null
-    const totalUniqueIPs = new Set(filteredTopAttackers.map(a => a.ip)).size
 
     return {
       totalTriggers,
       uniqueRules,
       totalAttackTypes,
       topAttackType,
-      totalUniqueIPs,
+      // Use real total from overview stats (totalUniqueIPs state)
+      totalUniqueIPs: totalUniqueIPs || filteredTopAttackers.length,
     }
-  }, [ruleStats, attackTypeStats, filteredTopAttackers])
+  }, [ruleStats, attackTypeStats, filteredTopAttackers, totalUniqueIPs])
 
   // Prepare chart data
   const pieChartData = useMemo(() => {
@@ -705,17 +751,41 @@ export function AttacksAnalyzer() {
           subtitle="Detected types"
           icon={<Target className="w-5 h-5 text-red-500" />}
         />
-        <StatCard
-          title="Top Attack"
-          value={summaryStats.topAttackType
-            ? (attackTypeNames[summaryStats.topAttackType.attack_type] || summaryStats.topAttackType.attack_type)
-            : 'N/A'}
-          subtitle={summaryStats.topAttackType
-            ? `${formatNumber(summaryStats.topAttackType.count)} occurrences`
-            : 'No data'}
-          icon={<TrendingUp className="w-5 h-5 text-yellow-500" />}
-          variant={summaryStats.topAttackType ? 'warning' : 'default'}
-        />
+        {/* Top Attack with search button */}
+        <div className="rounded-xl border p-6 bg-card transition-all hover:shadow-lg relative group">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Top Attack</p>
+              <p className="text-2xl font-bold truncate max-w-[180px]" title={summaryStats.topAttackType ? (attackTypeNames[summaryStats.topAttackType.attack_type] || summaryStats.topAttackType.attack_type) : 'N/A'}>
+                {summaryStats.topAttackType
+                  ? (attackTypeNames[summaryStats.topAttackType.attack_type] || summaryStats.topAttackType.attack_type)
+                  : 'N/A'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {summaryStats.topAttackType
+                  ? `${formatNumber(summaryStats.topAttackType.count)} occurrences`
+                  : 'No data'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {summaryStats.topAttackType && (
+                <button
+                  onClick={() => setAttackTypeModal({
+                    attackType: summaryStats.topAttackType!.attack_type,
+                    attackTypeName: attackTypeNames[summaryStats.topAttackType!.attack_type] || summaryStats.topAttackType!.attack_type
+                  })}
+                  className="p-2 bg-muted hover:bg-primary/10 hover:text-primary rounded-lg transition-colors"
+                  title="View IPs for this attack type"
+                >
+                  <Search className="w-5 h-5" />
+                </button>
+              )}
+              <div className="p-2 bg-muted rounded-lg">
+                <TrendingUp className="w-5 h-5 text-yellow-500" />
+              </div>
+            </div>
+          </div>
+        </div>
         {/* Unique Attackers with search button */}
         <div className="rounded-xl border p-6 bg-card transition-all hover:shadow-lg relative group">
           <div className="flex items-start justify-between">
@@ -812,7 +882,7 @@ export function AttacksAnalyzer() {
                     }}
                     formatter={(value: number, name: string) => [
                       formatNumber(value),
-                      name === 'trigger_count' ? 'Triggers' : 'Unique IPs'
+                      name // name is already 'Triggers' or 'Unique IPs' from Bar component
                     ]}
                     labelFormatter={(label) => {
                       const rule = barChartData.find(r => r.rule_id === label)
@@ -1040,6 +1110,7 @@ export function AttacksAnalyzer() {
         onClose={() => setShowAttackersModal(false)}
         attackers={filteredTopAttackers}
         period={period}
+        totalUniqueIPs={summaryStats.totalUniqueIPs}
         onIPLookup={handleIPLookup}
       />
 

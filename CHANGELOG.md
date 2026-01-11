@@ -4,6 +4,56 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.4.100] - 2026-01-11
+
+### Debug Session - UX Improvements & Bug Fixes
+
+Session de debug complete avec 8 corrections et ameliorations.
+
+#### Attack Analyzer
+
+| Fix | Description |
+|-----|-------------|
+| Tooltip Graphique | Correction label tooltip: affiche "Triggers" / "Unique IPs" au lieu de noms techniques |
+| Top Attack Magnifier | Ajout loupe sur bloc "Top Attack" pour voir les IPs associees au type d'attaque |
+| Unique Attackers | Compteur total reel (500 IPs max) + tabs "Most Attacks" / "Most Blocked" |
+
+#### Reports
+
+| Fix | Description |
+|-----|-------------|
+| Send by Mail | Nouveau bouton Mail pour envoyer les rapports par email avec piece jointe |
+| SMTP Hot-reload | Fix: Reports utilise maintenant le client SMTP dynamique (hot-reload apres config) |
+
+#### WAF Explorer
+
+| Fix | Description |
+|-----|-------------|
+| Expand/Collapse All | Nouveau bouton pour deployer/replier tous les jours en un clic |
+| Stats Header | Nouveau header avec Total Events, Blocked, Detected, nombre de jours |
+
+#### Infrastructure
+
+| Fix | Description |
+|-----|-------------|
+| SMTP Service | `reportsHandler` utilise `notificationService` pour le hot-reload SMTP |
+| `SendEmailWithAttachment` | Nouvelle methode pour envoi emails avec pieces jointes |
+
+#### Fichiers Modifies
+
+**Backend:**
+- `internal/adapter/controller/http/handlers/reports.go` - Utilise notificationService
+- `internal/usecase/notifications/service.go` - Ajout SendEmailWithAttachment
+- `cmd/api/main.go` - Passage notificationService a reportsHandler
+
+**Frontend:**
+- `src/pages/AttacksAnalyzer.tsx` - Tooltip fix, magnifier Top Attack, Unique Attackers tabs
+- `src/pages/Reports.tsx` - Bouton Send by Mail avec modal
+- `src/pages/WafExplorer.tsx` - Stats header + Expand/Collapse All
+- `src/lib/api.ts` - Ajout reportsApi.sendByEmail
+
+---
+
 ## [3.3.100] - 2026-01-11
 
 ### SMTP Email Notifications

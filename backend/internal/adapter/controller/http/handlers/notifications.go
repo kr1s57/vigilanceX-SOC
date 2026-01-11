@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kr1s57/vigilancex/internal/entity"
 	"github.com/kr1s57/vigilancex/internal/usecase/notifications"
 )
 

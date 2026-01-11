@@ -13,6 +13,9 @@ import {
   Loader2,
   HardDrive,
   Table2,
+  Mail,
+  X,
+  Send,
 } from 'lucide-react'
 import { reportsApi } from '@/lib/api'
 import { formatNumber } from '@/lib/utils'
@@ -46,6 +49,13 @@ export function Reports() {
   const [endDate, setEndDate] = useState('')
   const [selectedModules, setSelectedModules] = useState<string[]>(['waf', 'vpn', 'threats', 'bans'])
 
+  // Email modal state
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [emailAddress, setEmailAddress] = useState('')
+  const [emailReportType, setEmailReportType] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailResult, setEmailResult] = useState<{ success: boolean; message: string } | null>(null)
+
   useEffect(() => {
     async function fetchStats() {
       try {
@@ -68,6 +78,56 @@ export function Reports() {
         ? prev.filter(m => m !== moduleId)
         : [...prev, moduleId]
     )
+  }
+
+  const openEmailModal = (type: 'daily' | 'weekly' | 'monthly' | 'custom') => {
+    setEmailReportType(type)
+    setEmailAddress('')
+    setEmailResult(null)
+    setShowEmailModal(true)
+  }
+
+  const sendReportByEmail = async () => {
+    if (!emailAddress) {
+      setEmailResult({ success: false, message: 'Please enter an email address' })
+      return
+    }
+
+    setSendingEmail(true)
+    setEmailResult(null)
+
+    try {
+      const config: ReportConfig & { email: string } = {
+        type: emailReportType,
+        format,
+        email: emailAddress,
+        modules: selectedModules.length > 0 ? selectedModules : undefined,
+      }
+
+      if (emailReportType === 'custom') {
+        if (!startDate || !endDate) {
+          setEmailResult({ success: false, message: 'Please select start and end dates for custom reports' })
+          setSendingEmail(false)
+          return
+        }
+        config.start_date = startDate
+        config.end_date = endDate
+      }
+
+      const result = await reportsApi.sendByEmail(config)
+      setEmailResult({ success: true, message: result.message })
+      // Close modal after 2 seconds on success
+      setTimeout(() => {
+        setShowEmailModal(false)
+        setEmailResult(null)
+      }, 2000)
+    } catch (err: any) {
+      console.error('Failed to send report by email:', err)
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to send report by email'
+      setEmailResult({ success: false, message: errorMessage })
+    } finally {
+      setSendingEmail(false)
+    }
   }
 
   const generateReport = async (type: 'daily' | 'weekly' | 'monthly' | 'custom') => {
@@ -155,53 +215,86 @@ export function Reports() {
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <button
-            onClick={() => generateReport('daily')}
-            disabled={generating}
-            className="flex items-center justify-center gap-3 p-4 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {generatingType === 'daily' ? (
-              <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-            ) : (
-              <Download className="w-5 h-5 text-blue-500" />
-            )}
-            <div className="text-left">
-              <p className="font-medium">Daily Report</p>
-              <p className="text-xs text-muted-foreground">Last 24 hours</p>
-            </div>
-          </button>
+          {/* Daily Report */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => generateReport('daily')}
+              disabled={generating}
+              className="flex-1 flex items-center justify-center gap-3 p-4 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generatingType === 'daily' ? (
+                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+              ) : (
+                <Download className="w-5 h-5 text-blue-500" />
+              )}
+              <div className="text-left">
+                <p className="font-medium">Daily Report</p>
+                <p className="text-xs text-muted-foreground">Last 24 hours</p>
+              </div>
+            </button>
+            <button
+              onClick={() => openEmailModal('daily')}
+              disabled={generating || sendingEmail}
+              className="p-4 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Send by email"
+            >
+              <Mail className="w-5 h-5 text-blue-500" />
+            </button>
+          </div>
 
-          <button
-            onClick={() => generateReport('weekly')}
-            disabled={generating}
-            className="flex items-center justify-center gap-3 p-4 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {generatingType === 'weekly' ? (
-              <Loader2 className="w-5 h-5 animate-spin text-purple-500" />
-            ) : (
-              <Download className="w-5 h-5 text-purple-500" />
-            )}
-            <div className="text-left">
-              <p className="font-medium">Weekly Report</p>
-              <p className="text-xs text-muted-foreground">Last 7 days</p>
-            </div>
-          </button>
+          {/* Weekly Report */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => generateReport('weekly')}
+              disabled={generating}
+              className="flex-1 flex items-center justify-center gap-3 p-4 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generatingType === 'weekly' ? (
+                <Loader2 className="w-5 h-5 animate-spin text-purple-500" />
+              ) : (
+                <Download className="w-5 h-5 text-purple-500" />
+              )}
+              <div className="text-left">
+                <p className="font-medium">Weekly Report</p>
+                <p className="text-xs text-muted-foreground">Last 7 days</p>
+              </div>
+            </button>
+            <button
+              onClick={() => openEmailModal('weekly')}
+              disabled={generating || sendingEmail}
+              className="p-4 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Send by email"
+            >
+              <Mail className="w-5 h-5 text-purple-500" />
+            </button>
+          </div>
 
-          <button
-            onClick={() => generateReport('monthly')}
-            disabled={generating}
-            className="flex items-center justify-center gap-3 p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {generatingType === 'monthly' ? (
-              <Loader2 className="w-5 h-5 animate-spin text-green-500" />
-            ) : (
-              <Download className="w-5 h-5 text-green-500" />
-            )}
-            <div className="text-left">
-              <p className="font-medium">Monthly Report</p>
-              <p className="text-xs text-muted-foreground">Last 30 days</p>
-            </div>
-          </button>
+          {/* Monthly Report */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => generateReport('monthly')}
+              disabled={generating}
+              className="flex-1 flex items-center justify-center gap-3 p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generatingType === 'monthly' ? (
+                <Loader2 className="w-5 h-5 animate-spin text-green-500" />
+              ) : (
+                <Download className="w-5 h-5 text-green-500" />
+              )}
+              <div className="text-left">
+                <p className="font-medium">Monthly Report</p>
+                <p className="text-xs text-muted-foreground">Last 30 days</p>
+              </div>
+            </button>
+            <button
+              onClick={() => openEmailModal('monthly')}
+              disabled={generating || sendingEmail}
+              className="p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Send by email"
+            >
+              <Mail className="w-5 h-5 text-green-500" />
+            </button>
+          </div>
         </div>
 
         {/* Format Selection */}
@@ -305,7 +398,16 @@ export function Reports() {
         </div>
 
         {/* Generate Button */}
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={() => openEmailModal('custom')}
+            disabled={generating || sendingEmail || !startDate || !endDate}
+            className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Send by email"
+          >
+            <Mail className="w-5 h-5" />
+            Send by Email
+          </button>
           <button
             onClick={() => generateReport('custom')}
             disabled={generating || !startDate || !endDate}
@@ -418,6 +520,100 @@ export function Reports() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowEmailModal(false)} />
+          <div className="relative bg-card border rounded-xl shadow-2xl w-full max-w-md m-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Mail className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Send Report by Email</h2>
+                  <p className="text-sm text-muted-foreground capitalize">{emailReportType} report</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Email Address</label>
+                <input
+                  type="email"
+                  value={emailAddress}
+                  onChange={(e) => setEmailAddress(e.target.value)}
+                  placeholder="recipient@example.com"
+                  className="w-full px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  autoFocus
+                />
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                The {emailReportType} report will be generated as {format.toUpperCase()} and sent to the specified email address.
+              </p>
+
+              {/* Result message */}
+              {emailResult && (
+                <div className={`p-3 rounded-lg text-sm ${
+                  emailResult.success
+                    ? 'bg-green-500/10 text-green-500 border border-green-500/20'
+                    : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                }`}>
+                  {emailResult.success ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      {emailResult.message}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      {emailResult.message}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowEmailModal(false)
+                    setEmailResult(null)
+                  }}
+                  className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={sendReportByEmail}
+                  disabled={sendingEmail || !emailAddress}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sendingEmail ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Send Report
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

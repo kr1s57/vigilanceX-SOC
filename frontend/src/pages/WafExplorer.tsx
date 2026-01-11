@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X } from 'lucide-react'
+import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye } from 'lucide-react'
 import { modsecApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, getCountryName } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -189,6 +189,14 @@ export function WafExplorer() {
     }))
   }, [requests, shouldShowIP])
 
+  // Calculate total stats
+  const totalStats = useMemo(() => {
+    const totalEvents = dayGroups.reduce((sum, d) => sum + d.requests.length, 0)
+    const totalBlocked = dayGroups.reduce((sum, d) => sum + d.totalBlocked, 0)
+    const totalDetected = dayGroups.reduce((sum, d) => sum + d.totalDetected, 0)
+    return { totalEvents, totalBlocked, totalDetected }
+  }, [dayGroups])
+
   // Auto-expand all days on load (up to 7 days)
   useEffect(() => {
     if (dayGroups.length > 0 && expandedDays.size === 0) {
@@ -197,6 +205,17 @@ export function WafExplorer() {
       setExpandedDays(new Set(daysToExpand))
     }
   }, [dayGroups])
+
+  // Expand/Collapse all days
+  const expandAllDays = () => {
+    setExpandedDays(new Set(dayGroups.map(g => g.date)))
+  }
+
+  const collapseAllDays = () => {
+    setExpandedDays(new Set())
+  }
+
+  const allDaysExpanded = dayGroups.length > 0 && expandedDays.size === dayGroups.length
 
   const toggleDay = (date: string) => {
     const newExpanded = new Set(expandedDays)
@@ -608,8 +627,70 @@ export function WafExplorer() {
         </select>
       </div>
 
+      {/* Stats Summary */}
+      {!loading && requests.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-card rounded-xl border p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Events</p>
+                <p className="text-2xl font-bold">{totalStats.totalEvents.toLocaleString()}</p>
+              </div>
+              <div className="p-3 bg-blue-500/10 rounded-lg">
+                <Shield className="w-6 h-6 text-blue-500" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-card rounded-xl border p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Blocked</p>
+                <p className="text-2xl font-bold text-red-500">{totalStats.totalBlocked.toLocaleString()}</p>
+              </div>
+              <div className="p-3 bg-red-500/10 rounded-lg">
+                <AlertTriangle className="w-6 h-6 text-red-500" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-card rounded-xl border p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Detected Only</p>
+                <p className="text-2xl font-bold text-orange-500">{totalStats.totalDetected.toLocaleString()}</p>
+              </div>
+              <div className="p-3 bg-orange-500/10 rounded-lg">
+                <Eye className="w-6 h-6 text-orange-500" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-card rounded-xl border p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Days with Activity</p>
+                <p className="text-2xl font-bold">{dayGroups.length}</p>
+              </div>
+              <div className="p-3 bg-purple-500/10 rounded-lg">
+                <Calendar className="w-6 h-6 text-purple-500" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       <div className="bg-card rounded-xl border overflow-hidden">
+        {/* Expand/Collapse All button for grouped view */}
+        {!loading && requests.length > 0 && viewMode === 'grouped' && dayGroups.length > 1 && (
+          <div className="flex items-center justify-end p-3 border-b bg-muted/30">
+            <button
+              onClick={allDaysExpanded ? collapseAllDays : expandAllDays}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            >
+              <ChevronsUpDown className="w-4 h-4" />
+              {allDaysExpanded ? 'Collapse All' : 'Expand All'}
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

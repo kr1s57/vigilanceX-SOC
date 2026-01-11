@@ -411,14 +411,11 @@ export function Settings() {
       // Filter out masked password fields (containing ****)
       // Only send password if user entered a new value
       const dataToSave: Record<string, string> = {}
-      const saved = savedConfigs[editingPlugin.id] || {}
 
       editingPlugin.fields.forEach(field => {
         const value = pluginFormData[field.key] || ''
-        // If it's a password field and contains ****, use the original saved value
+        // If it's a password field and contains ****, skip it - backend preserves existing
         if (field.type === 'password' && value.includes('****')) {
-          // Don't include in dataToSave - backend will keep existing value
-          // Actually we need to send empty or the backend won't know to keep it
           // Skip masked passwords entirely - backend preserves existing
         } else {
           dataToSave[field.key] = value
@@ -1381,7 +1378,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.3.100</p>
+        <p>VIGILANCE X v3.4.100</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

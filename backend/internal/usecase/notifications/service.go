@@ -532,3 +532,18 @@ func (s *Service) GetSMTPHost() string {
 	}
 	return s.smtpClient.GetHost()
 }
+
+// SendEmailWithAttachment sends an email with optional attachments (for reports)
+func (s *Service) SendEmailWithAttachment(ctx context.Context, notif *entity.EmailNotification) error {
+	if s.smtpClient == nil || !s.smtpClient.IsConfigured() {
+		return fmt.Errorf("SMTP not configured")
+	}
+
+	if err := s.smtpClient.SendEmail(ctx, notif); err != nil {
+		s.logger.Error("Failed to send email with attachment", "error", err, "type", notif.Type)
+		return err
+	}
+
+	s.logger.Info("Email with attachment sent", "type", notif.Type, "recipients", len(notif.Recipients))
+	return nil
+}

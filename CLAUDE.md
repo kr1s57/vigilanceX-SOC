@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.3.100 | **Derniere mise a jour**: 2026-01-11
+> **Version**: 3.4.100 | **Derniere mise a jour**: 2026-01-11
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -704,6 +704,17 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.4.100 (2026-01-11)
+- **Debug Session**: 8 corrections UX et ameliorations
+- Attack Analyzer: Fix tooltip graphique (Triggers/Unique IPs)
+- Attack Analyzer: Loupe sur Top Attack pour voir IPs associees
+- Attack Analyzer: Unique Attackers avec compteur total + tabs filtres
+- Reports: Bouton "Send by Mail" avec piece jointe PDF/XML
+- Reports: Fix SMTP hot-reload (utilise notificationService)
+- WAF Explorer: Bouton Expand/Collapse All
+- WAF Explorer: Stats header (Total Events, Blocked, Detected)
+- Nouvelle methode `SendEmailWithAttachment` dans notifications service
 
 ### v3.3.100 (2026-01-11)
 - **SMTP Email Notifications**: Nouvelle integration (partiellement fonctionnelle)

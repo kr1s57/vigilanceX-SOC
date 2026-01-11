@@ -300,13 +300,13 @@ func main() {
 	threatsHandler.SetBlocklistsService(blocklistsService) // v1.6: Combined risk assessment
 	bansHandler := handlers.NewBansHandler(bansService)
 	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
-	reportsHandler := handlers.NewReportsHandler(reportsService)
+	reportsHandler := handlers.NewReportsHandler(reportsService, notificationService)
 	blocklistsHandler := handlers.NewBlocklistsHandler(blocklistsService)
-	geoblockingHandler := handlers.NewGeoblockingHandler(geoblockingService) // v2.0: Geoblocking
-	authHandler := handlers.NewAuthHandler(authService, logger)              // v2.6: Authentication
-	usersHandler := handlers.NewUsersHandler(authService, logger)            // v2.6: User management
-	licenseHandler := handlers.NewLicenseHandler(licenseClient)              // v2.9: License management
-	parserHandler := handlers.NewParserHandler(xgsParser)                    // v3.1: XGS Parser
+	geoblockingHandler := handlers.NewGeoblockingHandler(geoblockingService)    // v2.0: Geoblocking
+	authHandler := handlers.NewAuthHandler(authService, logger)                 // v2.6: Authentication
+	usersHandler := handlers.NewUsersHandler(authService, logger)               // v2.6: User management
+	licenseHandler := handlers.NewLicenseHandler(licenseClient)                 // v2.9: License management
+	parserHandler := handlers.NewParserHandler(xgsParser)                       // v3.1: XGS Parser
 	notificationHandler := handlers.NewNotificationHandler(notificationService) // v3.3: Email notifications
 
 	// Initialize WebSocket hub
@@ -574,6 +574,7 @@ func main() {
 				r.Get("/generate", reportsHandler.GenerateReport)
 				r.Post("/generate", reportsHandler.GenerateReport)
 				r.Get("/preview", reportsHandler.PreviewReport)
+				r.Post("/send-email", reportsHandler.SendReportByEmail) // v3.3.101: Send report by email
 			})
 
 			// System
