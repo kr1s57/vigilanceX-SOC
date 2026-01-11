@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.4.100 | **Derniere mise a jour**: 2026-01-11
+> **Version**: 3.5.100 | **Derniere mise a jour**: 2026-01-12
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -791,6 +791,18 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.5.100 (2026-01-12)
+- **Interactive Attack Map**: Nouvelle page de visualisation des attaques
+- Carte mondiale avec flux animes (source vers infrastructure)
+- Filtres par type: WAF (orange), IPS/IDS (rouge), Malware (violet), Threat (vert)
+- Selection multiple de types d'attaques simultanement
+- Selecteur periode: Live/24h/7d/30d
+- Modal details pays avec Top IPs et categories
+- Service d'enrichissement geo automatique (toutes les 5 min)
+- Enrichit IPS/Anti-Virus sans geolocalisation via ip-api.com
+- Nouveaux composants: AttackMap, CountryLayer, AttackFlowLayer, etc.
+- Nouveau store Zustand: attackMapStore.ts
 
 ### v3.4.100 (2026-01-11)
 - **Debug Session**: 8 corrections UX et ameliorations

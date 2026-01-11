@@ -4,6 +4,72 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.5.100] - 2026-01-12
+
+### Interactive Attack Map
+
+Nouvelle page "Attack Map" avec visualisation interactive des attaques en temps reel.
+
+#### Nouvelles Fonctionnalites
+
+| Feature | Description |
+|---------|-------------|
+| Carte Interactive | Carte mondiale avec tuiles CartoDB Dark |
+| Flux Animes | Lignes d'attaque animees avec particules de source vers infrastructure |
+| Filtres par Type | Boutons WAF, IPS/IDS, Malware, Threat avec couleurs distinctes |
+| Selection Multiple | Possibilite d'activer plusieurs types d'attaques simultanement |
+| Periodes | Selecteur Live/24h/7d/30d |
+| Stats en Temps Reel | Total Attacks, Countries, Top Source |
+| Modal Pays | Click sur pays pour details (Top IPs, categories) |
+| Legende | Types d'attaque + intensite pays |
+| Plein Ecran | Mode immersif fullscreen |
+| Enrichissement Geo | Service automatique pour IPS/Anti-Virus sans geolocalisation |
+
+#### Couleurs par Type d'Attaque
+
+| Type | Couleur | Description |
+|------|---------|-------------|
+| WAF | Orange | Web Application Firewall (SQL Injection, XSS, Bot) |
+| IPS/IDS | Rouge | Intrusion Prevention/Detection System |
+| Malware | Violet | Anti-Virus, Malware Detection |
+| Threat | Vert | Advanced Threat, C&C, Botnet |
+
+#### Backend - Geo Enrichment Service
+
+- Service automatique toutes les 5 minutes
+- Enrichit les IPs publiques sans geolocalisation
+- Utilise ip-api.com (gratuit, 45 req/min)
+- Mise a jour via ALTER TABLE UPDATE (ClickHouse mutations)
+
+#### Fichiers Crees
+
+**Backend:**
+- `internal/usecase/geoenrich/service.go` - Service d'enrichissement geo
+- `internal/adapter/repository/clickhouse/events_repo.go` - +4 methodes geo
+
+**Frontend:**
+- `src/pages/AttackMap.tsx` - Page principale carte
+- `src/stores/attackMapStore.ts` - Store Zustand
+- `src/components/attackmap/CountryLayer.tsx` - Couche GeoJSON pays
+- `src/components/attackmap/AttackFlowLayer.tsx` - Animations flux
+- `src/components/attackmap/TargetMarker.tsx` - Marqueur infrastructure
+- `src/components/attackmap/CountryModal.tsx` - Modal details pays
+- `src/components/attackmap/AttackMapLegend.tsx` - Legende
+
+#### Fichiers Modifies
+
+**Backend:**
+- `cmd/api/main.go` - Demarrage geo enrichment service
+- `internal/adapter/controller/http/handlers/events.go` - Parametre attack_types
+- `internal/usecase/events/service.go` - GetGeoHeatmapFiltered
+
+**Frontend:**
+- `src/App.tsx` - Route /attack-map
+- `src/components/layout/Sidebar.tsx` - Entree menu Attack Map
+- `src/lib/api.ts` - Parametre attackTypes pour heatmap
+
+---
+
 ## [3.4.100] - 2026-01-11
 
 ### Debug Session - UX Improvements & Bug Fixes

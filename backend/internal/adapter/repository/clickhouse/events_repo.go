@@ -465,6 +465,88 @@ func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]
 	return result, nil
 }
 
+// GetGeoHeatmapFiltered retrieves geographic distribution filtered by attack types
+// attackTypes can include: waf, ips, malware, bruteforce, ddos, threat
+func (r *EventsRepository) GetGeoHeatmapFiltered(ctx context.Context, period string, attackTypes []string) ([]map[string]interface{}, error) {
+	var startTime time.Time
+	now := time.Now()
+
+	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
+	case "24h":
+		startTime = now.Add(-24 * time.Hour)
+	case "7d":
+		startTime = now.Add(-7 * 24 * time.Hour)
+	case "30d":
+		startTime = now.Add(-30 * 24 * time.Hour)
+	default:
+		startTime = now.Add(-24 * time.Hour)
+	}
+
+	// Build attack type filter conditions
+	var conditions []string
+	for _, at := range attackTypes {
+		switch at {
+		case "waf":
+			conditions = append(conditions, "log_type = 'WAF'")
+		case "ips":
+			conditions = append(conditions, "(log_type = 'IPS' OR category LIKE '%IDS%' OR category LIKE '%IPS%')")
+		case "malware":
+			conditions = append(conditions, "(log_type = 'Anti-Virus' OR category LIKE '%Malware%')")
+		case "bruteforce":
+			conditions = append(conditions, "(category LIKE '%Brute%' OR category LIKE '%Auth Failure%')")
+		case "ddos":
+			conditions = append(conditions, "(category LIKE '%DDoS%' OR category LIKE '%Flood%' OR category LIKE '%DoS%')")
+		case "threat":
+			conditions = append(conditions, "(log_type = 'Threat' OR category LIKE '%Threat%' OR category LIKE '%C2%' OR category LIKE '%Botnet%')")
+		}
+	}
+
+	// Build WHERE clause for attack types
+	var whereClause string
+	if len(conditions) > 0 {
+		whereClause = "AND (" + strings.Join(conditions, " OR ") + ")"
+	} else {
+		// By default (no filters), show all security attack types combined
+		// WAF + IPS + Anti-Virus + Threat (excludes Firewall, Unknown, Admin, etc.)
+		whereClause = "AND (log_type = 'WAF' OR log_type = 'IPS' OR log_type = 'Anti-Virus' OR log_type = 'Threat' OR category LIKE '%Malware%' OR category LIKE '%IDS%' OR category LIKE '%IPS%' OR category LIKE '%Threat%' OR category LIKE '%C2%' OR category LIKE '%Botnet%')"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			geo_country,
+			count() as count,
+			uniqExact(src_ip) as unique_ips
+		FROM events
+		WHERE timestamp >= ? AND geo_country != '' %s
+		GROUP BY geo_country
+		ORDER BY count DESC
+	`, whereClause)
+
+	rows, err := r.conn.Query(ctx, query, startTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query geo heatmap filtered: %w", err)
+	}
+	defer rows.Close()
+
+	result := []map[string]interface{}{}
+	for rows.Next() {
+		var country string
+		var count, uniqueIPs uint64
+		if err := rows.Scan(&country, &count, &uniqueIPs); err != nil {
+			return nil, fmt.Errorf("failed to scan geo data: %w", err)
+		}
+		result = append(result, map[string]interface{}{
+			"country":    country,
+			"count":      count,
+			"unique_ips": uniqueIPs,
+		})
+	}
+
+	return result, nil
+}
+
 // GetUniqueHostnames returns unique hostnames for a given log type
 func (r *EventsRepository) GetUniqueHostnames(ctx context.Context, logType string) ([]string, error) {
 	query := `
@@ -688,4 +770,117 @@ func (r *EventsRepository) GetZoneTraffic(ctx context.Context, period string, li
 		TotalFlows:  uint64(len(flows)),
 		UniqueZones: zones,
 	}, nil
+}
+
+// EventNeedingGeo represents an event that needs geo enrichment
+type EventNeedingGeo struct {
+	EventID   string
+	SrcIP     string
+	Timestamp time.Time
+}
+
+// GetEventsNeedingGeoEnrichment returns events with valid public IPs but no geo_country
+func (r *EventsRepository) GetEventsNeedingGeoEnrichment(ctx context.Context, limit int) ([]EventNeedingGeo, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+
+	// Get events with valid public IPs (not 0.0.0.0, not private ranges) and empty geo_country
+	// Note: Alias must be different from column name to avoid shadowing in WHERE clause
+	query := `
+		SELECT
+			toString(event_id) as event_id,
+			IPv4NumToString(src_ip) as ip_str,
+			timestamp
+		FROM events
+		WHERE geo_country = ''
+		  AND src_ip != toIPv4('0.0.0.0')
+		  AND (src_ip < toIPv4('10.0.0.0') OR src_ip > toIPv4('10.255.255.255'))
+		  AND (src_ip < toIPv4('172.16.0.0') OR src_ip > toIPv4('172.31.255.255'))
+		  AND (src_ip < toIPv4('192.168.0.0') OR src_ip > toIPv4('192.168.255.255'))
+		  AND (src_ip < toIPv4('127.0.0.0') OR src_ip > toIPv4('127.255.255.255'))
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`
+
+	rows, err := r.conn.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events needing geo: %w", err)
+	}
+	defer rows.Close()
+
+	events := []EventNeedingGeo{}
+	for rows.Next() {
+		var e EventNeedingGeo
+		if err := rows.Scan(&e.EventID, &e.SrcIP, &e.Timestamp); err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+		events = append(events, e)
+	}
+
+	return events, nil
+}
+
+// UpdateEventGeo updates the geo_country for an event
+func (r *EventsRepository) UpdateEventGeo(ctx context.Context, srcIP string, countryCode string) error {
+	// Use ALTER TABLE UPDATE mutation for MergeTree
+	query := `
+		ALTER TABLE events
+		UPDATE geo_country = ?
+		WHERE src_ip = toIPv4(?) AND geo_country = ''
+	`
+
+	if err := r.conn.Exec(ctx, query, countryCode, srcIP); err != nil {
+		return fmt.Errorf("failed to update event geo: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateEventsGeoBatch updates geo_country for multiple IPs at once
+func (r *EventsRepository) UpdateEventsGeoBatch(ctx context.Context, ipToCountry map[string]string) error {
+	for ip, country := range ipToCountry {
+		if err := r.UpdateEventGeo(ctx, ip, country); err != nil {
+			r.logger.Warn("Failed to update geo for IP", "ip", ip, "error", err)
+			continue
+		}
+	}
+	return nil
+}
+
+// GetUniqueIPsNeedingGeo returns unique IPs that need geo enrichment
+func (r *EventsRepository) GetUniqueIPsNeedingGeo(ctx context.Context, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	// Note: Alias must be different from column name to avoid shadowing in WHERE clause
+	query := `
+		SELECT DISTINCT IPv4NumToString(src_ip) as ip_str
+		FROM events
+		WHERE geo_country = ''
+		  AND src_ip != toIPv4('0.0.0.0')
+		  AND (src_ip < toIPv4('10.0.0.0') OR src_ip > toIPv4('10.255.255.255'))
+		  AND (src_ip < toIPv4('172.16.0.0') OR src_ip > toIPv4('172.31.255.255'))
+		  AND (src_ip < toIPv4('192.168.0.0') OR src_ip > toIPv4('192.168.255.255'))
+		  AND (src_ip < toIPv4('127.0.0.0') OR src_ip > toIPv4('127.255.255.255'))
+		LIMIT ?
+	`
+
+	rows, err := r.conn.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unique IPs: %w", err)
+	}
+	defer rows.Close()
+
+	ips := []string{}
+	for rows.Next() {
+		var ip string
+		if err := rows.Scan(&ip); err != nil {
+			return nil, fmt.Errorf("failed to scan IP: %w", err)
+		}
+		ips = append(ips, ip)
+	}
+
+	return ips, nil
 }

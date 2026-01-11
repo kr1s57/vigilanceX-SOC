@@ -32,6 +32,7 @@ type Repository interface {
 	GetTopTargets(ctx context.Context, period string, limit int) ([]entity.TopTarget, error)
 	GetStatsByLogType(ctx context.Context, period string) (map[string]uint64, error)
 	GetGeoHeatmap(ctx context.Context, period string) ([]map[string]interface{}, error)
+	GetGeoHeatmapFiltered(ctx context.Context, period string, attackTypes []string) ([]map[string]interface{}, error)
 	GetUniqueHostnames(ctx context.Context, logType string) ([]string, error)
 	GetSyslogStatus(ctx context.Context) (*entity.SyslogStatus, error)
 	GetCriticalAlerts(ctx context.Context, limit int) ([]entity.CriticalAlert, error)
@@ -296,6 +297,21 @@ func (s *Service) GetGeoHeatmap(ctx context.Context, period string) ([]map[strin
 	}
 
 	return s.repo.GetGeoHeatmap(ctx, period)
+}
+
+// GetGeoHeatmapFiltered retrieves geographic distribution filtered by attack types
+// attackTypes can include: waf, ips, malware, bruteforce, ddos
+func (s *Service) GetGeoHeatmapFiltered(ctx context.Context, period string, attackTypes []string) ([]map[string]interface{}, error) {
+	if period == "" {
+		period = "24h"
+	}
+
+	// If no filters, use the original method but exclude Firewall Allowed
+	if len(attackTypes) == 0 {
+		return s.repo.GetGeoHeatmapFiltered(ctx, period, nil)
+	}
+
+	return s.repo.GetGeoHeatmapFiltered(ctx, period, attackTypes)
 }
 
 // GetUniqueHostnames retrieves unique hostnames for a log type

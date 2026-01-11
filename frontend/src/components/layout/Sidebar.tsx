@@ -16,6 +16,7 @@ import {
   LucideIcon,
   Key,
   AlertCircle,
+  Map,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -32,6 +33,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, colorClass: 'text-blue-500' },
+  { name: 'Attack Map', href: '/attack-map', icon: Map, colorClass: 'text-rose-500' },
   { name: 'WAF Explorer', href: '/waf', icon: Shield, colorClass: 'text-emerald-500' },
   { name: 'Attacks Analyzer', href: '/attacks', icon: Swords, colorClass: 'text-red-500' },
   { name: 'Advanced Threat', href: '/threats', icon: AlertTriangle, colorClass: 'text-orange-500' },

@@ -28,6 +28,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
 	"github.com/kr1s57/vigilancex/internal/usecase/events"
 	"github.com/kr1s57/vigilancex/internal/usecase/geoblocking"
+	"github.com/kr1s57/vigilancex/internal/usecase/geoenrich"
 	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
 	"github.com/kr1s57/vigilancex/internal/usecase/notifications"
 	"github.com/kr1s57/vigilancex/internal/usecase/reports"
@@ -198,6 +199,11 @@ func main() {
 		Timeout:      10 * time.Second,
 	})
 	logger.Info("GeoIP client initialized for geoblocking v2.0")
+
+	// Initialize Geo Enrichment Service (enriches IPS/Anti-Virus events with missing geolocation)
+	geoEnrichService := geoenrich.NewService(eventsRepo, geoIPClient, logger)
+	geoEnrichService.Start(context.Background(), 5*time.Minute) // Run every 5 minutes
+	logger.Info("Geo enrichment service started", "interval", "5m")
 
 	// Initialize Feed Ingester for blocklist synchronization (v1.6)
 	feedIngester := blocklist.NewFeedIngester(blocklistRepo, blocklist.IngesterConfig{

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -186,7 +187,16 @@ func (h *EventsHandler) GetGeoHeatmap(w http.ResponseWriter, r *http.Request) {
 
 	period := r.URL.Query().Get("period")
 
-	heatmap, err := h.service.GetGeoHeatmap(ctx, period)
+	// Parse attack types filter (comma-separated: waf,ips,malware,bruteforce)
+	attackTypes := r.URL.Query()["attack_types"]
+	if len(attackTypes) == 0 {
+		// Try single param with comma separation
+		if at := r.URL.Query().Get("attack_types"); at != "" {
+			attackTypes = splitAndTrim(at, ",")
+		}
+	}
+
+	heatmap, err := h.service.GetGeoHeatmapFiltered(ctx, period, attackTypes)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to retrieve geo heatmap", err)
 		return
@@ -195,6 +205,18 @@ func (h *EventsHandler) GetGeoHeatmap(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"data": heatmap,
 	})
+}
+
+// splitAndTrim splits a string by delimiter and trims whitespace
+func splitAndTrim(s string, sep string) []string {
+	parts := []string{}
+	for _, p := range strings.Split(s, sep) {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return parts
 }
 
 // GetHostnames handles GET /api/v1/events/hostnames

@@ -131,9 +131,13 @@ export const statsApi = {
 
 // Geo API
 export const geoApi = {
-  heatmap: async (period: string = '24h') => {
+  heatmap: async (period: string = '24h', attackTypes?: string[]) => {
+    const params: Record<string, string> = { period }
+    if (attackTypes && attackTypes.length > 0) {
+      params.attack_types = attackTypes.join(',')
+    }
     const response = await api.get<{ data: Array<{ country: string; count: number; unique_ips: number }> }>('/geo/heatmap', {
-      params: { period }
+      params
     })
     return response.data.data
   },

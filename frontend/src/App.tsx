@@ -5,6 +5,7 @@ import AdminRoute from '@/components/AdminRoute'
 import Login from '@/pages/Login'
 import LicenseActivation from '@/pages/LicenseActivation'
 import { Dashboard } from '@/pages/Dashboard'
+import { AttackMap } from '@/pages/AttackMap'
 import { WafExplorer } from '@/pages/WafExplorer'
 import { AttacksAnalyzer } from '@/pages/AttacksAnalyzer'
 import { AdvancedThreat } from '@/pages/AdvancedThreat'
@@ -33,6 +34,7 @@ function App() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
+                  <Route path="/attack-map" element={<AttackMap />} />
                   <Route path="/waf" element={<WafExplorer />} />
                   <Route path="/attacks" element={<AttacksAnalyzer />} />
                   <Route path="/threats" element={<AdvancedThreat />} />
