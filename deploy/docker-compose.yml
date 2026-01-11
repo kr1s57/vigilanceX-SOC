@@ -84,6 +84,7 @@ services:
     container_name: vigilance_backend
     volumes:
       - backend_data:/app/data
+      - backend_config:/app/config
       - ./ssh/id_rsa_xgs:/app/.ssh/id_rsa_xgs:ro
       - /etc/machine-id:/etc/machine-id:ro
     environment:
@@ -125,6 +126,15 @@ services:
       ALIENVAULT_API_KEY: ${ALIENVAULT_API_KEY:-}
       CRIMINALIP_API_KEY: ${CRIMINALIP_API_KEY:-}
       PULSEDIVE_API_KEY: ${PULSEDIVE_API_KEY:-}
+      # v3.3: SMTP Email Notifications
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-tls}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_RECIPIENTS: ${SMTP_RECIPIENTS:-}
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-30s}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -220,3 +230,5 @@ volumes:
     name: vigilance_vector_data
   backend_data:
     name: vigilance_backend_data
+  backend_config:
+    name: vigilance_backend_config
