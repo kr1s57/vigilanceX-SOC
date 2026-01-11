@@ -614,6 +614,41 @@ export function Settings() {
             ]}
           />
         </SettingRow>
+
+        {/* Timezone */}
+        <SettingRow
+          label="Timezone"
+          description="System timezone for dates and times"
+          icon={<Globe className="w-4 h-4" />}
+        >
+          <select
+            value={settings.timezone}
+            onChange={(e) => handleChange('timezone', e.target.value)}
+            className="px-3 py-2 bg-muted border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm min-w-[200px]"
+          >
+            <option value="Europe/Paris">Europe/Paris (CET)</option>
+            <option value="Europe/London">Europe/London (GMT)</option>
+            <option value="Europe/Berlin">Europe/Berlin (CET)</option>
+            <option value="Europe/Luxembourg">Europe/Luxembourg (CET)</option>
+            <option value="Europe/Brussels">Europe/Brussels (CET)</option>
+            <option value="America/New_York">America/New_York (EST)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+            <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+            <option value="UTC">UTC</option>
+          </select>
+        </SettingRow>
+
+        {/* Dashboard Clock */}
+        <SettingRow
+          label="Show clock on dashboard"
+          description="Display current time in dashboard header"
+          icon={<Clock className="w-4 h-4" />}
+        >
+          <ToggleSwitch
+            checked={settings.showDashboardClock}
+            onChange={(v) => handleChange('showDashboardClock', v)}
+          />
+        </SettingRow>
       </SettingsSection>
 
       {/* Dashboard & Refresh Settings */}

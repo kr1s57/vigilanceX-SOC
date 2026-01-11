@@ -627,12 +627,14 @@ func main() {
 				r.Post("/test", parserHandler.TestParse)
 			})
 
-			// Notifications (v3.3 - Email notifications)
+			// Notifications (v3.3 - Email notifications, v3.5 - SMTP config persistence)
 			r.Route("/notifications", func(r chi.Router) {
 				r.Get("/settings", notificationHandler.GetSettings)
 				r.Put("/settings", notificationHandler.UpdateSettings)
 				r.Post("/test-email", notificationHandler.SendTestEmail)
 				r.Get("/status", notificationHandler.GetStatus)
+				r.Get("/smtp-config", notificationHandler.GetSMTPConfig)    // v3.5
+				r.Put("/smtp-config", notificationHandler.UpdateSMTPConfig) // v3.5
 			})
 		})
 	})

@@ -10,6 +10,8 @@ export interface AppSettings {
   numberFormat: 'fr' | 'en'
   defaultPeriod: '1h' | '24h' | '7d' | '30d'
   iconStyle: 'mono' | 'color' // v2.3: Icon style option
+  timezone: string // v3.5: Timezone setting (e.g., 'Europe/Paris', 'UTC')
+  showDashboardClock: boolean // v3.5: Show clock on dashboard
 
   // Dashboard & Refresh
   refreshInterval: 15 | 30 | 60 | 0 // 0 = manual
@@ -35,6 +37,8 @@ const defaultSettings: AppSettings = {
   numberFormat: 'fr',
   defaultPeriod: '24h',
   iconStyle: 'mono',
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris', // Auto-detect or default
+  showDashboardClock: true,
 
   // Dashboard & Refresh
   refreshInterval: 30,

@@ -193,7 +193,7 @@ func (r *EventsRepository) GetTimeline(ctx context.Context, period string, inter
 		SELECT
 			%s as time_bucket,
 			count() as total_events,
-			countIf(action = 'drop') as blocked_events,
+			countIf(action IN ('drop', 'reject', 'block', 'blocked')) as blocked_events,
 			uniqExact(src_ip) as unique_ips
 		FROM events
 		WHERE timestamp >= ?
@@ -240,7 +240,7 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 	query := `
 		SELECT
 			count() as total_events,
-			countIf(action = 'drop') as blocked_events,
+			countIf(action IN ('drop', 'reject', 'block', 'blocked')) as blocked_events,
 			uniqExact(src_ip) as unique_ips,
 			countIf(severity = 'critical') as critical_events,
 			countIf(severity = 'high') as high_events,
@@ -292,7 +292,7 @@ func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, l
 		SELECT
 			IPv4NumToString(src_ip) as ip,
 			count() as attack_count,
-			countIf(action = 'drop') as blocked_count,
+			countIf(action IN ('drop', 'reject', 'block', 'blocked')) as blocked_count,
 			uniqExact(rule_id) as unique_rules,
 			groupUniqArray(5)(category) as categories,
 			any(geo_country) as country

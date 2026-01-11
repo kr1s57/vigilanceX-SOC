@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kr1s57/vigilancex/internal/entity"
 	"github.com/kr1s57/vigilancex/internal/usecase/notifications"
 )
 
@@ -105,5 +106,54 @@ func (h *NotificationHandler) GetStatus(w http.ResponseWriter, r *http.Request) 
 		"configured": configured,
 		"status":     status,
 		"host":       host,
+	})
+}
+
+// GetSMTPConfig returns SMTP configuration (without password)
+// GET /api/v1/notifications/smtp-config
+func (h *NotificationHandler) GetSMTPConfig(w http.ResponseWriter, r *http.Request) {
+	config := h.service.GetSMTPConfig()
+	if config == nil {
+		JSONResponse(w, http.StatusOK, map[string]interface{}{
+			"configured": false,
+		})
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"configured": true,
+		"config":     config,
+	})
+}
+
+// UpdateSMTPConfig updates and persists SMTP configuration
+// PUT /api/v1/notifications/smtp-config
+func (h *NotificationHandler) UpdateSMTPConfig(w http.ResponseWriter, r *http.Request) {
+	var config entity.SMTPConfig
+	if err := DecodeJSON(r, &config); err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	// Validate required fields
+	if config.Host == "" {
+		ErrorResponse(w, http.StatusBadRequest, "SMTP host is required", nil)
+		return
+	}
+	if config.Port == 0 {
+		config.Port = 587 // Default port
+	}
+	if config.Security == "" {
+		config.Security = "tls" // Default security
+	}
+
+	if err := h.service.UpdateSMTPConfig(&config); err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to update SMTP config", err)
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "SMTP configuration saved and will persist across restarts",
 	})
 }

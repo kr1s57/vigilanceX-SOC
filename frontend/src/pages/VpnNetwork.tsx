@@ -1,38 +1,23 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Network,
-  Shield,
   Wifi,
   WifiOff,
   Users,
   Globe,
-  Activity,
-  Server,
   Lock,
-  Unlock,
   AlertTriangle,
   RefreshCw,
   ChevronDown,
   ChevronUp,
   Search,
   X,
-  Eye,
   Calendar,
 } from 'lucide-react'
-import { Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { StatCard } from '@/components/dashboard/StatCard'
-import { eventsApi, statsApi, geoApi } from '@/lib/api'
-import type { Event, OverviewResponse, PaginatedResponse } from '@/types'
-
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899']
-const LOG_TYPE_COLORS: Record<string, string> = {
-  WAF: '#3b82f6',
-  IPS: '#ef4444',
-  VPN: '#10b981',
-  Firewall: '#f59e0b',
-  ATP: '#8b5cf6',
-  'Anti-Virus': '#ec4899',
-}
+import { eventsApi, geoApi } from '@/lib/api'
+import type { Event, PaginatedResponse } from '@/types'
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
@@ -219,41 +204,31 @@ export function VpnNetwork() {
   const [period, setPeriod] = useState<Period>('24h')
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
   const [vpnFilter, setVpnFilter] = useState('')
-  const [networkFilter, setNetworkFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
   const [detailModal, setDetailModal] = useState<{
-    type: 'vpn' | 'firewall' | 'ips' | null
+    type: 'vpn' | null
     title: string
     icon: React.ElementType
     iconColor: string
     events: Event[]
   }>({ type: null, title: '', icon: Lock, iconColor: '', events: [] })
 
-  // Data states
-  const [overview, setOverview] = useState<OverviewResponse | null>(null)
+  // Data states - VPN only
   const [vpnEvents, setVpnEvents] = useState<PaginatedResponse<Event> | null>(null)
-  const [firewallEvents, setFirewallEvents] = useState<PaginatedResponse<Event> | null>(null)
-  const [ipsEvents, setIpsEvents] = useState<PaginatedResponse<Event> | null>(null)
   const [geoData, setGeoData] = useState<GeoHeatmapEntry[]>([])
 
-  // Fetch data
+  // Fetch VPN data only
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
       const startTime = getStartTimeFromPeriod(period)
       try {
-        const [overviewRes, vpnRes, firewallRes, ipsRes, geoRes] = await Promise.all([
-          statsApi.overview(period),
+        const [vpnRes, geoRes] = await Promise.all([
           eventsApi.list({ log_type: 'VPN', limit: 100, start_time: startTime }),
-          eventsApi.list({ log_type: 'Firewall', limit: 100, start_time: startTime }),
-          eventsApi.list({ log_type: 'IPS', limit: 50, start_time: startTime }),
           geoApi.heatmap(period),
         ])
-        setOverview(overviewRes)
         setVpnEvents(vpnRes)
-        setFirewallEvents(firewallRes)
-        setIpsEvents(ipsRes)
         setGeoData(geoRes)
       } catch (error) {
         console.error('Failed to fetch data:', error)
@@ -266,43 +241,6 @@ export function VpnNetwork() {
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [period])
-
-  // Calculate log type distribution
-  const logTypeDistribution = useMemo(() => {
-    if (!overview?.by_log_type) return []
-    return Object.entries(overview.by_log_type)
-      .map(([name, value]) => ({
-        name,
-        value: value as number,
-        color: LOG_TYPE_COLORS[name] || '#6b7280',
-      }))
-      .filter(item => item.value > 0)
-      .sort((a, b) => b.value - a.value)
-  }, [overview])
-
-  // Calculate protocol distribution from events
-  const protocolDistribution = useMemo(() => {
-    const protocols: Record<string, number> = {}
-    const allEvents = [
-      ...(vpnEvents?.data || []),
-      ...(firewallEvents?.data || []),
-      ...(ipsEvents?.data || []),
-    ]
-
-    allEvents.forEach((event: Event) => {
-      const proto = event.protocol || 'Unknown'
-      protocols[proto] = (protocols[proto] || 0) + 1
-    })
-
-    return Object.entries(protocols)
-      .map(([name, value], index) => ({
-        name,
-        value,
-        color: COLORS[index % COLORS.length],
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 7)
-  }, [vpnEvents, firewallEvents, ipsEvents])
 
   // Parse VPN sessions from events
   const vpnSessions = useMemo((): VPNSession[] => {
@@ -384,53 +322,20 @@ export function VpnNetwork() {
     })
   }
 
-  // Filter network events (Firewall + IPS)
-  const networkEvents = useMemo(() => {
-    const events = [
-      ...(firewallEvents?.data || []),
-      ...(ipsEvents?.data || []),
-    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-
-    if (!networkFilter) return events.slice(0, 50)
-    const lower = networkFilter.toLowerCase()
-    return events.filter((e: Event) =>
-      e.src_ip.includes(lower) ||
-      e.dst_ip.includes(lower) ||
-      e.rule_name?.toLowerCase().includes(lower) ||
-      e.action?.toLowerCase().includes(lower)
-    ).slice(0, 50)
-  }, [firewallEvents, ipsEvents, networkFilter])
-
-  // Stats calculations
+  // Stats calculations - VPN only
   const stats = useMemo(() => {
     const vpnCount = vpnEvents?.pagination?.total || 0
-    const firewallCount = firewallEvents?.pagination?.total || 0
-    const ipsCount = ipsEvents?.pagination?.total || 0
-    const uniqueVPNUsers = new Set(vpnEvents?.data?.map((e: Event) => e.user_name).filter(Boolean)).size
-    const blockedNetwork = [...(firewallEvents?.data || []), ...(ipsEvents?.data || [])]
-      .filter((e: Event) => e.action === 'drop' || e.action === 'reject').length
+    // Live users = unique users with connected status (active sessions)
+    const connectedSessions = vpnSessions.filter(s => s.status === 'connected')
+    const liveUsers = new Set(connectedSessions.map(s => s.user).filter(Boolean)).size
 
     return {
       vpnSessions: vpnCount,
-      firewallEvents: firewallCount,
-      ipsEvents: ipsCount,
-      uniqueVPNUsers,
-      blockedNetwork,
-      totalNetworkEvents: firewallCount + ipsCount,
+      liveUsers,
     }
-  }, [vpnEvents, firewallEvents, ipsEvents])
+  }, [vpnEvents, vpnSessions])
 
   const formatNumber = (n: number) => n.toLocaleString()
-
-  const formatTime = (ts: string) => {
-    const date = new Date(ts)
-    return date.toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
@@ -447,19 +352,6 @@ export function VpnNetwork() {
       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.disconnected}`}>
         {icons[status]}
         {status}
-      </span>
-    )
-  }
-
-  const getActionBadge = (action: string) => {
-    const styles: Record<string, string> = {
-      allow: 'bg-green-500/10 text-green-500',
-      drop: 'bg-red-500/10 text-red-500',
-      reject: 'bg-orange-500/10 text-orange-500',
-    }
-    return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[action] || 'bg-gray-500/10 text-gray-400'}`}>
-        {action}
       </span>
     )
   }
@@ -500,110 +392,117 @@ export function VpnNetwork() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatCard
-          title="VPN Sessions"
-          value={formatNumber(stats.vpnSessions)}
-          subtitle="Total connections"
-          icon={<Lock className="w-5 h-5 text-green-500" />}
-          variant={stats.vpnSessions > 0 ? 'success' : 'default'}
-        />
-        <StatCard
-          title="VPN Users"
-          value={formatNumber(stats.uniqueVPNUsers)}
-          subtitle="Unique users"
-          icon={<Users className="w-5 h-5 text-blue-500" />}
-        />
-        <StatCard
-          title="Firewall Events"
-          value={formatNumber(stats.firewallEvents)}
-          subtitle="Rule matches"
-          icon={<Shield className="w-5 h-5 text-orange-500" />}
-        />
-        <StatCard
-          title="IPS Events"
-          value={formatNumber(stats.ipsEvents)}
-          subtitle="Intrusion prevention"
-          icon={<Activity className="w-5 h-5 text-red-500" />}
-          variant={stats.ipsEvents > 0 ? 'warning' : 'default'}
-        />
-        <StatCard
-          title="Blocked"
-          value={formatNumber(stats.blockedNetwork)}
-          subtitle="Network blocks"
-          icon={<Unlock className="w-5 h-5 text-purple-500" />}
-          variant={stats.blockedNetwork > 0 ? 'critical' : 'default'}
-        />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Log Type Distribution - Horizontal Bar Chart */}
-        <div className="bg-card rounded-xl border p-6">
-          <h3 className="text-lg font-semibold mb-4">Event Distribution by Type</h3>
-          {logTypeDistribution.length > 0 ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={logTypeDistribution} layout="vertical">
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={70}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [formatNumber(value), 'Events']}
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                    }}
-                  />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                    {logTypeDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              No event data available
-            </div>
-          )}
+      {/* Stats Cards - VPN only */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div
+          onClick={() => setDetailModal({
+            type: 'vpn',
+            title: 'VPN Sessions',
+            icon: Lock,
+            iconColor: 'bg-green-500/10 text-green-500',
+            events: vpnEvents?.data || []
+          })}
+          className="cursor-pointer hover:scale-[1.02] transition-transform"
+        >
+          <StatCard
+            title="VPN Sessions"
+            value={formatNumber(stats.vpnSessions)}
+            subtitle="Click to view details"
+            icon={<Lock className="w-5 h-5 text-green-500" />}
+            variant={stats.vpnSessions > 0 ? 'success' : 'default'}
+          />
         </div>
-
-        {/* Geographic Distribution */}
-        <div className="bg-card rounded-xl border p-6">
-          <h3 className="text-lg font-semibold mb-4">Traffic by Country</h3>
-          {geoData && geoData.length > 0 ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={geoData.slice(0, 8)} layout="vertical">
-                  <XAxis type="number" />
-                  <YAxis type="category" dataKey="country" width={50} tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    formatter={(value: number) => [formatNumber(value), 'Events']}
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                    }}
-                  />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              No geographic data available
-            </div>
-          )}
+        <div
+          onClick={() => setDetailModal({
+            type: 'vpn',
+            title: 'Live Connected Users',
+            icon: Users,
+            iconColor: 'bg-blue-500/10 text-blue-500',
+            events: (vpnEvents?.data || []).filter(e =>
+              e.category?.toLowerCase().includes('connection') ||
+              e.category?.toLowerCase().includes('success') ||
+              e.action === 'allow'
+            )
+          })}
+          className="cursor-pointer hover:scale-[1.02] transition-transform"
+        >
+          <StatCard
+            title="Live Users"
+            value={formatNumber(stats.liveUsers)}
+            subtitle="Currently connected"
+            icon={<Users className="w-5 h-5 text-blue-500" />}
+            variant={stats.liveUsers > 0 ? 'success' : 'default'}
+          />
+        </div>
+        <div
+          onClick={() => setDetailModal({
+            type: 'vpn',
+            title: 'Connected Sessions',
+            icon: Wifi,
+            iconColor: 'bg-cyan-500/10 text-cyan-500',
+            events: (vpnEvents?.data || []).filter(e =>
+              e.category?.toLowerCase().includes('connection') ||
+              e.category?.toLowerCase().includes('success') ||
+              e.action === 'allow'
+            )
+          })}
+          className="cursor-pointer hover:scale-[1.02] transition-transform"
+        >
+          <StatCard
+            title="Connected"
+            value={formatNumber(vpnSessions.filter(s => s.status === 'connected').length)}
+            subtitle="Click to view active sessions"
+            icon={<Wifi className="w-5 h-5 text-cyan-500" />}
+            variant="success"
+          />
+        </div>
+        <div
+          onClick={() => setDetailModal({
+            type: 'vpn',
+            title: 'Authentication Failures',
+            icon: AlertTriangle,
+            iconColor: 'bg-red-500/10 text-red-500',
+            events: (vpnEvents?.data || []).filter(e =>
+              e.category?.toLowerCase().includes('failure') ||
+              e.category?.toLowerCase().includes('fail') ||
+              e.action === 'drop'
+            )
+          })}
+          className="cursor-pointer hover:scale-[1.02] transition-transform"
+        >
+          <StatCard
+            title="Failed"
+            value={formatNumber(vpnSessions.filter(s => s.status === 'failed').length)}
+            subtitle="Click to view failures"
+            icon={<AlertTriangle className="w-5 h-5 text-red-500" />}
+            variant={vpnSessions.filter(s => s.status === 'failed').length > 0 ? 'critical' : 'default'}
+          />
         </div>
       </div>
+
+      {/* VPN Geographic Distribution */}
+      {geoData && geoData.length > 0 && (
+        <div className="bg-card rounded-xl border p-6">
+          <h3 className="text-lg font-semibold mb-4">VPN Connections by Country</h3>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={geoData.slice(0, 8)} layout="vertical">
+                <XAxis type="number" />
+                <YAxis type="category" dataKey="country" width={50} tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(value: number) => [formatNumber(value), 'Connections']}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Bar dataKey="count" fill="#10b981" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* VPN Sessions Section */}
       <div className="bg-card rounded-xl border overflow-hidden">
@@ -755,233 +654,6 @@ export function VpnNetwork() {
         )}
       </div>
 
-      {/* Network Events Section */}
-      <div className="bg-card rounded-xl border overflow-hidden">
-        <button
-          onClick={() => toggleSection('network')}
-          className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <Server className="w-5 h-5 text-orange-500" />
-            <span className="font-semibold">Network Events</span>
-            <span className="text-sm text-muted-foreground">
-              (Firewall + IPS: {stats.totalNetworkEvents} events)
-            </span>
-          </div>
-          {expandedSection === 'network' ? (
-            <ChevronUp className="w-5 h-5" />
-          ) : (
-            <ChevronDown className="w-5 h-5" />
-          )}
-        </button>
-
-        {expandedSection === 'network' && (
-          <div className="border-t p-4">
-            {stats.totalNetworkEvents > 0 ? (
-              <>
-                {/* Search */}
-                <div className="mb-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder="Search by IP, rule, or action..."
-                      value={networkFilter}
-                      onChange={(e) => setNetworkFilter(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 bg-muted rounded-lg border-0 focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                </div>
-
-                {/* Events Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="text-left text-sm text-muted-foreground border-b">
-                        <th className="pb-2 font-medium">Time</th>
-                        <th className="pb-2 font-medium">Type</th>
-                        <th className="pb-2 font-medium">Source</th>
-                        <th className="pb-2 font-medium">Destination</th>
-                        <th className="pb-2 font-medium">Rule</th>
-                        <th className="pb-2 font-medium">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {networkEvents.map((event, idx) => (
-                        <tr key={idx} className="hover:bg-muted/50">
-                          <td className="py-3 text-sm text-muted-foreground whitespace-nowrap">
-                            {formatTime(event.timestamp)}
-                          </td>
-                          <td className="py-3">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              event.log_type === 'IPS'
-                                ? 'bg-red-500/10 text-red-500'
-                                : 'bg-orange-500/10 text-orange-500'
-                            }`}>
-                              {event.log_type}
-                            </span>
-                          </td>
-                          <td className="py-3">
-                            <div className="font-mono text-sm">
-                              {event.src_ip}
-                              {event.src_port > 0 && <span className="text-muted-foreground">:{event.src_port}</span>}
-                            </div>
-                          </td>
-                          <td className="py-3">
-                            <div className="font-mono text-sm">
-                              {event.dst_ip}
-                              {event.dst_port > 0 && <span className="text-muted-foreground">:{event.dst_port}</span>}
-                            </div>
-                          </td>
-                          <td className="py-3 text-sm max-w-xs truncate" title={event.rule_name}>
-                            {event.rule_name || event.rule_id || '-'}
-                          </td>
-                          <td className="py-3">
-                            {getActionBadge(event.action)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-12">
-                <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <h4 className="text-lg font-medium mb-2">No Network Events</h4>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  No Firewall or IPS events have been recorded.
-                  Configure Sophos XGS to forward network logs to see traffic data.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Protocol Distribution (if we have protocol data) */}
-      {protocolDistribution.length > 0 && (
-        <div className="bg-card rounded-xl border p-6">
-          <h3 className="text-lg font-semibold mb-4">Protocol Distribution</h3>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={protocolDistribution}>
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis />
-                <Tooltip
-                  formatter={(value: number) => [formatNumber(value), 'Events']}
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {protocolDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Actions / Info - Clickable sections */}
-      <div className="bg-card rounded-xl border p-6">
-        <h3 className="text-lg font-semibold mb-4">Network Security Overview</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* VPN Security */}
-          <div
-            onClick={() => stats.vpnSessions > 0 && setDetailModal({
-              type: 'vpn',
-              title: 'VPN Sessions',
-              icon: Lock,
-              iconColor: 'bg-green-500/10 text-green-500',
-              events: vpnEvents?.data || []
-            })}
-            className={`p-4 rounded-lg border transition-all ${
-              stats.vpnSessions > 0
-                ? 'hover:bg-muted/50 cursor-pointer hover:border-green-500/50'
-                : 'opacity-60'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium flex items-center gap-2">
-                <Lock className="w-4 h-4 text-green-500" />
-                VPN Security
-              </h4>
-              {stats.vpnSessions > 0 && <Eye className="w-4 h-4 text-muted-foreground" />}
-            </div>
-            <p className="text-2xl font-bold text-green-500">{formatNumber(stats.vpnSessions)}</p>
-            <p className="text-sm text-muted-foreground">
-              {stats.vpnSessions > 0
-                ? `${stats.uniqueVPNUsers} unique users`
-                : 'No sessions monitored'}
-            </p>
-          </div>
-
-          {/* Firewall Protection */}
-          <div
-            onClick={() => stats.firewallEvents > 0 && setDetailModal({
-              type: 'firewall',
-              title: 'Firewall Events',
-              icon: Shield,
-              iconColor: 'bg-orange-500/10 text-orange-500',
-              events: firewallEvents?.data || []
-            })}
-            className={`p-4 rounded-lg border transition-all ${
-              stats.firewallEvents > 0
-                ? 'hover:bg-muted/50 cursor-pointer hover:border-orange-500/50'
-                : 'opacity-60'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium flex items-center gap-2">
-                <Shield className="w-4 h-4 text-orange-500" />
-                Firewall Protection
-              </h4>
-              {stats.firewallEvents > 0 && <Eye className="w-4 h-4 text-muted-foreground" />}
-            </div>
-            <p className="text-2xl font-bold text-orange-500">{formatNumber(stats.firewallEvents)}</p>
-            <p className="text-sm text-muted-foreground">
-              {stats.firewallEvents > 0
-                ? 'rule matches'
-                : 'No events recorded'}
-            </p>
-          </div>
-
-          {/* Intrusion Prevention */}
-          <div
-            onClick={() => stats.ipsEvents > 0 && setDetailModal({
-              type: 'ips',
-              title: 'IPS Alerts',
-              icon: Activity,
-              iconColor: 'bg-red-500/10 text-red-500',
-              events: ipsEvents?.data || []
-            })}
-            className={`p-4 rounded-lg border transition-all ${
-              stats.ipsEvents > 0
-                ? 'hover:bg-muted/50 cursor-pointer hover:border-red-500/50'
-                : 'opacity-60'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium flex items-center gap-2">
-                <Activity className="w-4 h-4 text-red-500" />
-                Intrusion Prevention
-              </h4>
-              {stats.ipsEvents > 0 && <Eye className="w-4 h-4 text-muted-foreground" />}
-            </div>
-            <p className="text-2xl font-bold text-red-500">{formatNumber(stats.ipsEvents)}</p>
-            <p className="text-sm text-muted-foreground">
-              {stats.ipsEvents > 0
-                ? 'IPS alerts detected'
-                : 'No events recorded'}
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* Events Detail Modal */}
       <EventsDetailModal

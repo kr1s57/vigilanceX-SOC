@@ -35,6 +35,65 @@ func (s *Service) UpdateSMTPClient(client *smtp.Client) {
 	s.logger.Info("SMTP client updated", "configured", s.settings.SMTPConfigured)
 }
 
+// UpdateSMTPConfig updates and persists the SMTP configuration
+func (s *Service) UpdateSMTPConfig(config *entity.SMTPConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Store config in settings for persistence
+	s.settings.SMTPConfig = config
+
+	// Create new SMTP client with the config
+	if config != nil && config.Host != "" {
+		s.smtpClient = smtp.NewClient(smtp.Config{
+			Host:       config.Host,
+			Port:       config.Port,
+			Security:   config.Security,
+			FromEmail:  config.FromEmail,
+			Username:   config.Username,
+			Password:   config.Password,
+			Recipients: config.Recipients,
+		}, s.logger)
+		s.settings.SMTPConfigured = s.smtpClient.IsConfigured()
+	} else {
+		s.smtpClient = nil
+		s.settings.SMTPConfigured = false
+	}
+
+	// Save to disk for persistence across restarts
+	if err := s.saveSettings(); err != nil {
+		return fmt.Errorf("save SMTP config: %w", err)
+	}
+
+	s.logger.Info("SMTP config updated and persisted",
+		"host", config.Host,
+		"port", config.Port,
+		"configured", s.settings.SMTPConfigured)
+
+	return nil
+}
+
+// GetSMTPConfig returns the current SMTP configuration (without password)
+func (s *Service) GetSMTPConfig() *entity.SMTPConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.settings.SMTPConfig == nil {
+		return nil
+	}
+
+	// Return config without password for security
+	return &entity.SMTPConfig{
+		Host:       s.settings.SMTPConfig.Host,
+		Port:       s.settings.SMTPConfig.Port,
+		Security:   s.settings.SMTPConfig.Security,
+		FromEmail:  s.settings.SMTPConfig.FromEmail,
+		Username:   s.settings.SMTPConfig.Username,
+		Password:   "", // Don't expose password
+		Recipients: s.settings.SMTPConfig.Recipients,
+	}
+}
+
 // NewService creates a new notification service
 func NewService(smtpClient *smtp.Client, logger *slog.Logger) *Service {
 	s := &Service{
@@ -44,11 +103,27 @@ func NewService(smtpClient *smtp.Client, logger *slog.Logger) *Service {
 		settingsPath: "/app/config/notification_settings.json",
 	}
 
-	// Load settings from disk
+	// Load settings from disk (includes SMTP config if previously saved)
 	s.loadSettings()
 
+	// If SMTP config was persisted and no client provided from env, create one from saved config
+	if smtpClient == nil && s.settings.SMTPConfig != nil && s.settings.SMTPConfig.Host != "" {
+		logger.Info("Loading SMTP config from persisted settings",
+			"host", s.settings.SMTPConfig.Host,
+			"port", s.settings.SMTPConfig.Port)
+		s.smtpClient = smtp.NewClient(smtp.Config{
+			Host:       s.settings.SMTPConfig.Host,
+			Port:       s.settings.SMTPConfig.Port,
+			Security:   s.settings.SMTPConfig.Security,
+			FromEmail:  s.settings.SMTPConfig.FromEmail,
+			Username:   s.settings.SMTPConfig.Username,
+			Password:   s.settings.SMTPConfig.Password,
+			Recipients: s.settings.SMTPConfig.Recipients,
+		}, logger)
+	}
+
 	// Update SMTP configured status
-	s.settings.SMTPConfigured = smtpClient != nil && smtpClient.IsConfigured()
+	s.settings.SMTPConfigured = s.smtpClient != nil && s.smtpClient.IsConfigured()
 
 	return s
 }

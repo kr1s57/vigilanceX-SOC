@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Activity,
   X,
+  Clock,
 } from 'lucide-react'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
@@ -94,26 +95,29 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header with period selector */}
+      {/* Header with period selector and clock */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Security Dashboard</h1>
           <p className="text-muted-foreground">Real-time security overview</p>
         </div>
-        <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-          {(['1h', '24h', '7d', '30d'] as Period[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                period === p
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
+        <div className="flex items-center gap-4">
+          <DashboardClock timezone={settings.timezone} show={settings.showDashboardClock} />
+          <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
+            {(['1h', '24h', '7d', '30d'] as Period[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  period === p
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -399,6 +403,42 @@ function LogTypeRow({ logType, count, total }: { logType: string; count: number;
           style={{ width: `${percentage}%` }}
         />
       </div>
+    </div>
+  )
+}
+
+// Clock component for dashboard header
+function DashboardClock({ timezone, show }: { timezone: string; show: boolean }) {
+  const [time, setTime] = useState(new Date())
+
+  useEffect(() => {
+    if (!show) return
+    const timer = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [show])
+
+  if (!show) return null
+
+  const formattedTime = time.toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: timezone,
+    hour12: false,
+  })
+
+  const formattedDate = time.toLocaleDateString('fr-FR', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: timezone,
+  })
+
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Clock className="w-4 h-4" />
+      <span className="font-mono">{formattedTime}</span>
+      <span className="text-xs hidden sm:inline">({formattedDate})</span>
     </div>
   )
 }

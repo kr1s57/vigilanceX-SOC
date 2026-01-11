@@ -7,7 +7,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
 
 // Period options for WAF logs
-type WafPeriod = '7d' | '14d' | '30d'
+type WafPeriod = '24h' | '7d' | '14d' | '30d'
 
 // Attack type colors
 const attackTypeColors: Record<string, string> = {
@@ -60,6 +60,7 @@ function getDateKey(timestamp: string): string {
 function getStartTimeFromPeriod(period: WafPeriod): string {
   const now = new Date()
   const offsets: Record<WafPeriod, number> = {
+    '24h': 24 * 60 * 60 * 1000,
     '7d': 7 * 24 * 60 * 60 * 1000,
     '14d': 14 * 24 * 60 * 60 * 1000,
     '30d': 30 * 24 * 60 * 60 * 1000,
@@ -119,10 +120,13 @@ export function WafExplorer() {
     }).catch(() => {})
   }, [])
 
-  // Fetch grouped ModSec logs
+  // Fetch grouped ModSec logs - reset data when period changes
   useEffect(() => {
     async function fetchRequests() {
       setLoading(true)
+      // Clear previous data immediately to show fresh stats
+      setRequests([])
+
       try {
         // Determine time filters based on selectedDate or period
         let startTime: string | undefined
@@ -538,13 +542,14 @@ export function WafExplorer() {
       <div className="flex flex-wrap gap-4 p-4 bg-card rounded-xl border">
         {/* Period selector */}
         <div className="flex bg-muted rounded-lg p-1">
-          {(['7d', '14d', '30d'] as WafPeriod[]).map((p) => (
+          {(['24h', '7d', '14d', '30d'] as WafPeriod[]).map((p) => (
             <button
               key={p}
               onClick={() => {
                 setPeriod(p)
                 setSelectedDate('') // Clear specific date when selecting period
                 setExpandedDays(new Set()) // Reset expanded state to trigger auto-expand
+                setPagination(prev => ({ ...prev, offset: 0 })) // Reset offset for new period
               }}
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                 !selectedDate && period === p
@@ -552,7 +557,7 @@ export function WafExplorer() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {p === '7d' ? '7 days' : p === '14d' ? '14 days' : '30 days'}
+              {p === '24h' ? '24h' : p === '7d' ? '7 days' : p === '14d' ? '14 days' : '30 days'}
             </button>
           ))}
         </div>
@@ -567,6 +572,7 @@ export function WafExplorer() {
             onChange={(e) => {
               setSelectedDate(e.target.value)
               setExpandedDays(new Set()) // Reset to trigger auto-expand
+              setPagination(prev => ({ ...prev, offset: 0 })) // Reset offset for new date
             }}
             className={`px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm ${
               selectedDate ? 'border-primary' : ''

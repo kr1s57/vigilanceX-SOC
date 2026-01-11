@@ -18,6 +18,9 @@ type NotificationSettings struct {
 	// SMTP Status
 	SMTPConfigured bool `json:"smtp_configured"`
 
+	// SMTP Config (persisted) - v3.5
+	SMTPConfig *SMTPConfig `json:"smtp_config,omitempty"`
+
 	// Scheduled Reports
 	DailyReportEnabled   bool   `json:"daily_report_enabled"`
 	DailyReportTime      string `json:"daily_report_time"` // HH:MM format

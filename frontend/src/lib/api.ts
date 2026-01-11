@@ -804,7 +804,18 @@ export interface NotificationStatus {
   host: string
 }
 
-// Notifications API (v3.3 - Email notifications)
+// SMTP Config Types (v3.5)
+export interface SMTPConfig {
+  host: string
+  port: number
+  security: string
+  from_email: string
+  username: string
+  password: string
+  recipients: string[]
+}
+
+// Notifications API (v3.3 - Email notifications, v3.5 - SMTP config persistence)
 export const notificationsApi = {
   getSettings: async (): Promise<NotificationSettings> => {
     const response = await api.get<NotificationSettings>('/notifications/settings')
@@ -823,6 +834,17 @@ export const notificationsApi = {
 
   getStatus: async (): Promise<NotificationStatus> => {
     const response = await api.get<NotificationStatus>('/notifications/status')
+    return response.data
+  },
+
+  // v3.5: SMTP config persistence
+  getSMTPConfig: async (): Promise<{ configured: boolean; config?: SMTPConfig }> => {
+    const response = await api.get<{ configured: boolean; config?: SMTPConfig }>('/notifications/smtp-config')
+    return response.data
+  },
+
+  updateSMTPConfig: async (config: SMTPConfig): Promise<{ success: boolean; message: string }> => {
+    const response = await api.put<{ success: boolean; message: string }>('/notifications/smtp-config', config)
     return response.data
   },
 }
