@@ -4,6 +4,42 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.5.101] - 2026-01-12
+
+### Debug Session - VPN, WAF, Dashboard & SMTP Fixes
+
+#### Corrections
+
+| Fix | Description |
+|-----|-------------|
+| Dashboard Blocked Events | Compteur inclut maintenant reject/block/blocked (pas seulement drop) |
+| Dashboard Clock | Nouvelle horloge temps reel avec support timezone |
+| SMTP Persistence | Configuration SMTP sauvegardee sur disque (persiste apres rebuild) |
+| VPN Page Cleanup | Page simplifiee: uniquement VPN (Firewall/IPS/Network retires) |
+| VPN Clickable Cards | Les 4 cartes sont cliquables avec modal de details |
+| VPN Live Users | Affiche uniquement les sessions actives (status connected) |
+| WAF Explorer 24h | Nouveau filtre 24h ajoute |
+| WAF Explorer Stats | Correction stats qui n'updataient pas au changement de periode |
+
+#### Fichiers Modifies
+
+**Backend:**
+- `cmd/api/main.go` - Routes SMTP config
+- `internal/entity/notification.go` - SMTPConfig dans NotificationSettings
+- `internal/usecase/notifications/service.go` - Methodes Get/Update SMTPConfig
+- `internal/adapter/controller/http/handlers/notifications.go` - Handlers SMTP
+- `internal/adapter/repository/clickhouse/events_repo.go` - Fix blocked actions
+
+**Frontend:**
+- `src/pages/Dashboard.tsx` - Clock component + timezone
+- `src/pages/Settings.tsx` - Timezone selector
+- `src/pages/VpnNetwork.tsx` - Simplification + clickable cards
+- `src/pages/WafExplorer.tsx` - 24h filter + data reset
+- `src/contexts/SettingsContext.tsx` - timezone + showDashboardClock
+- `src/lib/api.ts` - SMTP config endpoints
+
+---
+
 ## [3.5.100] - 2026-01-12
 
 ### Interactive Attack Map
