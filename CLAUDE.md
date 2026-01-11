@@ -604,6 +604,93 @@ POST /api/v1/license/validate      # Force validation (admin)
 
 ---
 
+## Backup Git - Forgejo Local
+
+### Architecture
+
+Backup automatise vers une instance Forgejo locale (air-gapped).
+
+| Composant | Details |
+|-----------|---------|
+| **Serveur** | 10.56.121.100 (Docker) |
+| **Image** | codeberg.org/forgejo/forgejo:13 |
+| **Web UI** | http://10.56.121.100:3000 |
+| **SSH** | Port 2222 (via ProxyJump) |
+| **User** | itsadm (admin) |
+
+### Repos Sauvegardes
+
+| Repo Forgejo | Source | Description |
+|--------------|--------|-------------|
+| `itsadm/vigilanceX` | /opt/vigilanceX | Code source principal |
+| `itsadm/vigilanceX-SOC` | /opt/vigilanceX | Deploiement public |
+| `itsadm/vigilanceKey` | 10.56.126.126:/opt/vigilanceKey | Serveur licences |
+
+### Configuration SSH
+
+```bash
+# ~/.ssh/config
+Host forgejo
+    HostName localhost
+    Port 2222
+    User git
+    IdentityFile ~/.ssh/id_forgejo
+    IdentitiesOnly yes
+    ProxyJump itsadm@10.56.121.100
+```
+
+### Git Remotes
+
+```bash
+# vigilanceX
+git remote -v
+# origin   -> GitHub (kr1s57/vigilanceX)
+# public   -> GitHub (kr1s57/vigilanceX-SOC)
+# forgejo  -> Forgejo (itsadm/vigilanceX)
+# forgejo-soc -> Forgejo (itsadm/vigilanceX-SOC)
+```
+
+### Script de Backup
+
+**Chemin**: `/opt/vigilanceX/scripts/backup-to-forgejo.sh`
+
+```bash
+# Usage
+./backup-to-forgejo.sh --all           # Backup tout
+./backup-to-forgejo.sh --vigilancex    # vigilanceX + SOC
+./backup-to-forgejo.sh --vigilancekey  # vigilanceKey seulement
+./backup-to-forgejo.sh --check         # Test connexion
+```
+
+### Cron Automatique
+
+```bash
+# Backup quotidien a 2h du matin
+0 2 * * * /opt/vigilanceX/scripts/backup-to-forgejo.sh --all >> /var/log/forgejo-backup.log 2>&1
+```
+
+### Commandes Manuelles
+
+```bash
+# Push manuel vers Forgejo
+cd /opt/vigilanceX
+git push forgejo main --tags
+git push forgejo-soc main --tags
+
+# Verifier les logs
+tail -f /var/log/forgejo-backup.log
+```
+
+### Strategie 3-2-1
+
+| Copie | Emplacement | Type |
+|-------|-------------|------|
+| 1 | Machine DEV (/opt/vigilanceX) | Local |
+| 2 | GitHub (kr1s57/*) | Cloud |
+| 3 | Forgejo (10.56.121.100) | Local air-gapped |
+
+---
+
 ## Sous-Agents Claude (Regles)
 
 ### Configuration Requise
