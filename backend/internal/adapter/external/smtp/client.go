@@ -58,6 +58,9 @@ func (c *Client) TestConnection(ctx context.Context) error {
 	}
 
 	addr := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
+	security := strings.ToLower(c.config.Security)
+
+	c.logger.Info("Testing SMTP connection", "host", c.config.Host, "port", c.config.Port, "security", security)
 
 	// Create connection with timeout
 	dialer := net.Dialer{Timeout: c.config.Timeout}
@@ -65,15 +68,18 @@ func (c *Client) TestConnection(ctx context.Context) error {
 	var conn net.Conn
 	var err error
 
-	switch strings.ToLower(c.config.Security) {
-	case "ssl":
+	switch security {
+	case "ssl", "implicit":
 		// Direct TLS connection (port 465)
 		tlsConfig := &tls.Config{
 			ServerName: c.config.Host,
 		}
 		conn, err = tls.DialWithDialer(&dialer, "tcp", addr, tlsConfig)
+	case "none", "plain":
+		// Plain connection, no TLS
+		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	default:
-		// Plain connection first, then STARTTLS
+		// "tls", "starttls", or default: Plain connection first, then STARTTLS
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	}
 
@@ -89,24 +95,56 @@ func (c *Client) TestConnection(ctx context.Context) error {
 	}
 	defer client.Close()
 
-	// STARTTLS if using TLS mode (port 587)
-	if strings.ToLower(c.config.Security) == "tls" {
-		tlsConfig := &tls.Config{
-			ServerName: c.config.Host,
-		}
-		if err := client.StartTLS(tlsConfig); err != nil {
-			return fmt.Errorf("failed to start TLS: %w", err)
+	// STARTTLS for tls/starttls modes (port 587)
+	if security == "tls" || security == "starttls" || security == "" {
+		// Check if server supports STARTTLS
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			tlsConfig := &tls.Config{
+				ServerName: c.config.Host,
+			}
+			if err := client.StartTLS(tlsConfig); err != nil {
+				return fmt.Errorf("STARTTLS failed: %w", err)
+			}
+			c.logger.Info("STARTTLS negotiated successfully")
+		} else if security == "starttls" {
+			return fmt.Errorf("server does not support STARTTLS")
 		}
 	}
 
-	// Authenticate
-	auth := smtp.PlainAuth("", c.config.Username, c.config.Password, c.config.Host)
-	if err := client.Auth(auth); err != nil {
-		// Try LOGIN auth for servers that don't support PLAIN
-		auth = LoginAuth(c.config.Username, c.config.Password)
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
+	// Authenticate - try LOGIN first (Office365 requires it), then PLAIN
+	var authErr error
+
+	// Check supported auth methods
+	authSupported := false
+	if ok, authMethods := client.Extension("AUTH"); ok {
+		c.logger.Debug("Server auth methods", "methods", authMethods)
+		// Try LOGIN first (required for Office365)
+		if strings.Contains(authMethods, "LOGIN") {
+			auth := LoginAuth(c.config.Username, c.config.Password)
+			if err := client.Auth(auth); err != nil {
+				c.logger.Debug("LOGIN auth failed", "error", err)
+				authErr = err
+			} else {
+				authSupported = true
+			}
 		}
+		// Try PLAIN if LOGIN didn't work or isn't supported
+		if !authSupported && strings.Contains(authMethods, "PLAIN") {
+			auth := smtp.PlainAuth("", c.config.Username, c.config.Password, c.config.Host)
+			if err := client.Auth(auth); err != nil {
+				c.logger.Debug("PLAIN auth failed", "error", err)
+				authErr = err
+			} else {
+				authSupported = true
+			}
+		}
+	}
+
+	if !authSupported {
+		if authErr != nil {
+			return fmt.Errorf("authentication failed: %w", authErr)
+		}
+		return fmt.Errorf("no supported authentication method")
 	}
 
 	c.logger.Info("SMTP connection test successful", "host", c.config.Host, "port", c.config.Port)
@@ -131,6 +169,7 @@ func (c *Client) SendEmail(ctx context.Context, notif *entity.EmailNotification)
 	msg := c.buildMessage(notif.Subject, notif.TextBody, notif.HTMLBody, recipients)
 
 	addr := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
+	security := strings.ToLower(c.config.Security)
 
 	// Create connection with timeout
 	dialer := net.Dialer{Timeout: c.config.Timeout}
@@ -138,13 +177,16 @@ func (c *Client) SendEmail(ctx context.Context, notif *entity.EmailNotification)
 	var conn net.Conn
 	var err error
 
-	switch strings.ToLower(c.config.Security) {
-	case "ssl":
+	switch security {
+	case "ssl", "implicit":
 		tlsConfig := &tls.Config{
 			ServerName: c.config.Host,
 		}
 		conn, err = tls.DialWithDialer(&dialer, "tcp", addr, tlsConfig)
+	case "none", "plain":
+		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	default:
+		// "tls", "starttls", or default
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	}
 
@@ -159,23 +201,53 @@ func (c *Client) SendEmail(ctx context.Context, notif *entity.EmailNotification)
 	}
 	defer client.Close()
 
-	// STARTTLS if using TLS mode
-	if strings.ToLower(c.config.Security) == "tls" {
-		tlsConfig := &tls.Config{
-			ServerName: c.config.Host,
-		}
-		if err := client.StartTLS(tlsConfig); err != nil {
-			return fmt.Errorf("failed to start TLS: %w", err)
+	// STARTTLS for tls/starttls modes
+	if security == "tls" || security == "starttls" || security == "" {
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			tlsConfig := &tls.Config{
+				ServerName: c.config.Host,
+			}
+			if err := client.StartTLS(tlsConfig); err != nil {
+				return fmt.Errorf("STARTTLS failed: %w", err)
+			}
+		} else if security == "starttls" {
+			return fmt.Errorf("server does not support STARTTLS")
 		}
 	}
 
-	// Authenticate
-	auth := smtp.PlainAuth("", c.config.Username, c.config.Password, c.config.Host)
-	if err := client.Auth(auth); err != nil {
-		auth = LoginAuth(c.config.Username, c.config.Password)
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
+	// Authenticate - try LOGIN first (Office365 requires it), then PLAIN
+	var authErr error
+	authSupported := false
+
+	if ok, authMethods := client.Extension("AUTH"); ok {
+		c.logger.Debug("Server auth methods", "methods", authMethods)
+		// Try LOGIN first (required for Office365)
+		if strings.Contains(authMethods, "LOGIN") {
+			auth := LoginAuth(c.config.Username, c.config.Password)
+			if err := client.Auth(auth); err != nil {
+				c.logger.Debug("LOGIN auth failed", "error", err)
+				authErr = err
+			} else {
+				authSupported = true
+			}
 		}
+		// Try PLAIN if LOGIN didn't work or isn't supported
+		if !authSupported && strings.Contains(authMethods, "PLAIN") {
+			auth := smtp.PlainAuth("", c.config.Username, c.config.Password, c.config.Host)
+			if err := client.Auth(auth); err != nil {
+				c.logger.Debug("PLAIN auth failed", "error", err)
+				authErr = err
+			} else {
+				authSupported = true
+			}
+		}
+	}
+
+	if !authSupported {
+		if authErr != nil {
+			return fmt.Errorf("authentication failed: %w", authErr)
+		}
+		return fmt.Errorf("no supported authentication method")
 	}
 
 	// Set sender

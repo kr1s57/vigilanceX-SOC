@@ -122,9 +122,6 @@ func (t *TriggerHandler) ProcessModSecEvent(ctx context.Context, log *entity.Mod
 		return
 	}
 
-	// Determine if this is a blocked event
-	isBlocked := log.Action == "blocked" || log.Action == "deny"
-
 	// Check specific event IDs if configured
 	if len(settings.SpecificEventIDs) > 0 {
 		found := false
@@ -139,29 +136,37 @@ func (t *TriggerHandler) ProcessModSecEvent(ctx context.Context, log *entity.Mod
 		}
 	}
 
+	// Convert severity string to level
 	severity := "medium"
-	if log.Severity >= 4 {
+	switch log.RuleSeverity {
+	case "CRITICAL", "0":
 		severity = "critical"
-	} else if log.Severity >= 3 {
+	case "ERROR", "1", "2":
 		severity = "high"
-	} else if log.Severity >= 2 {
+	case "WARNING", "3", "4":
 		severity = "medium"
-	} else {
+	default:
 		severity = "low"
+	}
+
+	// Calculate threat score from total score
+	threatScore := int(log.TotalScore)
+	if threatScore > 100 {
+		threatScore = 100
 	}
 
 	event := &entity.AlertData{
 		Timestamp:   log.Timestamp,
-		SourceIP:    log.ClientIP,
+		SourceIP:    log.SrcIP,
 		Target:      log.URI,
 		RuleID:      log.RuleID,
-		RuleName:    log.Message,
-		Details:     log.Data,
+		RuleName:    log.RuleMsg,
+		Details:     log.RuleData,
 		Severity:    severity,
-		ThreatScore: log.Severity * 25, // Rough conversion
+		ThreatScore: threatScore,
 	}
 
-	if isBlocked && settings.WAFBlockedEnabled {
+	if log.IsBlocking && settings.WAFBlockedEnabled {
 		t.OnWAFBlocked(ctx, event)
 	} else if settings.WAFDetectionEnabled {
 		t.OnWAFDetection(ctx, event)

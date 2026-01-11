@@ -4,7 +4,7 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
-## [3.3.100] - 2026-01-10
+## [3.3.100] - 2026-01-11
 
 ### SMTP Email Notifications
 
@@ -14,12 +14,33 @@ Nouvelle integration SMTP pour l'envoi d'emails de notifications et rapports de 
 
 | Feature | Description |
 |---------|-------------|
-| Configuration SMTP | Support TLS/SSL/None, Office365 par defaut |
+| Configuration SMTP | Support TLS/STARTTLS/SSL, Office365 par defaut |
+| AUTH LOGIN | Prioritaire pour Office365 (ne supporte pas PLAIN) |
+| STARTTLS | Support explicite port 587 |
 | Test Email | Bouton pour tester la configuration SMTP |
+| Hot-reload | SMTP client recharge sans redemarrage apres config |
 | Rapports Programmes | Daily, Weekly, Monthly avec choix horaire |
 | Alertes Temps-reel | WAF Detection, WAF Blocked, New Bans, Critical Events |
 | Seuil de Severite | Filtre par niveau: Critical, High, Medium, Low |
 | Templates HTML | Emails professionnels avec branding VIGILANCE X |
+
+#### Configuration Office365
+
+```bash
+SMTP_HOST=smtp.office365.com
+SMTP_PORT=587
+SMTP_SECURITY=starttls    # Important: starttls, pas tls ou ssl
+# AUTH LOGIN est utilise automatiquement (requis par Office365)
+```
+
+#### Bugs Connus
+
+| Bug | Description | Statut |
+|-----|-------------|--------|
+| Multi-toggle | Selection multiple (daily+weekly+monthly) ne persist pas | En investigation |
+| Race condition | Requetes concurrentes s'ecrasent mutuellement | Fix implemente mais non effectif |
+
+> **Note**: Voir `docs/bugfix/SMTP_IMPLEMENTATION_NOTES.md` pour details de debug
 
 #### Nouveaux Fichiers Backend
 

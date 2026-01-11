@@ -91,6 +91,7 @@ services:
       - ../backend/scenarios:/app/scenarios:ro
       - ./ssh/id_rsa_xgs:/app/.ssh/id_rsa_xgs:ro
       - backend_data:/app/data
+      - backend_config:/app/config
       - /etc/machine-id:/etc/machine-id:ro
     environment:
       APP_ENV: ${APP_ENV:-production}
@@ -151,6 +152,16 @@ services:
       OSINT_PROXY_URL: ${OSINT_PROXY_URL:-}
       OSINT_PROXY_TIMEOUT: ${OSINT_PROXY_TIMEOUT:-30s}
       OSINT_PROXY_RATE_LIMIT: ${OSINT_PROXY_RATE_LIMIT:-60}
+
+      # v3.3: SMTP Email Notifications
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-tls}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_RECIPIENTS: ${SMTP_RECIPIENTS:-}
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-30s}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -251,3 +262,4 @@ volumes:
   redis_data:
   vector_data:
   backend_data:
+  backend_config:

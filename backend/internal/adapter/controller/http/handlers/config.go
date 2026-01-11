@@ -15,10 +15,14 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// SMTPReloadFunc is a callback to reload SMTP configuration
+type SMTPReloadFunc func(host string, port int, security, fromEmail, username, password string, recipients []string)
+
 // ConfigHandler handles configuration management
 type ConfigHandler struct {
-	configPath string
-	mu         sync.RWMutex
+	configPath     string
+	mu             sync.RWMutex
+	onSMTPReload   SMTPReloadFunc
 }
 
 // NewConfigHandler creates a new config handler
@@ -26,6 +30,11 @@ func NewConfigHandler() *ConfigHandler {
 	return &ConfigHandler{
 		configPath: "/app/config/integrations.json",
 	}
+}
+
+// SetSMTPReloadCallback sets the callback for SMTP config reload
+func (h *ConfigHandler) SetSMTPReloadCallback(fn SMTPReloadFunc) {
+	h.onSMTPReload = fn
 }
 
 // IntegrationConfig represents a single integration configuration
@@ -83,6 +92,30 @@ func (h *ConfigHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Update environment variables in memory for immediate effect
 	h.applyConfigToEnv(req.PluginID, req.Fields)
+
+	// Hot-reload SMTP client if SMTP config was saved
+	if req.PluginID == "smtp" && h.onSMTPReload != nil {
+		// Load the merged config to get all fields including preserved passwords
+		mergedConfig := h.getMergedConfig(req.PluginID, req.Fields)
+
+		port := 587
+		if p := mergedConfig["SMTP_PORT"]; p != "" {
+			fmt.Sscanf(p, "%d", &port)
+		}
+		recipients := strings.Split(mergedConfig["SMTP_RECIPIENTS"], ",")
+		for i := range recipients {
+			recipients[i] = strings.TrimSpace(recipients[i])
+		}
+		h.onSMTPReload(
+			mergedConfig["SMTP_HOST"],
+			port,
+			mergedConfig["SMTP_SECURITY"],
+			mergedConfig["SMTP_FROM_EMAIL"],
+			mergedConfig["SMTP_USERNAME"],
+			mergedConfig["SMTP_PASSWORD"],
+			recipients,
+		)
+	}
 
 	JSONResponse(w, http.StatusOK, map[string]interface{}{
 		"saved":   true,
@@ -363,10 +396,27 @@ func (h *ConfigHandler) saveIntegrationConfig(pluginID string, fields map[string
 		json.Unmarshal(data, &configs)
 	}
 
+	// Merge new fields with existing (preserve fields not sent, like masked passwords)
+	existingFields := make(map[string]string)
+	if existing, ok := configs[pluginID]; ok {
+		existingFields = existing.Fields
+	}
+
+	// Merge: new values override existing, but missing fields are preserved
+	mergedFields := make(map[string]string)
+	for k, v := range existingFields {
+		mergedFields[k] = v
+	}
+	for k, v := range fields {
+		if v != "" { // Only override if new value is not empty
+			mergedFields[k] = v
+		}
+	}
+
 	// Update config
 	configs[pluginID] = IntegrationConfig{
 		ID:        pluginID,
-		Fields:    fields,
+		Fields:    mergedFields,
 		UpdatedAt: time.Now(),
 	}
 
@@ -393,6 +443,35 @@ func (h *ConfigHandler) loadAllConfigs() map[string]IntegrationConfig {
 		json.Unmarshal(data, &configs)
 	}
 	return configs
+}
+
+// getMergedConfig returns the merged config (existing + new fields)
+func (h *ConfigHandler) getMergedConfig(pluginID string, newFields map[string]string) map[string]string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	// Load existing configs
+	configs := make(map[string]IntegrationConfig)
+	if data, err := os.ReadFile(h.configPath); err == nil {
+		json.Unmarshal(data, &configs)
+	}
+
+	// Start with existing fields
+	mergedFields := make(map[string]string)
+	if existing, ok := configs[pluginID]; ok {
+		for k, v := range existing.Fields {
+			mergedFields[k] = v
+		}
+	}
+
+	// Override with new non-empty fields
+	for k, v := range newFields {
+		if v != "" {
+			mergedFields[k] = v
+		}
+	}
+
+	return mergedFields
 }
 
 // applyConfigToEnv updates environment variables in memory

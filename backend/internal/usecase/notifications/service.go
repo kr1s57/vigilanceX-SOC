@@ -26,6 +26,15 @@ type Service struct {
 	scheduler    *Scheduler
 }
 
+// UpdateSMTPClient updates the SMTP client configuration (hot-reload)
+func (s *Service) UpdateSMTPClient(client *smtp.Client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.smtpClient = client
+	s.settings.SMTPConfigured = client != nil && client.IsConfigured()
+	s.logger.Info("SMTP client updated", "configured", s.settings.SMTPConfigured)
+}
+
 // NewService creates a new notification service
 func NewService(smtpClient *smtp.Client, logger *slog.Logger) *Service {
 	s := &Service{
@@ -85,6 +94,78 @@ func (s *Service) UpdateSettings(settings *entity.NotificationSettings) error {
 		"daily_enabled", settings.DailyReportEnabled,
 		"weekly_enabled", settings.WeeklyReportEnabled,
 		"monthly_enabled", settings.MonthlyReportEnabled,
+	)
+
+	return nil
+}
+
+// MergeAndUpdateSettings atomically merges partial updates with current settings
+func (s *Service) MergeAndUpdateSettings(updates map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Apply updates to current settings atomically
+	if v, ok := updates["daily_report_enabled"].(bool); ok {
+		s.settings.DailyReportEnabled = v
+	}
+	if v, ok := updates["daily_report_time"].(string); ok {
+		s.settings.DailyReportTime = v
+	}
+	if v, ok := updates["weekly_report_enabled"].(bool); ok {
+		s.settings.WeeklyReportEnabled = v
+	}
+	if v, ok := updates["weekly_report_day"].(float64); ok {
+		s.settings.WeeklyReportDay = int(v)
+	}
+	if v, ok := updates["weekly_report_time"].(string); ok {
+		s.settings.WeeklyReportTime = v
+	}
+	if v, ok := updates["monthly_report_enabled"].(bool); ok {
+		s.settings.MonthlyReportEnabled = v
+	}
+	if v, ok := updates["monthly_report_day"].(float64); ok {
+		s.settings.MonthlyReportDay = int(v)
+	}
+	if v, ok := updates["monthly_report_time"].(string); ok {
+		s.settings.MonthlyReportTime = v
+	}
+	if v, ok := updates["waf_detection_enabled"].(bool); ok {
+		s.settings.WAFDetectionEnabled = v
+	}
+	if v, ok := updates["waf_blocked_enabled"].(bool); ok {
+		s.settings.WAFBlockedEnabled = v
+	}
+	if v, ok := updates["new_ban_enabled"].(bool); ok {
+		s.settings.NewBanEnabled = v
+	}
+	if v, ok := updates["critical_alert_enabled"].(bool); ok {
+		s.settings.CriticalAlertEnabled = v
+	}
+	if v, ok := updates["min_severity_level"].(string); ok {
+		s.settings.MinSeverityLevel = v
+	}
+
+	// Preserve SMTP configured status
+	s.settings.SMTPConfigured = s.smtpClient != nil && s.smtpClient.IsConfigured()
+
+	// Save to disk
+	if err := s.saveSettings(); err != nil {
+		return fmt.Errorf("save settings: %w", err)
+	}
+
+	// Reschedule reports if scheduler exists
+	if s.scheduler != nil {
+		s.scheduler.RescheduleReports(s.settings)
+	}
+
+	s.logger.Info("[ATOMIC] Notification settings merged and saved",
+		"daily", s.settings.DailyReportEnabled,
+		"weekly", s.settings.WeeklyReportEnabled,
+		"monthly", s.settings.MonthlyReportEnabled,
+		"waf_detection", s.settings.WAFDetectionEnabled,
+		"waf_blocked", s.settings.WAFBlockedEnabled,
+		"new_ban", s.settings.NewBanEnabled,
+		"critical", s.settings.CriticalAlertEnabled,
 	)
 
 	return nil

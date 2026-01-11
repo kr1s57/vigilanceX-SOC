@@ -30,13 +30,15 @@ func (h *NotificationHandler) GetSettings(w http.ResponseWriter, r *http.Request
 // UpdateSettings updates notification settings
 // PUT /api/v1/notifications/settings
 func (h *NotificationHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
-	var settings entity.NotificationSettings
-	if err := DecodeJSON(r, &settings); err != nil {
+	// Decode as map to support partial updates
+	var updates map[string]interface{}
+	if err := DecodeJSON(r, &updates); err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
-	if err := h.service.UpdateSettings(&settings); err != nil {
+	// Use atomic merge to avoid race conditions with concurrent requests
+	if err := h.service.MergeAndUpdateSettings(updates); err != nil {
 		ErrorResponse(w, http.StatusInternalServerError, "Failed to update settings", err)
 		return
 	}
@@ -74,7 +76,12 @@ func (h *NotificationHandler) SendTestEmail(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.service.SendTestEmail(r.Context(), req.Recipients); err != nil {
-		ErrorResponse(w, http.StatusInternalServerError, "Failed to send test email", err)
+		// Return detailed error for debugging SMTP issues
+		JSONResponse(w, http.StatusInternalServerError, map[string]interface{}{
+			"success": false,
+			"error":   "Failed to send test email",
+			"details": err.Error(),
+		})
 		return
 	}
 

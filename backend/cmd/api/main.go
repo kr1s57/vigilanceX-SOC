@@ -586,6 +586,23 @@ func main() {
 			// Config management (v2.3 - Plugin configuration)
 			r.Route("/config", func(r chi.Router) {
 				configHandler := handlers.NewConfigHandler()
+				// v3.3: Set SMTP hot-reload callback
+				configHandler.SetSMTPReloadCallback(func(host string, port int, security, fromEmail, username, password string, recipients []string) {
+					if host == "" {
+						return
+					}
+					newClient := smtp.NewClient(smtp.Config{
+						Host:       host,
+						Port:       port,
+						Security:   security,
+						FromEmail:  fromEmail,
+						Username:   username,
+						Password:   password,
+						Recipients: recipients,
+						Timeout:    30 * time.Second,
+					}, logger)
+					notificationService.UpdateSMTPClient(newClient)
+				})
 				r.Post("/test", configHandler.TestConfig)
 				r.Post("/save", configHandler.SaveConfig)
 				r.Get("/", configHandler.GetConfig)

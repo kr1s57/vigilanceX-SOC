@@ -158,7 +158,7 @@ const defaultPluginConfigs: PluginConfig[] = [
     fields: [
       { key: 'SMTP_HOST', label: 'SMTP Server', type: 'text', value: '', placeholder: 'smtp.office365.com' },
       { key: 'SMTP_PORT', label: 'Port', type: 'number', value: '587', placeholder: '587' },
-      { key: 'SMTP_SECURITY', label: 'Security', type: 'text', value: 'tls', placeholder: 'tls, ssl, or none' },
+      { key: 'SMTP_SECURITY', label: 'Security', type: 'text', value: 'starttls', placeholder: 'starttls, ssl, or none' },
       { key: 'SMTP_FROM_EMAIL', label: 'From Email', type: 'text', value: '', placeholder: 'noreply@company.com' },
       { key: 'SMTP_USERNAME', label: 'Username', type: 'text', value: '', placeholder: 'user@company.com' },
       { key: 'SMTP_PASSWORD', label: 'Password', type: 'password', value: '', placeholder: '********' },
@@ -217,6 +217,20 @@ export function Settings() {
   const [pluginFormData, setPluginFormData] = useState<Record<string, string>>({})
   const [savingPlugin, setSavingPlugin] = useState(false)
   const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [savedConfigs, setSavedConfigs] = useState<Record<string, Record<string, string>>>({})
+
+  // Fetch saved configs on mount
+  useEffect(() => {
+    async function fetchSavedConfigs() {
+      try {
+        const configs = await configApi.get()
+        setSavedConfigs(configs || {})
+      } catch (err) {
+        console.error('Failed to fetch saved configs:', err)
+      }
+    }
+    fetchSavedConfigs()
+  }, [])
 
   // Fetch integration status
   useEffect(() => {
@@ -349,16 +363,39 @@ export function Settings() {
   }
 
   // Plugin editor functions
-  const handleEditPlugin = (pluginId: string) => {
+  const handleEditPlugin = async (pluginId: string) => {
     const plugin = defaultPluginConfigs.find(p => p.id === pluginId)
     if (plugin) {
       setEditingPlugin(plugin)
-      // Initialize form data with current values
-      const initialData: Record<string, string> = {}
-      plugin.fields.forEach(field => {
-        initialData[field.key] = field.value
-      })
-      setPluginFormData(initialData)
+      // Always fetch fresh configs before editing
+      try {
+        const freshConfigs = await configApi.get()
+        setSavedConfigs(freshConfigs || {})
+        const saved = (freshConfigs && freshConfigs[pluginId]) || {}
+        const initialData: Record<string, string> = {}
+        plugin.fields.forEach(field => {
+          // Use saved value if exists, otherwise use default
+          if (saved[field.key] !== undefined && saved[field.key] !== '') {
+            initialData[field.key] = saved[field.key]
+          } else {
+            initialData[field.key] = field.value
+          }
+        })
+        setPluginFormData(initialData)
+      } catch (err) {
+        console.error('Failed to fetch configs:', err)
+        // Fallback to cached or default values
+        const saved = savedConfigs[pluginId] || {}
+        const initialData: Record<string, string> = {}
+        plugin.fields.forEach(field => {
+          if (saved[field.key] !== undefined && saved[field.key] !== '') {
+            initialData[field.key] = saved[field.key]
+          } else {
+            initialData[field.key] = field.value
+          }
+        })
+        setPluginFormData(initialData)
+      }
     }
   }
 
@@ -371,12 +408,33 @@ export function Settings() {
     setSavingPlugin(true)
     setSaveResult(null)
     try {
-      const result = await configApi.save(editingPlugin.id, pluginFormData)
+      // Filter out masked password fields (containing ****)
+      // Only send password if user entered a new value
+      const dataToSave: Record<string, string> = {}
+      const saved = savedConfigs[editingPlugin.id] || {}
+
+      editingPlugin.fields.forEach(field => {
+        const value = pluginFormData[field.key] || ''
+        // If it's a password field and contains ****, use the original saved value
+        if (field.type === 'password' && value.includes('****')) {
+          // Don't include in dataToSave - backend will keep existing value
+          // Actually we need to send empty or the backend won't know to keep it
+          // Skip masked passwords entirely - backend preserves existing
+        } else {
+          dataToSave[field.key] = value
+        }
+      })
+
+      const result = await configApi.save(editingPlugin.id, dataToSave)
       setSaveResult({
         success: result.test.success,
         message: result.message,
       })
-      // Keep modal open to show result, auto-close after 3s on success
+      // Refresh saved configs
+      const newConfigs = await configApi.get()
+      setSavedConfigs(newConfigs || {})
+
+      // Keep modal open to show result, auto-close after 2s on success
       if (result.test.success) {
         setTimeout(() => {
           setEditingPlugin(null)
@@ -388,7 +446,7 @@ export function Settings() {
     } catch (err: any) {
       setSaveResult({
         success: false,
-        message: err.response?.data?.error || 'Failed to save configuration',
+        message: err.response?.data?.details || err.response?.data?.error || 'Failed to save configuration',
       })
     } finally {
       setSavingPlugin(false)
