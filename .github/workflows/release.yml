@@ -262,12 +262,15 @@ jobs:
         run: |
           cd client-repo
 
-          # Update image tags in docker-compose.yml
-          sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-api:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-api:${{ steps.version.outputs.VERSION }}|g" deploy/docker-compose.yml
-          sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-frontend:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-frontend:${{ steps.version.outputs.VERSION }}|g" deploy/docker-compose.yml
-          sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-detect2ban:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-detect2ban:${{ steps.version.outputs.VERSION }}|g" deploy/docker-compose.yml
+          # Update image tags in docker-compose.yml (in docker/ folder)
+          if [ -f docker/docker-compose.yml ]; then
+            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-api:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-api:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
+            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-frontend:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-frontend:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
+            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-detect2ban:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-detect2ban:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
+            echo "Updated docker/docker-compose.yml"
+          fi
 
-          # Update VERSION file if exists
+          # Update VERSION file
           echo "${{ steps.version.outputs.VERSION }}" > VERSION
 
       - name: Commit and push
