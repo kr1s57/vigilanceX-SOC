@@ -35,7 +35,7 @@ type Repository interface {
 	GetGeoHeatmapFiltered(ctx context.Context, period string, attackTypes []string) ([]map[string]interface{}, error)
 	GetUniqueHostnames(ctx context.Context, logType string) ([]string, error)
 	GetSyslogStatus(ctx context.Context) (*entity.SyslogStatus, error)
-	GetCriticalAlerts(ctx context.Context, limit int) ([]entity.CriticalAlert, error)
+	GetCriticalAlerts(ctx context.Context, limit int, period string) ([]entity.CriticalAlert, error)
 	GetZoneTraffic(ctx context.Context, period string, limit int) (*entity.ZoneTrafficStats, error)
 }
 
@@ -325,11 +325,14 @@ func (s *Service) GetSyslogStatus(ctx context.Context) (*entity.SyslogStatus, er
 }
 
 // GetCriticalAlerts retrieves recent critical and high severity alerts
-func (s *Service) GetCriticalAlerts(ctx context.Context, limit int) ([]entity.CriticalAlert, error) {
+func (s *Service) GetCriticalAlerts(ctx context.Context, limit int, period string) ([]entity.CriticalAlert, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	return s.repo.GetCriticalAlerts(ctx, limit)
+	if period == "" {
+		period = "24h"
+	}
+	return s.repo.GetCriticalAlerts(ctx, limit, period)
 }
 
 // GetZoneTraffic retrieves traffic flow between network zones

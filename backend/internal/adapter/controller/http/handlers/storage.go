@@ -4,17 +4,30 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/storage"
 	"github.com/kr1s57/vigilancex/internal/usecase/archiver"
 )
+
+// LocalStorageStats represents local ClickHouse storage statistics
+type LocalStorageStats struct {
+	DatabaseSize   string            `json:"database_size"`
+	TotalEvents    uint64            `json:"total_events"`
+	EventsByType   map[string]uint64 `json:"events_by_type"`
+	DateRangeStart time.Time         `json:"date_range_start"`
+	DateRangeEnd   time.Time         `json:"date_range_end"`
+	StoragePath    string            `json:"storage_path"`
+}
 
 // StorageHandler handles storage-related HTTP requests
 type StorageHandler struct {
 	manager  *storage.Manager
 	archiver *archiver.Service
+	dbConn   driver.Conn
 }
 
 // NewStorageHandler creates a new storage handler
@@ -22,6 +35,11 @@ func NewStorageHandler(manager *storage.Manager) *StorageHandler {
 	return &StorageHandler{
 		manager: manager,
 	}
+}
+
+// SetDBConnection sets the ClickHouse connection for local stats
+func (h *StorageHandler) SetDBConnection(conn driver.Conn) {
+	h.dbConn = conn
 }
 
 // SetArchiver sets the archiver service (called after initialization)
@@ -220,4 +238,74 @@ func (h *StorageHandler) WriteTestFile(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"message": "Test file written successfully - check test/ folder on storage",
 	})
+}
+
+// GetLocalStorageStats returns local ClickHouse storage statistics
+func (h *StorageHandler) GetLocalStorageStats(w http.ResponseWriter, r *http.Request) {
+	if h.dbConn == nil {
+		JSONResponse(w, http.StatusServiceUnavailable, map[string]string{"error": "Database not connected"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	stats := &LocalStorageStats{
+		EventsByType: make(map[string]uint64),
+		StoragePath:  "/var/lib/clickhouse (Docker: clickhouse_data)",
+	}
+
+	// Get database size
+	sizeQuery := `
+		SELECT formatReadableSize(sum(bytes_on_disk)) as size
+		FROM system.parts
+		WHERE database = 'vigilance_x' AND active = 1
+	`
+	row := h.dbConn.QueryRow(ctx, sizeQuery)
+	if err := row.Scan(&stats.DatabaseSize); err != nil {
+		slog.Warn("[STORAGE] Failed to get database size", "error", err)
+		stats.DatabaseSize = "N/A"
+	}
+
+	// Get total events count
+	totalQuery := `SELECT count() FROM events`
+	row = h.dbConn.QueryRow(ctx, totalQuery)
+	if err := row.Scan(&stats.TotalEvents); err != nil {
+		slog.Warn("[STORAGE] Failed to get total events", "error", err)
+	}
+
+	// Get events by log type
+	byTypeQuery := `
+		SELECT log_type, count() as cnt
+		FROM events
+		GROUP BY log_type
+		ORDER BY cnt DESC
+	`
+	rows, err := h.dbConn.Query(ctx, byTypeQuery)
+	if err != nil {
+		slog.Warn("[STORAGE] Failed to get events by type", "error", err)
+	} else {
+		defer rows.Close()
+		for rows.Next() {
+			var logType string
+			var count uint64
+			if err := rows.Scan(&logType, &count); err == nil {
+				stats.EventsByType[logType] = count
+			}
+		}
+	}
+
+	// Get date range
+	dateRangeQuery := `
+		SELECT
+			min(timestamp) as first_event,
+			max(timestamp) as last_event
+		FROM events
+	`
+	row = h.dbConn.QueryRow(ctx, dateRangeQuery)
+	if err := row.Scan(&stats.DateRangeStart, &stats.DateRangeEnd); err != nil {
+		slog.Warn("[STORAGE] Failed to get date range", "error", err)
+	}
+
+	JSONResponse(w, http.StatusOK, stats)
 }

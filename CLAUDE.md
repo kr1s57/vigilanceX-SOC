@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.51.101 | **Derniere mise a jour**: 2026-01-12
+> **Version**: 3.51.102 | **Derniere mise a jour**: 2026-01-12
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -996,6 +996,15 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.51.102 (2026-01-12)
+- **Report Recipients**: Configuration des emails destinataires pour scheduled reports
+- Nouveau champ `report_recipients` dans NotificationSettings (backend + frontend)
+- Input comma-separated dans Settings > Email Notifications > Scheduled Reports
+- **Country Flags**: Affichage drapeau pays a cote des IPs dans Active Bans
+- Enrichissement GeoIP automatique des bans via le client GeoIP existant
+- Nouveau champ `Country` dans BanStatus (enrichi via API, non stocke en DB)
+- Interface `GeoIPClient` dans handlers pour decouplage
 
 ### v3.51.101 (2026-01-12)
 - **WAF Event Watcher**: Trigger instantane de sync ModSec sur detection WAF

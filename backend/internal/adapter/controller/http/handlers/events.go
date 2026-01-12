@@ -263,7 +263,9 @@ func (h *EventsHandler) GetCriticalAlerts(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	alerts, err := h.service.GetCriticalAlerts(ctx, limit)
+	period := r.URL.Query().Get("period")
+
+	alerts, err := h.service.GetCriticalAlerts(ctx, limit, period)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to get critical alerts", err)
 		return

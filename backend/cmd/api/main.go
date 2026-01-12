@@ -18,14 +18,12 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/smtp"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
-	"github.com/kr1s57/vigilancex/internal/adapter/external/storage"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
 	sophosparser "github.com/kr1s57/vigilancex/internal/adapter/parser/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
 	"github.com/kr1s57/vigilancex/internal/entity"  // v3.51.100: For SMTP config persistence
 	"github.com/kr1s57/vigilancex/internal/license" // v2.9: License system
-	"github.com/kr1s57/vigilancex/internal/usecase/archiver"
 	"github.com/kr1s57/vigilancex/internal/usecase/auth"
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
@@ -357,6 +355,7 @@ func main() {
 	threatsHandler := handlers.NewThreatsHandler(threatsService)
 	threatsHandler.SetBlocklistsService(blocklistsService) // v1.6: Combined risk assessment
 	bansHandler := handlers.NewBansHandler(bansService)
+	bansHandler.SetGeoIPClient(geoIPClient)                              // v3.51: Country enrichment for bans
 	detect2banHandler := handlers.NewDetect2BanHandler(detect2banEngine) // v3.51: Detect2Ban control
 
 	// v3.51: Auto-start Detect2Ban engine
@@ -378,37 +377,6 @@ func main() {
 	licenseHandler := handlers.NewLicenseHandler(licenseClient)                 // v2.9: License management
 	parserHandler := handlers.NewParserHandler(xgsParser)                       // v3.1: XGS Parser
 	notificationHandler := handlers.NewNotificationHandler(notificationService) // v3.3: Email notifications
-
-	// v3.51: Initialize Storage Manager for SMB/S3 log archiving
-	storageConfigPath := "./config/storage.json"
-	storageManager := storage.NewManager(storageConfigPath)
-	if err := storageManager.LoadConfig(); err != nil {
-		logger.Warn("Failed to load storage config, using defaults", "error", err)
-	}
-	storageHandler := handlers.NewStorageHandler(storageManager)
-	logger.Info("Storage Manager initialized", "config_path", storageConfigPath)
-
-	// v3.51.100: Auto-connect SMB storage if previously enabled
-	storageCfg := storageManager.GetConfig()
-	if storageCfg.Enabled && storageCfg.SMB != nil && storageCfg.SMB.Host != "" {
-		logger.Info("Storage was previously enabled, attempting auto-connect",
-			"type", storageCfg.Type,
-			"host", storageCfg.SMB.Host)
-		if err := storageManager.Connect(context.Background()); err != nil {
-			logger.Warn("Failed to auto-connect storage on startup", "error", err)
-		} else {
-			logger.Info("Storage auto-connected successfully on startup")
-		}
-	}
-
-	// v3.51: Initialize Archiver Service for log archiving to SMB/S3
-	archiverService := archiver.NewService(storageManager, eventsRepo)
-	storageHandler.SetArchiver(archiverService)
-	// Start archiver background service (archives events every 5 minutes)
-	archiverCtx, archiverCancel := context.WithCancel(context.Background())
-	defer archiverCancel()
-	go archiverService.Start(archiverCtx, 5*time.Minute)
-	logger.Info("Archiver service initialized", "interval", "5m")
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -757,23 +725,6 @@ func main() {
 				r.Get("/status", notificationHandler.GetStatus)
 				r.Get("/smtp-config", notificationHandler.GetSMTPConfig)    // v3.5
 				r.Put("/smtp-config", notificationHandler.UpdateSMTPConfig) // v3.5
-			})
-
-			// Storage (v3.51 - External log archiving SMB/S3)
-			r.Route("/storage", func(r chi.Router) {
-				r.Get("/config", storageHandler.GetConfig)
-				r.Put("/config", storageHandler.UpdateConfig)
-				r.Put("/smb", storageHandler.UpdateSMBConfig)
-				r.Get("/status", storageHandler.GetStatus)
-				r.Post("/test", storageHandler.TestConnection)
-				r.Post("/connect", storageHandler.Connect)
-				r.Post("/disconnect", storageHandler.Disconnect)
-				r.Post("/enable", storageHandler.Enable)
-				r.Post("/disable", storageHandler.Disable)
-				// Archiver endpoints
-				r.Get("/archiver/status", storageHandler.GetArchiverStatus)
-				r.Post("/archiver/run", storageHandler.RunArchiver)
-				r.Post("/archiver/test-write", storageHandler.WriteTestFile)
 			})
 		})
 	})

@@ -7,6 +7,52 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.51.102] - 2026-01-12
+
+### Email Report Recipients & Country Flags in Active Bans
+
+Ajout de la configuration des destinataires pour les rapports programmés et affichage des drapeaux de pays dans la page Active Bans.
+
+#### Nouvelles Fonctionnalités
+
+| Feature | Description |
+|---------|-------------|
+| **Report Recipients** | Champ pour définir les emails destinataires des scheduled reports dans Settings |
+| **Country Flags** | Affichage du drapeau du pays à côté des IPs bannies dans Active Bans |
+| GeoIP Enrichment | Enrichissement automatique des bans avec le country code via GeoIP |
+
+#### Modifications
+
+| Fichier | Description |
+|---------|-------------|
+| `backend/internal/entity/notification.go` | Ajout `ReportRecipients []string` dans NotificationSettings |
+| `backend/internal/entity/ban.go` | Ajout champ `Country` dans BanStatus (enrichi, non stocké) |
+| `backend/internal/adapter/controller/http/handlers/bans.go` | Enrichissement GeoIP dans List(), interface GeoIPClient |
+| `backend/cmd/api/main.go` | Wiring du GeoIPClient dans BansHandler |
+| `frontend/src/lib/api.ts` | Ajout `report_recipients` dans NotificationSettings type |
+| `frontend/src/types/index.ts` | Ajout `country?` dans BanStatus type |
+| `frontend/src/pages/Settings.tsx` | Input pour Report Recipients (emails comma-separated) |
+| `frontend/src/pages/ActiveBans.tsx` | Affichage drapeau emoji via getCountryFlag() |
+
+---
+
+## [3.51.101] - 2026-01-12
+
+### WAF Event Watcher for Instant ModSec Sync
+
+Service de surveillance WAF pour synchronisation instantanée des règles ModSecurity lors de détection d'événements WAF.
+
+#### Nouvelles Fonctionnalités
+
+| Feature | Description |
+|---------|-------------|
+| **WAF Event Watcher** | Trigger instantané de sync ModSec sur détection WAF |
+| Polling ClickHouse | Vérification toutes les 15s des events WAF blocking |
+| Cooldown System | 30s entre syncs pour éviter la surcharge |
+| Status Endpoint | `GET /api/v1/modsec/watcher` pour état du watcher |
+
+---
+
 ## [3.51.100] - 2026-01-12
 
 ### SMTP/SMB Auto-Reconnect, Detect2Ban Immunity & Ban History Modal

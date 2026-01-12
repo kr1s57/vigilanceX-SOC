@@ -479,9 +479,9 @@ export const statusApi = {
 
 // Alerts API
 export const alertsApi = {
-  critical: async (limit: number = 20) => {
+  critical: async (limit: number = 20, period?: string) => {
     const response = await api.get<{ data: CriticalAlert[]; count: number }>('/alerts/critical', {
-      params: { limit }
+      params: { limit, period }
     })
     return response.data
   },
@@ -826,6 +826,7 @@ export interface NotificationSettings {
   monthly_report_enabled: boolean
   monthly_report_day: number
   monthly_report_time: string
+  report_recipients: string[] // Email addresses for scheduled reports
   waf_detection_enabled: boolean
   waf_blocked_enabled: boolean
   new_ban_enabled: boolean
@@ -925,91 +926,3 @@ export const softWhitelistApi = {
   },
 }
 
-// Storage Types (v3.50)
-export interface StorageSMBConfig {
-  host: string
-  port: number
-  share: string
-  username: string
-  password: string
-  domain: string
-  base_path: string
-  // Security options (v3.51)
-  require_signing: boolean
-  min_version: string  // "3.0", "3.0.2", "3.1.1"
-}
-
-export interface StorageArchiveConfig {
-  enabled: boolean
-  compression: boolean
-  rotation_pattern: 'daily' | 'hourly'
-  retention_days: number
-  max_file_size: number
-}
-
-export interface StorageConfig {
-  enabled: boolean
-  type: 'smb' | 's3' | 'local'
-  smb?: StorageSMBConfig
-  s3?: Record<string, unknown>  // Future implementation
-  archive?: StorageArchiveConfig
-}
-
-export interface StorageStatus {
-  type: string
-  connected: boolean
-  host?: string
-  share?: string
-  last_error?: string
-  last_success?: string
-  bytes_written: number
-  files_written: number
-}
-
-// Storage API (v3.50 - Log archiving to SMB/S3)
-export const storageApi = {
-  getConfig: async (): Promise<StorageConfig> => {
-    const response = await api.get<StorageConfig>('/storage/config')
-    return response.data
-  },
-
-  updateConfig: async (config: Partial<StorageConfig>): Promise<{ message: string }> => {
-    const response = await api.put<{ message: string }>('/storage/config', config)
-    return response.data
-  },
-
-  updateSMBConfig: async (smb: StorageSMBConfig): Promise<{ message: string }> => {
-    const response = await api.put<{ message: string }>('/storage/smb', smb)
-    return response.data
-  },
-
-  getStatus: async (): Promise<StorageStatus> => {
-    const response = await api.get<StorageStatus>('/storage/status')
-    return response.data
-  },
-
-  testConnection: async (smb: StorageSMBConfig): Promise<{ success: boolean; message?: string; error?: string }> => {
-    const response = await api.post<{ success: boolean; message?: string; error?: string }>('/storage/test', smb)
-    return response.data
-  },
-
-  connect: async (): Promise<{ message: string }> => {
-    const response = await api.post<{ message: string }>('/storage/connect')
-    return response.data
-  },
-
-  disconnect: async (): Promise<{ message: string }> => {
-    const response = await api.post<{ message: string }>('/storage/disconnect')
-    return response.data
-  },
-
-  enable: async (): Promise<{ message: string }> => {
-    const response = await api.post<{ message: string }>('/storage/enable')
-    return response.data
-  },
-
-  disable: async (): Promise<{ message: string }> => {
-    const response = await api.post<{ message: string }>('/storage/disable')
-    return response.data
-  },
-}

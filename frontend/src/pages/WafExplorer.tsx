@@ -94,7 +94,7 @@ export function WafExplorer() {
   const { shouldShowIP } = useSettings()
   const [searchParams] = useSearchParams()
   const [requests, setRequests] = useState<ModSecRequestGroup[]>([])
-  const [pagination, setPagination] = useState({ total: 0, limit: 500, offset: 0, has_more: false })
+  const [pagination, setPagination] = useState({ total: 0, limit: 5000, offset: 0, has_more: false })
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState(searchParams.get('src_ip') || '')
@@ -174,7 +174,7 @@ export function WafExplorer() {
         }
         const response = await modsecApi.getGroupedLogs(filters)
         setRequests(response.data || [])
-        setPagination(response.pagination || { total: 0, limit: 500, offset: 0, has_more: false })
+        setPagination(response.pagination || { total: 0, limit: 5000, offset: 0, has_more: false })
       } catch (err) {
         console.error('Failed to fetch ModSec logs:', err)
         setRequests([])
@@ -288,7 +288,7 @@ export function WafExplorer() {
       }
       const response = await modsecApi.getGroupedLogs(filters)
       setRequests(response.data || [])
-      setPagination(response.pagination || { total: 0, limit: 500, offset: 0, has_more: false })
+      setPagination(response.pagination || { total: 0, limit: 5000, offset: 0, has_more: false })
       const status = await modsecApi.getStats()
       setSyncStatus(status)
     } catch (err) {
@@ -323,7 +323,7 @@ export function WafExplorer() {
       }
       const response = await modsecApi.getGroupedLogs(filters)
       setRequests(prev => [...prev, ...(response.data || [])])
-      setPagination(response.pagination || { total: 0, limit: 500, offset: 0, has_more: false })
+      setPagination(response.pagination || { total: 0, limit: 5000, offset: 0, has_more: false })
     } catch (err) {
       console.error('Failed to load more:', err)
     } finally {
@@ -742,9 +742,12 @@ export function WafExplorer() {
 
       {/* Results */}
       <div className="bg-card rounded-xl border overflow-hidden">
-        {/* Expand/Collapse All button for grouped view */}
-        {!loading && requests.length > 0 && viewMode === 'grouped' && dayGroups.length > 1 && (
-          <div className="flex items-center justify-end p-3 border-b bg-muted/30">
+        {/* Expand/Collapse All button for grouped view - always show when there are days */}
+        {!loading && requests.length > 0 && viewMode === 'grouped' && dayGroups.length >= 1 && (
+          <div className="flex items-center justify-between p-3 border-b bg-muted/30">
+            <span className="text-sm text-muted-foreground">
+              {dayGroups.length} day{dayGroups.length > 1 ? 's' : ''} with activity
+            </span>
             <button
               onClick={allDaysExpanded ? collapseAllDays : expandAllDays}
               className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"

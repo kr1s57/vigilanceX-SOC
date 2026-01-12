@@ -263,6 +263,7 @@ func (m *Manager) Flush(ctx context.Context) error {
 		m.bufferMu.Lock()
 		m.buffer = append(entries, m.buffer...)
 		m.bufferMu.Unlock()
+		slog.Warn("[STORAGE] Flush failed: not connected")
 		return fmt.Errorf("storage not connected")
 	}
 
@@ -292,10 +293,17 @@ func (m *Manager) Flush(ctx context.Context) error {
 		data = append(data, '\n')
 	}
 
+	slog.Info("[STORAGE] Flushing to storage", "entries", len(entries), "bytes", len(data), "file", filename)
+
 	// Check if we should compress
 	if config.Archive.Compression {
 		if smbProvider, ok := provider.(*SMBProvider); ok {
-			return smbProvider.WriteCompressed(ctx, filename, data)
+			if err := smbProvider.WriteCompressed(ctx, filename, data); err != nil {
+				slog.Error("[STORAGE] WriteCompressed failed", "error", err)
+				return err
+			}
+			slog.Info("[STORAGE] Flush complete (compressed)", "file", filename+".gz")
+			return nil
 		}
 	}
 
@@ -303,7 +311,12 @@ func (m *Manager) Flush(ctx context.Context) error {
 	existing, _ := provider.Read(ctx, filename)
 	data = append(existing, data...)
 
-	return provider.Write(ctx, filename, data)
+	if err := provider.Write(ctx, filename, data); err != nil {
+		slog.Error("[STORAGE] Write failed", "error", err)
+		return err
+	}
+	slog.Info("[STORAGE] Flush complete", "file", filename)
+	return nil
 }
 
 // StartArchiver starts the background archiving service

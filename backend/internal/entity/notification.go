@@ -22,14 +22,15 @@ type NotificationSettings struct {
 	SMTPConfig *SMTPConfig `json:"smtp_config,omitempty"`
 
 	// Scheduled Reports
-	DailyReportEnabled   bool   `json:"daily_report_enabled"`
-	DailyReportTime      string `json:"daily_report_time"` // HH:MM format
-	WeeklyReportEnabled  bool   `json:"weekly_report_enabled"`
-	WeeklyReportDay      int    `json:"weekly_report_day"`  // 0=Sun, 1=Mon, etc.
-	WeeklyReportTime     string `json:"weekly_report_time"` // HH:MM format
-	MonthlyReportEnabled bool   `json:"monthly_report_enabled"`
-	MonthlyReportDay     int    `json:"monthly_report_day"`  // 1-28
-	MonthlyReportTime    string `json:"monthly_report_time"` // HH:MM format
+	DailyReportEnabled   bool     `json:"daily_report_enabled"`
+	DailyReportTime      string   `json:"daily_report_time"` // HH:MM format
+	WeeklyReportEnabled  bool     `json:"weekly_report_enabled"`
+	WeeklyReportDay      int      `json:"weekly_report_day"`  // 0=Sun, 1=Mon, etc.
+	WeeklyReportTime     string   `json:"weekly_report_time"` // HH:MM format
+	MonthlyReportEnabled bool     `json:"monthly_report_enabled"`
+	MonthlyReportDay     int      `json:"monthly_report_day"`  // 1-28
+	MonthlyReportTime    string   `json:"monthly_report_time"` // HH:MM format
+	ReportRecipients     []string `json:"report_recipients"`   // Email addresses for scheduled reports
 
 	// Real-time Alerts
 	WAFDetectionEnabled  bool `json:"waf_detection_enabled"`
@@ -54,6 +55,7 @@ func DefaultNotificationSettings() *NotificationSettings {
 		MonthlyReportEnabled: false,
 		MonthlyReportDay:     1,
 		MonthlyReportTime:    "08:00",
+		ReportRecipients:     []string{},
 		WAFDetectionEnabled:  false,
 		WAFBlockedEnabled:    false,
 		NewBanEnabled:        false,

@@ -617,9 +617,26 @@ func (r *EventsRepository) GetSyslogStatus(ctx context.Context) (*entity.SyslogS
 }
 
 // GetCriticalAlerts returns recent critical and high severity alerts
-func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int) ([]entity.CriticalAlert, error) {
+func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int, period string) ([]entity.CriticalAlert, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
+	}
+
+	// Calculate start time from period
+	var startTime time.Time
+	now := time.Now()
+
+	switch period {
+	case "1h":
+		startTime = now.Add(-1 * time.Hour)
+	case "24h":
+		startTime = now.Add(-24 * time.Hour)
+	case "7d":
+		startTime = now.Add(-7 * 24 * time.Hour)
+	case "30d":
+		startTime = now.Add(-30 * 24 * time.Hour)
+	default:
+		startTime = now.Add(-24 * time.Hour)
 	}
 
 	query := `
@@ -639,11 +656,12 @@ func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int) ([]
 			geo_country
 		FROM events
 		WHERE severity IN ('critical', 'high')
+		AND timestamp >= ?
 		ORDER BY timestamp DESC
 		LIMIT ?
 	`
 
-	rows, err := r.conn.Query(ctx, query, limit)
+	rows, err := r.conn.Query(ctx, query, startTime, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query critical alerts: %w", err)
 	}

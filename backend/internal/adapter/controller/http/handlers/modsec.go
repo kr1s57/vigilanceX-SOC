@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -118,7 +119,7 @@ func (h *ModSecHandler) GetLogs(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit <= 0 || limit > 500 {
+	if limit <= 0 || limit > 10000 {
 		limit = 50
 	}
 	offset, _ := strconv.Atoi(q.Get("offset"))
@@ -174,10 +175,19 @@ func (h *ModSecHandler) GetGroupedLogs(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit <= 0 || limit > 500 {
+	if limit <= 0 || limit > 10000 {
 		limit = 100
 	}
 	offset, _ := strconv.Atoi(q.Get("offset"))
+
+	// Debug: log all query parameters
+	slog.Info("[MODSEC-DEBUG] GetGroupedLogs called",
+		"raw_url", r.URL.String(),
+		"limit", limit,
+		"limit_raw", q.Get("limit"),
+		"offset", offset,
+		"start_time", q.Get("start_time"),
+		"end_time", q.Get("end_time"))
 
 	filters := entity.ModSecLogFilters{
 		SrcIP:      q.Get("src_ip"),
@@ -192,6 +202,9 @@ func (h *ModSecHandler) GetGroupedLogs(w http.ResponseWriter, r *http.Request) {
 	if startStr := q.Get("start_time"); startStr != "" {
 		if t, err := time.Parse(time.RFC3339, startStr); err == nil {
 			filters.StartTime = t
+			slog.Info("[MODSEC-DEBUG] Parsed start_time", "start_time", t)
+		} else {
+			slog.Warn("[MODSEC-DEBUG] Failed to parse start_time", "raw", startStr, "error", err)
 		}
 	}
 	if endStr := q.Get("end_time"); endStr != "" {
@@ -201,6 +214,7 @@ func (h *ModSecHandler) GetGroupedLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	groups, total, err := h.repo.GetGroupedByRequest(r.Context(), filters, limit, offset)
+	slog.Info("[MODSEC-DEBUG] Query result", "groups_returned", len(groups), "total", total)
 	if err != nil {
 		ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch grouped ModSec logs", err)
 		return

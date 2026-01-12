@@ -36,13 +36,10 @@ import {
   ChevronsUpDown,
   Mail,
   Send,
-  HardDrive,
-  FolderSync,
-  Archive,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, storageApi, type LicenseStatus, type NotificationSettings, type StorageConfig, type StorageStatus, type StorageSMBConfig } from '@/lib/api'
+import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, type LicenseStatus, type NotificationSettings } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ThreatProvider {
@@ -188,21 +185,12 @@ export function Settings() {
   const [sendingTestEmail, setSendingTestEmail] = useState(false)
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  // Storage settings state (v3.50)
-  const [storageConfig, setStorageConfig] = useState<StorageConfig | null>(null)
-  const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null)
-  const [loadingStorage, setLoadingStorage] = useState(true)
-  const [savingStorage, setSavingStorage] = useState(false)
-  const [testingStorage, setTestingStorage] = useState(false)
-  const [storageTestResult, setStorageTestResult] = useState<{ success: boolean; message: string } | null>(null)
-
   // Collapsible sections state - all collapsed by default
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     display: true,
     dashboard: true,
     notifications: true,
     email_notifications: true,
-    storage: true,
     security: true,
     license: true,
     integrations: true,
@@ -216,7 +204,7 @@ export function Settings() {
   }
 
   const toggleAllSections = (collapse: boolean) => {
-    const sections = ['display', 'dashboard', 'notifications', 'email_notifications', 'storage', 'security', 'license', 'integrations']
+    const sections = ['display', 'dashboard', 'notifications', 'email_notifications', 'security', 'license', 'integrations']
     setCollapsedSections(
       sections.reduce((acc, section) => ({ ...acc, [section]: collapse }), {})
     )
@@ -326,93 +314,6 @@ export function Settings() {
 
     fetchNotificationSettings()
   }, [])
-
-  // Fetch storage config and status (v3.50)
-  useEffect(() => {
-    async function fetchStorageData() {
-      setLoadingStorage(true)
-      try {
-        const [config, status] = await Promise.all([
-          storageApi.getConfig().catch(() => null),
-          storageApi.getStatus().catch(() => null)
-        ])
-        if (config) setStorageConfig(config)
-        if (status) setStorageStatus(status)
-      } catch (err) {
-        console.error('Failed to fetch storage data:', err)
-      } finally {
-        setLoadingStorage(false)
-      }
-    }
-
-    fetchStorageData()
-  }, [])
-
-  // Handle storage SMB config update
-  const handleStorageSMBUpdate = async (smb: StorageSMBConfig) => {
-    setSavingStorage(true)
-    setStorageTestResult(null)
-    try {
-      // 1. Save SMB config
-      await storageApi.updateSMBConfig(smb)
-      // 2. Enable and connect
-      await storageApi.enable()
-      // 3. Refresh config and status
-      const [config, status] = await Promise.all([
-        storageApi.getConfig(),
-        storageApi.getStatus()
-      ])
-      setStorageConfig(config)
-      setStorageStatus(status)
-      setStorageTestResult({ success: true, message: 'Configuration saved and storage enabled' })
-    } catch (err) {
-      console.error('Failed to save/enable storage:', err)
-      setStorageTestResult({ success: false, message: err instanceof Error ? err.message : 'Failed to enable storage' })
-    } finally {
-      setSavingStorage(false)
-    }
-  }
-
-  // Handle storage connection test
-  const handleStorageTest = async (smb: StorageSMBConfig) => {
-    setTestingStorage(true)
-    setStorageTestResult(null)
-    try {
-      const result = await storageApi.testConnection(smb)
-      setStorageTestResult({
-        success: result.success,
-        message: result.success ? 'Connection successful!' : (result.error || 'Connection failed')
-      })
-    } catch (err) {
-      console.error('Storage test failed:', err)
-      setStorageTestResult({ success: false, message: 'Test failed - check console for details' })
-    } finally {
-      setTestingStorage(false)
-    }
-  }
-
-  // Handle storage enable/disable
-  const handleStorageToggle = async (enabled: boolean) => {
-    setSavingStorage(true)
-    try {
-      if (enabled) {
-        await storageApi.enable()
-      } else {
-        await storageApi.disable()
-      }
-      // Refresh status
-      const [config, status] = await Promise.all([
-        storageApi.getConfig(),
-        storageApi.getStatus()
-      ])
-      setStorageConfig(config)
-      setStorageStatus(status)
-    } catch (err) {
-      console.error('Failed to toggle storage:', err)
-    } finally {
-      setSavingStorage(false)
-    }
-  }
 
   // Handle notification settings change
   const handleNotifSettingChange = async <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => {
@@ -957,6 +858,30 @@ export function Settings() {
               <p className="text-sm font-medium text-muted-foreground">Scheduled Reports</p>
             </div>
 
+            {/* Report Recipients */}
+            <SettingRow
+              label="Report Recipients"
+              description="Email addresses to receive scheduled reports (comma-separated)"
+              icon={<Mail className="w-4 h-4" />}
+            >
+              <div className="flex items-center gap-2 w-full max-w-md">
+                <input
+                  type="text"
+                  value={(notifSettings?.report_recipients || []).join(', ')}
+                  onChange={(e) => {
+                    const emails = e.target.value
+                      .split(',')
+                      .map(email => email.trim())
+                      .filter(email => email.length > 0)
+                    handleNotifSettingChange('report_recipients', emails)
+                  }}
+                  placeholder="admin@company.com, security@company.com"
+                  disabled={!notifSettings?.smtp_configured || savingNotifSettings}
+                  className="flex-1 px-3 py-2 bg-background border rounded-lg text-sm disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </SettingRow>
+
             {/* Daily Report */}
             <SettingRow
               label="Daily Report"
@@ -1122,110 +1047,6 @@ export function Settings() {
                 disabled={!notifSettings?.smtp_configured || savingNotifSettings}
               />
             </SettingRow>
-          </>
-        )}
-      </SettingsSection>
-
-      {/* Storage Settings (v3.50) */}
-      <SettingsSection
-        title="Storage & Archiving"
-        description="External log storage configuration (SMB/S3)"
-        icon={<HardDrive className="w-5 h-5" />}
-        isCollapsed={collapsedSections['storage']}
-        onToggle={() => toggleSection('storage')}
-      >
-        {loadingStorage ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <>
-            {/* Storage Status */}
-            <SettingRow
-              label="Storage Status"
-              description={storageStatus?.connected ? `Connected to ${storageStatus.host}` : 'Not connected'}
-              icon={<FolderSync className="w-4 h-4" />}
-            >
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium',
-                  storageStatus?.connected
-                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                    : 'bg-muted text-muted-foreground'
-                )}>
-                  {storageStatus?.connected ? (
-                    <CheckCircle className="w-4 h-4" />
-                  ) : (
-                    <XCircle className="w-4 h-4" />
-                  )}
-                  {storageStatus?.connected ? 'Connected' : 'Disconnected'}
-                </div>
-                {storageConfig?.enabled && (
-                  <button
-                    onClick={() => handleStorageToggle(false)}
-                    disabled={savingStorage}
-                    className="px-3 py-1.5 bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                  >
-                    Disable
-                  </button>
-                )}
-              </div>
-            </SettingRow>
-
-            {/* Storage Stats */}
-            {storageStatus?.connected && (
-              <SettingRow
-                label="Archive Statistics"
-                description="Files and bytes written to storage"
-                icon={<Archive className="w-4 h-4" />}
-              >
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="text-muted-foreground">
-                    <span className="font-medium text-foreground">{storageStatus.files_written}</span> files
-                  </div>
-                  <div className="text-muted-foreground">
-                    <span className="font-medium text-foreground">
-                      {(storageStatus.bytes_written / 1024 / 1024).toFixed(2)}
-                    </span> MB
-                  </div>
-                </div>
-              </SettingRow>
-            )}
-
-            {/* SMB Configuration */}
-            <div className="border-t border-border pt-4 mt-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Server className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">SMB Configuration</span>
-                <span className="text-xs px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded">
-                  {storageConfig?.type === 'smb' ? 'Active' : 'Available'}
-                </span>
-              </div>
-
-              <StorageSMBForm
-                config={storageConfig?.smb}
-                onSave={handleStorageSMBUpdate}
-                onTest={handleStorageTest}
-                saving={savingStorage}
-                testing={testingStorage}
-                testResult={storageTestResult}
-                isAdmin={isAdmin}
-              />
-            </div>
-
-            {/* S3/MinIO (Coming Soon) */}
-            <div className="border-t border-border pt-4 mt-4">
-              <div className="flex items-center gap-2 mb-2">
-                <HardDrive className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium text-muted-foreground">S3 / MinIO</span>
-                <span className="text-xs px-2 py-0.5 bg-muted text-muted-foreground rounded">
-                  Coming Soon
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                S3-compatible storage support will be available in a future release.
-              </p>
-            </div>
           </>
         )}
       </SettingsSection>
@@ -1616,7 +1437,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.51.101</p>
+        <p>VIGILANCE X v3.51.102</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
@@ -1812,233 +1633,6 @@ function IntegrationRow({
           )}
         </div>
       </div>
-    </div>
-  )
-}
-
-// Storage SMB Form Component (v3.50)
-function StorageSMBForm({
-  config,
-  onSave,
-  onTest,
-  saving,
-  testing,
-  testResult,
-  isAdmin,
-}: {
-  config?: StorageSMBConfig
-  onSave: (config: StorageSMBConfig) => void
-  onTest: (config: StorageSMBConfig) => void
-  saving: boolean
-  testing: boolean
-  testResult: { success: boolean; message: string } | null
-  isAdmin: boolean
-}) {
-  const [formData, setFormData] = useState<StorageSMBConfig>({
-    host: config?.host || '',
-    port: config?.port || 445,
-    share: config?.share || '',
-    username: config?.username || '',
-    password: config?.password || '',
-    domain: config?.domain || 'WORKGROUP',
-    base_path: config?.base_path || 'vigilancex',
-    require_signing: config?.require_signing ?? true,
-    min_version: config?.min_version || '3.0',
-  })
-
-  const handleChange = (key: keyof StorageSMBConfig, value: string | number | boolean) => {
-    setFormData(prev => ({ ...prev, [key]: value }))
-  }
-
-  const handleSave = () => {
-    onSave(formData)
-  }
-
-  const handleTest = () => {
-    onTest(formData)
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Host/IP</label>
-          <input
-            type="text"
-            value={formData.host}
-            onChange={(e) => handleChange('host', e.target.value)}
-            placeholder="10.0.0.100"
-            disabled={!isAdmin}
-            className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Port</label>
-          <input
-            type="number"
-            value={formData.port}
-            onChange={(e) => handleChange('port', parseInt(e.target.value) || 445)}
-            placeholder="445"
-            disabled={!isAdmin}
-            className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-1">Share Name</label>
-        <input
-          type="text"
-          value={formData.share}
-          onChange={(e) => handleChange('share', e.target.value)}
-          placeholder="vigilancex_logs"
-          disabled={!isAdmin}
-          className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Username</label>
-          <input
-            type="text"
-            value={formData.username}
-            onChange={(e) => handleChange('username', e.target.value)}
-            placeholder="vigilancex_svc"
-            disabled={!isAdmin}
-            className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Password</label>
-          <input
-            type="password"
-            value={formData.password}
-            onChange={(e) => handleChange('password', e.target.value)}
-            placeholder="********"
-            disabled={!isAdmin}
-            className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Domain</label>
-          <input
-            type="text"
-            value={formData.domain}
-            onChange={(e) => handleChange('domain', e.target.value)}
-            placeholder="WORKGROUP"
-            disabled={!isAdmin}
-            className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Base Path</label>
-          <input
-            type="text"
-            value={formData.base_path}
-            onChange={(e) => handleChange('base_path', e.target.value)}
-            placeholder="vigilancex"
-            disabled={!isAdmin}
-            className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
-          />
-        </div>
-      </div>
-
-      {/* Security Options (v3.51) */}
-      <div className="border-t border-border pt-4 mt-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Shield className="w-4 h-4 text-green-500" />
-          <span className="text-sm font-medium">Security Options</span>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Minimum SMB Version</label>
-            <select
-              value={formData.min_version}
-              onChange={(e) => handleChange('min_version', e.target.value)}
-              disabled={!isAdmin}
-              className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
-            >
-              <option value="3.0">SMB 3.0 (AES-128-CCM)</option>
-              <option value="3.0.2">SMB 3.0.2 (AES-128-CCM)</option>
-              <option value="3.1.1">SMB 3.1.1 (AES-128-GCM)</option>
-            </select>
-            <p className="text-xs text-muted-foreground mt-1">SMB 3.x enables encryption</p>
-          </div>
-          <div className="flex items-center">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.require_signing}
-                onChange={(e) => handleChange('require_signing', e.target.checked)}
-                disabled={!isAdmin}
-                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary disabled:opacity-50"
-              />
-              <div>
-                <span className="text-sm font-medium">Require Message Signing</span>
-                <p className="text-xs text-muted-foreground">Protects against MITM attacks</p>
-              </div>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* Test Result */}
-      {testResult && (
-        <div className={cn(
-          'rounded-lg p-3 border',
-          testResult.success
-            ? 'bg-green-500/10 border-green-500/20'
-            : 'bg-red-500/10 border-red-500/20'
-        )}>
-          <div className="flex items-center gap-2">
-            {testResult.success ? (
-              <CheckCircle className="w-4 h-4 text-green-500" />
-            ) : (
-              <XCircle className="w-4 h-4 text-red-500" />
-            )}
-            <span className={cn(
-              'text-sm',
-              testResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-            )}>
-              {testResult.message}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      {isAdmin && (
-        <div className="flex gap-3 pt-2">
-          <button
-            onClick={handleTest}
-            disabled={testing || saving || !formData.host || !formData.share}
-            className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
-          >
-            {testing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            Test Connection
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || testing || !formData.host || !formData.share}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Check className="w-4 h-4" />
-            )}
-            Save & Enable
-          </button>
-        </div>
-      )}
     </div>
   )
 }

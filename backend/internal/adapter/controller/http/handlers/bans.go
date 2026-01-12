@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,14 +12,25 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 )
 
+// GeoIPClient interface for geolocation lookups
+type GeoIPClient interface {
+	Lookup(ctx context.Context, ip string) (*entity.GeoLocation, error)
+}
+
 // BansHandler handles ban-related HTTP requests
 type BansHandler struct {
-	service *bans.Service
+	service     *bans.Service
+	geoIPClient GeoIPClient
 }
 
 // NewBansHandler creates a new bans handler
 func NewBansHandler(service *bans.Service) *BansHandler {
 	return &BansHandler{service: service}
+}
+
+// SetGeoIPClient sets the GeoIP client for country enrichment
+func (h *BansHandler) SetGeoIPClient(client GeoIPClient) {
+	h.geoIPClient = client
 }
 
 // List returns all active bans
@@ -30,6 +42,16 @@ func (h *BansHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch bans", err)
 		return
+	}
+
+	// Enrich with country codes if GeoIP client is available
+	if h.geoIPClient != nil {
+		for i := range activeBans {
+			geo, err := h.geoIPClient.Lookup(ctx, activeBans[i].IP)
+			if err == nil && geo != nil {
+				activeBans[i].Country = geo.CountryCode
+			}
+		}
 	}
 
 	// Wrap in data object for frontend compatibility

@@ -46,7 +46,7 @@ export function Dashboard() {
         const [overviewData, timelineData, alertsData] = await Promise.all([
           statsApi.overview(period),
           eventsApi.timeline(period, period === '24h' || period === '1h' ? 'hour' : 'day'),
-          alertsApi.critical(20),
+          alertsApi.critical(20, period),
         ])
         setOverview(overviewData)
         setTimeline(timelineData)
@@ -141,9 +141,9 @@ export function Dashboard() {
           className="cursor-pointer transition-transform hover:scale-[1.02]"
         >
           <StatCard
-            title="Critical Alerts"
-            value={formatNumber(stats?.critical_events || 0)}
-            subtitle={`+ ${formatNumber(stats?.high_events || 0)} high - Click to view`}
+            title="Critical & High"
+            value={formatNumber((stats?.critical_events || 0) + (stats?.high_events || 0))}
+            subtitle={`${formatNumber(stats?.critical_events || 0)} critical, ${formatNumber(stats?.high_events || 0)} high`}
             icon={<ShieldAlert className="w-5 h-5 text-red-500" />}
             variant={stats?.critical_events && stats.critical_events > 0 ? 'critical' : 'default'}
           />

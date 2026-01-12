@@ -81,6 +81,7 @@ export interface BanStatus {
   trigger_rule: string
   synced_xgs: boolean
   created_by: string
+  country?: string // Country code for flag display
 }
 
 export interface BanHistory {

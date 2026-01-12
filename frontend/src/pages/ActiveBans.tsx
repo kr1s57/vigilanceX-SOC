@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat } from 'lucide-react'
 import { bansApi, detect2banApi, type Detect2BanStatus } from '@/lib/api'
 import { IPThreatModal } from '@/components/IPThreatModal'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, getCountryFlag } from '@/lib/utils'
 import type { BanStatus, BanStats } from '@/types'
 
 type StatsFilter = 'active' | 'permanent' | 'recent' | 'recidivist' | null
@@ -313,7 +313,14 @@ export function ActiveBans() {
                     onClick={() => handleIPLookup(ban.ip)}
                   >
                     <td>
-                      <span className="font-mono">{ban.ip}</span>
+                      <div className="flex items-center gap-2">
+                        {ban.country && (
+                          <span title={ban.country} className="text-base">
+                            {getCountryFlag(ban.country)}
+                          </span>
+                        )}
+                        <span className="font-mono">{ban.ip}</span>
+                      </div>
                     </td>
                     <td>
                       <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
@@ -503,7 +510,16 @@ export function ActiveBans() {
                           handleIPLookup(ban.ip)
                         }}
                       >
-                        <td className="py-2 px-3 font-mono text-sm">{ban.ip}</td>
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-2">
+                            {ban.country && (
+                              <span title={ban.country} className="text-base">
+                                {getCountryFlag(ban.country)}
+                              </span>
+                            )}
+                            <span className="font-mono text-sm">{ban.ip}</span>
+                          </div>
+                        </td>
                         <td className="py-2 px-3">
                           <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
                             ban.status === 'permanent'

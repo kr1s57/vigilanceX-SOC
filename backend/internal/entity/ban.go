@@ -23,6 +23,7 @@ type BanStatus struct {
 	CreatedBy    string     `json:"created_by" ch:"created_by"`
 	UpdatedAt    time.Time  `json:"updated_at" ch:"updated_at"`
 	Version      uint64     `json:"-" ch:"version"`
+	Country      string     `json:"country,omitempty"` // Country code (enriched via GeoIP, not stored in DB)
 }
 
 // BanHistory represents a ban/unban action in the audit trail

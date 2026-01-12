@@ -49,6 +49,7 @@ type SMBProvider struct {
 	session      *smb2.Session
 	share        *smb2.Share
 	mu           sync.RWMutex
+	writeMu      sync.Mutex // Mutex for WriteCompressed to prevent race conditions
 	status       *Status
 	bytesWritten int64
 	filesWritten int64
@@ -254,23 +255,55 @@ func (p *SMBProvider) WriteStream(ctx context.Context, path string, reader io.Re
 	return p.Write(ctx, path, data)
 }
 
-// WriteCompressed writes gzip-compressed data to a file
+// WriteCompressed writes gzip-compressed data to a file, appending to existing content
+// Uses mutex to prevent race conditions between concurrent writes (archiver + migration)
 func (p *SMBProvider) WriteCompressed(ctx context.Context, path string, data []byte) error {
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-
-	if _, err := gw.Write(data); err != nil {
-		return fmt.Errorf("failed to compress: %w", err)
-	}
-	if err := gw.Close(); err != nil {
-		return fmt.Errorf("failed to close gzip: %w", err)
-	}
+	// Lock to prevent concurrent read-modify-write race conditions
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
 
 	// Add .gz extension if not present
 	if filepath.Ext(path) != ".gz" {
 		path += ".gz"
 	}
 
+	// Read and decompress existing content if file exists
+	var existingData []byte
+	existingCompressed, err := p.Read(ctx, path)
+	if err != nil {
+		// File doesn't exist yet, that's OK - we'll create it
+		slog.Debug("[STORAGE] No existing file (creating new)", "path", path)
+	} else if len(existingCompressed) > 0 {
+		gr, err := gzip.NewReader(bytes.NewReader(existingCompressed))
+		if err != nil {
+			slog.Warn("[STORAGE] Failed to decompress existing file, starting fresh", "path", path, "error", err)
+		} else {
+			existingData, err = io.ReadAll(gr)
+			gr.Close()
+			if err != nil {
+				slog.Warn("[STORAGE] Failed to read decompressed data, starting fresh", "path", path, "error", err)
+				existingData = nil
+			} else {
+				slog.Debug("[STORAGE] Read existing compressed data", "path", path, "existing_bytes", len(existingData))
+			}
+		}
+	}
+
+	// Append new data to existing
+	allData := append(existingData, data...)
+
+	// Compress combined data
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+
+	if _, err := gw.Write(allData); err != nil {
+		return fmt.Errorf("failed to compress: %w", err)
+	}
+	if err := gw.Close(); err != nil {
+		return fmt.Errorf("failed to close gzip: %w", err)
+	}
+
+	slog.Debug("[STORAGE] Writing compressed data", "path", path, "total_bytes", len(allData), "compressed_bytes", buf.Len())
 	return p.Write(ctx, path, buf.Bytes())
 }
 
@@ -370,20 +403,70 @@ func (p *SMBProvider) MkdirAll(ctx context.Context, path string) error {
 	return share.MkdirAll(fullPath, 0755)
 }
 
-// GetStatus returns the current status
+// GetStatus returns the current status with real filesystem stats
 func (p *SMBProvider) GetStatus() *Status {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	return &Status{
-		Type:         StorageTypeSMB,
-		Connected:    p.status.Connected,
-		Host:         p.status.Host,
-		Share:        p.status.Share,
-		LastError:    p.status.LastError,
-		LastSuccess:  p.status.LastSuccess,
-		BytesWritten: p.bytesWritten,
-		FilesWritten: p.filesWritten,
+	status := &Status{
+		Type:        StorageTypeSMB,
+		Connected:   p.status.Connected,
+		Host:        p.status.Host,
+		Share:       p.status.Share,
+		LastError:   p.status.LastError,
+		LastSuccess: p.status.LastSuccess,
+	}
+
+	// Calculate real stats from filesystem if connected
+	if p.share != nil && p.status.Connected {
+		files, bytes := p.calculateStatsLocked()
+		status.FilesWritten = files
+		status.BytesWritten = bytes
+	}
+
+	return status
+}
+
+// calculateStatsLocked scans the filesystem to get real file counts and sizes
+// Must be called with mu held
+func (p *SMBProvider) calculateStatsLocked() (int64, int64) {
+	var totalFiles int64
+	var totalBytes int64
+
+	// Start from base path (e.g., "vigilancex/logs")
+	basePath := p.config.BasePath
+	if basePath == "" {
+		basePath = "."
+	}
+
+	// Recursive scan with depth limit to avoid infinite loops
+	p.scanDirectory(basePath, &totalFiles, &totalBytes, 0, 5)
+
+	return totalFiles, totalBytes
+}
+
+// scanDirectory recursively scans a directory and accumulates file stats
+func (p *SMBProvider) scanDirectory(path string, totalFiles *int64, totalBytes *int64, depth, maxDepth int) {
+	if depth > maxDepth || p.share == nil {
+		return
+	}
+
+	entries, err := p.share.ReadDir(path)
+	if err != nil {
+		// Directory doesn't exist or not accessible - that's ok
+		return
+	}
+
+	for _, entry := range entries {
+		fullPath := filepath.Join(path, entry.Name())
+		if entry.IsDir() {
+			// Recurse into subdirectory
+			p.scanDirectory(fullPath, totalFiles, totalBytes, depth+1, maxDepth)
+		} else {
+			// Count file
+			*totalFiles++
+			*totalBytes += entry.Size()
+		}
 	}
 }
 
