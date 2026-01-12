@@ -4,6 +4,7 @@ import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTr
 import { modsecApi, bansApi } from '@/lib/api'
 import { formatDateTime, formatDateTimeFull, getCountryFlag, getCountryName } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
+import { IPThreatModal } from '@/components/IPThreatModal'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
 
 // Period options for WAF logs
@@ -111,6 +112,8 @@ export function WafExplorer() {
   // Ban state
   const [banningIP, setBanningIP] = useState<string | null>(null)
   const [bannedIPs, setBannedIPs] = useState<Set<string>>(new Set())
+  // IP Threat Modal state
+  const [selectedIP, setSelectedIP] = useState<string | null>(null)
 
   const handleBanIP = async (ip: string, reason: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -218,12 +221,14 @@ export function WafExplorer() {
     return { totalEvents, totalBlocked, totalDetected }
   }, [dayGroups])
 
-  // Auto-expand all days on load (up to 7 days)
+  // Auto-expand only Today on load (other days collapsed by default)
   useEffect(() => {
     if (dayGroups.length > 0 && expandedDays.size === 0) {
-      // Expand all days (or up to 7 most recent)
-      const daysToExpand = dayGroups.slice(0, 7).map(g => g.date)
-      setExpandedDays(new Set(daysToExpand))
+      // Only expand "Today" by default
+      const todayGroup = dayGroups.find(g => g.dateDisplay === 'Today')
+      if (todayGroup) {
+        setExpandedDays(new Set([todayGroup.date]))
+      }
     }
   }, [dayGroups])
 
@@ -345,7 +350,19 @@ export function WafExplorer() {
         </td>
         <td>
           <div className="flex flex-col">
-            <span className="font-mono text-sm">{request.src_ip}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-sm">{request.src_ip}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedIP(request.src_ip)
+                }}
+                className="p-1 hover:bg-muted rounded transition-colors"
+                title="View threat intelligence"
+              >
+                <Search className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+              </button>
+            </div>
             {request.geo_country && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                 <span>{getCountryFlag(request.geo_country)}</span>
@@ -880,6 +897,15 @@ export function WafExplorer() {
           </div>
         )}
       </div>
+
+      {/* IP Threat Modal */}
+      {selectedIP && (
+        <IPThreatModal
+          ip={selectedIP}
+          isOpen={!!selectedIP}
+          onClose={() => setSelectedIP(null)}
+        />
+      )}
     </div>
   )
 }
