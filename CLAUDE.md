@@ -68,13 +68,26 @@ Ces mesures seraient requises uniquement si exposition Internet:
 
 ### En Developpement (Coquille)
 - **Policies de bans**: Logique de decision non finalisee
-- **Detect2Ban engine**: Scenarios YAML a completer
 - **Recidivisme automatique**: A configurer selon besoins
-- **Storage SMB/S3**: Interface prete, tests a valider (v3.50)
 
 > **Note**: Ne pas modifier la logique des bans sans consultation prealable.
 
-### Storage External (v3.50 - Preparation)
+### Detect2Ban Engine (v3.51 - Active)
+
+Moteur de detection et ban automatique des menaces.
+
+| Composant | Status |
+|-----------|--------|
+| Engine Core | Active (auto-start au boot) |
+| Scenarios YAML | 2 scenarios (waf_attacks, brute_force) |
+| Check Interval | 30 secondes |
+| Badge D2B | Header (vert/rouge) |
+
+**Criteres de blocage:**
+- `waf_attacks`: 5+ drops WAF en 5 min + threat score >= 50
+- `brute_force`: 10+ auth failures en 10 min
+
+### Storage External (v3.51 - Wired)
 
 Archivage des logs vers stockage externe SMB/S3.
 
@@ -84,6 +97,7 @@ Archivage des logs vers stockage externe SMB/S3.
 | SMB Client | `internal/adapter/external/storage/smb.go` | Ready |
 | Storage Manager | `internal/adapter/external/storage/manager.go` | Ready |
 | HTTP Handlers | `internal/adapter/controller/http/handlers/storage.go` | Ready |
+| Routes API | `backend/cmd/api/main.go` | **Wired** |
 | Settings UI | `frontend/src/pages/Settings.tsx` | Ready |
 | API Client | `frontend/src/lib/api.ts` | Ready |
 | Risk Analysis | `docs/STORAGE-SMB-RISK.md` | Done |

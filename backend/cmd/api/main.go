@@ -18,6 +18,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/smtp"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
+	"github.com/kr1s57/vigilancex/internal/adapter/external/storage"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
 	sophosparser "github.com/kr1s57/vigilancex/internal/adapter/parser/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
@@ -340,6 +341,15 @@ func main() {
 	licenseHandler := handlers.NewLicenseHandler(licenseClient)                 // v2.9: License management
 	parserHandler := handlers.NewParserHandler(xgsParser)                       // v3.1: XGS Parser
 	notificationHandler := handlers.NewNotificationHandler(notificationService) // v3.3: Email notifications
+
+	// v3.51: Initialize Storage Manager for SMB/S3 log archiving
+	storageConfigPath := "./config/storage.json"
+	storageManager := storage.NewManager(storageConfigPath)
+	if err := storageManager.LoadConfig(); err != nil {
+		logger.Warn("Failed to load storage config, using defaults", "error", err)
+	}
+	storageHandler := handlers.NewStorageHandler(storageManager)
+	logger.Info("Storage Manager initialized", "config_path", storageConfigPath)
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -670,6 +680,19 @@ func main() {
 				r.Get("/status", notificationHandler.GetStatus)
 				r.Get("/smtp-config", notificationHandler.GetSMTPConfig)    // v3.5
 				r.Put("/smtp-config", notificationHandler.UpdateSMTPConfig) // v3.5
+			})
+
+			// Storage (v3.51 - External log archiving SMB/S3)
+			r.Route("/storage", func(r chi.Router) {
+				r.Get("/config", storageHandler.GetConfig)
+				r.Put("/config", storageHandler.UpdateConfig)
+				r.Put("/smb", storageHandler.UpdateSMBConfig)
+				r.Get("/status", storageHandler.GetStatus)
+				r.Post("/test", storageHandler.TestConnection)
+				r.Post("/connect", storageHandler.Connect)
+				r.Post("/disconnect", storageHandler.Disconnect)
+				r.Post("/enable", storageHandler.Enable)
+				r.Post("/disable", storageHandler.Disable)
 			})
 		})
 	})

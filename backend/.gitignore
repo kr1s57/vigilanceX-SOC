@@ -1,6 +1,6 @@
-# Compiled binaries
-api
-detect2ban
+# Compiled binaries (root level only)
+/api
+/detect2ban
 
 # Environment files
 .env
