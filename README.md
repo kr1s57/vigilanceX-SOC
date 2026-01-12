@@ -1,8 +1,10 @@
 # VIGILANCE X - Live Active Response
 
-> **Version 3.1.0** | Security Operations Center pour Sophos XGS
+> **Version 3.51.100** | Security Operations Center pour Sophos XGS
 
 Solution de supervision de sécurité et de réponse active automatisée pour **Sophos XGS**.
+
+📖 **[Quick Install Guide](https://github.com/kr1s57/vigilanceX-SOC/wiki)** - Installation rapide et configuration
 
 ## Stack Technique
 

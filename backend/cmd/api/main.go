@@ -23,6 +23,7 @@ import (
 	sophosparser "github.com/kr1s57/vigilancex/internal/adapter/parser/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
+	"github.com/kr1s57/vigilancex/internal/entity"  // v3.51.100: For SMTP config persistence
 	"github.com/kr1s57/vigilancex/internal/license" // v2.9: License system
 	"github.com/kr1s57/vigilancex/internal/usecase/archiver"
 	"github.com/kr1s57/vigilancex/internal/usecase/auth"
@@ -264,6 +265,7 @@ func main() {
 	}
 
 	// Initialize SMTP client for email notifications
+	// v3.51.100: SMTP can be configured via env vars OR persisted settings
 	var smtpClient *smtp.Client
 	if cfg.SMTP.Host != "" {
 		smtpClient = smtp.NewClient(smtp.Config{
@@ -276,9 +278,9 @@ func main() {
 			Recipients: cfg.SMTP.Recipients,
 			Timeout:    cfg.SMTP.Timeout,
 		}, logger)
-		logger.Info("SMTP client initialized", "host", cfg.SMTP.Host, "port", cfg.SMTP.Port)
+		logger.Info("SMTP client initialized from env vars", "host", cfg.SMTP.Host, "port", cfg.SMTP.Port)
 	} else {
-		logger.Info("SMTP client not configured - email notifications disabled")
+		logger.Info("SMTP not configured via env vars, will check persisted settings")
 	}
 
 	// Initialize services
@@ -308,6 +310,13 @@ func main() {
 	geoblockingService := geoblocking.NewService(geoblockingRepo, geoIPClient) // v2.0: Geoblocking
 	authService := auth.NewService(usersRepo, cfg, logger)                     // v2.6: Authentication
 	notificationService := notifications.NewService(smtpClient, logger)        // v3.3: Email notifications
+
+	// v3.51.100: Log actual SMTP status (may have been configured from persisted settings)
+	if notificationService.IsSMTPConfigured() {
+		logger.Info("SMTP configured and ready", "host", notificationService.GetSMTPHost())
+	} else {
+		logger.Warn("SMTP not configured - email notifications disabled")
+	}
 
 	// Initialize notification scheduler (for daily/weekly/monthly reports)
 	notificationScheduler := notifications.NewScheduler(notificationService, nil, logger)
@@ -351,6 +360,19 @@ func main() {
 	}
 	storageHandler := handlers.NewStorageHandler(storageManager)
 	logger.Info("Storage Manager initialized", "config_path", storageConfigPath)
+
+	// v3.51.100: Auto-connect SMB storage if previously enabled
+	storageCfg := storageManager.GetConfig()
+	if storageCfg.Enabled && storageCfg.SMB != nil && storageCfg.SMB.Host != "" {
+		logger.Info("Storage was previously enabled, attempting auto-connect",
+			"type", storageCfg.Type,
+			"host", storageCfg.SMB.Host)
+		if err := storageManager.Connect(context.Background()); err != nil {
+			logger.Warn("Failed to auto-connect storage on startup", "error", err)
+		} else {
+			logger.Info("Storage auto-connected successfully on startup")
+		}
+	}
 
 	// v3.51: Initialize Archiver Service for log archiving to SMB/S3
 	archiverService := archiver.NewService(storageManager, eventsRepo)
@@ -649,6 +671,7 @@ func main() {
 			r.Route("/config", func(r chi.Router) {
 				configHandler := handlers.NewConfigHandler()
 				// v3.3: Set SMTP hot-reload callback
+				// v3.51.100: Also persist SMTP config for auto-reconnect on restart
 				configHandler.SetSMTPReloadCallback(func(host string, port int, security, fromEmail, username, password string, recipients []string) {
 					if host == "" {
 						return
@@ -664,6 +687,22 @@ func main() {
 						Timeout:    30 * time.Second,
 					}, logger)
 					notificationService.UpdateSMTPClient(newClient)
+
+					// v3.51.100: Also persist SMTP config for auto-reconnect on restart
+					smtpConfig := &entity.SMTPConfig{
+						Host:       host,
+						Port:       port,
+						Security:   security,
+						FromEmail:  fromEmail,
+						Username:   username,
+						Password:   password,
+						Recipients: recipients,
+					}
+					if err := notificationService.UpdateSMTPConfig(smtpConfig); err != nil {
+						logger.Warn("Failed to persist SMTP config", "error", err)
+					} else {
+						logger.Info("SMTP config persisted for auto-reconnect on restart")
+					}
 				})
 				r.Post("/test", configHandler.TestConfig)
 				r.Post("/save", configHandler.SaveConfig)
