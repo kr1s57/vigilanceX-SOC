@@ -10,17 +10,24 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/entity"
 	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
+	"github.com/kr1s57/vigilancex/internal/usecase/wafwatcher"
 )
 
 // ModSecHandler handles ModSec-related requests
 type ModSecHandler struct {
-	service *modsec.Service
-	repo    *clickhouse.ModSecRepository
+	service    *modsec.Service
+	repo       *clickhouse.ModSecRepository
+	wafWatcher *wafwatcher.Service
 }
 
 // NewModSecHandler creates a new ModSec handler
 func NewModSecHandler(service *modsec.Service, repo *clickhouse.ModSecRepository) *ModSecHandler {
 	return &ModSecHandler{service: service, repo: repo}
+}
+
+// SetWAFWatcher sets the WAF watcher service for status reporting
+func (h *ModSecHandler) SetWAFWatcher(watcher *wafwatcher.Service) {
+	h.wafWatcher = watcher
 }
 
 // GetStats returns ModSec sync statistics
@@ -273,4 +280,37 @@ func (h *ModSecHandler) GetAttackTypeStats(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+// GetWAFWatcherStatus returns the WAF event watcher status
+// GET /api/v1/modsec/watcher
+func (h *ModSecHandler) GetWAFWatcherStatus(w http.ResponseWriter, r *http.Request) {
+	if h.wafWatcher == nil {
+		// Return a "not configured" status instead of error
+		response := map[string]interface{}{
+			"configured":      false,
+			"running":         false,
+			"message":         "WAF Event Watcher not configured (ModSec sync service not available)",
+			"triggered_syncs": 0,
+			"events_checked":  0,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	stats := h.wafWatcher.GetStats()
+	response := map[string]interface{}{
+		"configured":       true,
+		"running":          stats.Running,
+		"last_check":       stats.LastCheck,
+		"last_sync":        stats.LastSync,
+		"triggered_syncs":  stats.TriggeredSyncs,
+		"events_checked":   stats.EventsChecked,
+		"poll_interval_ms": stats.PollInterval.Milliseconds(),
+		"sync_cooldown_ms": stats.SyncCooldown.Milliseconds(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

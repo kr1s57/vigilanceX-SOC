@@ -884,3 +884,28 @@ func (r *EventsRepository) GetUniqueIPsNeedingGeo(ctx context.Context, limit int
 
 	return ips, nil
 }
+
+// GetRecentWAFBlockEvents returns the count of WAF blocking events since the given time
+// This is used by the WAF watcher to detect new attacks and trigger ModSec sync
+func (r *EventsRepository) GetRecentWAFBlockEvents(ctx context.Context, since time.Time) (int, error) {
+	// Query for WAF events with blocking actions since the given timestamp
+	// Actions: 'drop', 'blocked', 'Block', 'Drop', etc.
+	query := `
+		SELECT count() as cnt
+		FROM events
+		WHERE timestamp > ?
+		  AND log_type = 'WAF'
+		  AND (
+			  lower(action) IN ('drop', 'blocked', 'deny', 'reject', 'block')
+			  OR lower(category) LIKE '%blocked%'
+			  OR lower(category) LIKE '%denied%'
+		  )
+	`
+
+	var count uint64
+	if err := r.conn.QueryRow(ctx, query, since).Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to count WAF block events: %w", err)
+	}
+
+	return int(count), nil
+}

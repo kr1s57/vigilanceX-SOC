@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.51.100 | **Derniere mise a jour**: 2026-01-12
+> **Version**: 3.51.101 | **Derniere mise a jour**: 2026-01-12
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -996,6 +996,14 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.51.101 (2026-01-12)
+- **WAF Event Watcher**: Trigger instantane de sync ModSec sur detection WAF
+- Nouveau service `wafwatcher.Service` qui monitore ClickHouse pour les events WAF blocking
+- Poll toutes les 15s, cooldown 30s entre syncs
+- Bridge le gap entre Syslog real-time et SSH rule ID retrieval
+- Endpoint status: `GET /api/v1/modsec/watcher`
+- Detect2Ban peut maintenant reagir quasi-instantanement aux attaques WAF
 
 ### v3.51.100 (2026-01-12)
 - **Detect2Ban Immunity**: Nouveau bouton "Unban 24h" pour faux positifs

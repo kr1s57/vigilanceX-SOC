@@ -37,6 +37,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/notifications"
 	"github.com/kr1s57/vigilancex/internal/usecase/reports"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
+	"github.com/kr1s57/vigilancex/internal/usecase/wafwatcher"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -246,6 +247,28 @@ func main() {
 		logger.Warn("ModSec sync service not configured - SSH host not set")
 	}
 
+	// v3.51.101: Initialize WAF Event Watcher (triggers ModSec sync on WAF detection)
+	// This bridges the gap between Syslog real-time ingestion and SSH rule ID retrieval
+	var wafWatcherService *wafwatcher.Service
+	if modsecService != nil {
+		wafWatcherService = wafwatcher.NewService(
+			wafwatcher.Config{
+				PollInterval:       15 * time.Second, // Check every 15 seconds
+				SyncCooldown:       30 * time.Second, // Don't sync more than once per 30 seconds
+				MinEventsToTrigger: 1,                // Trigger on any new blocking event
+			},
+			eventsRepo,    // Implements WAFEventChecker
+			modsecService, // Implements ModSecSyncer
+			logger,
+		)
+		go wafWatcherService.Start(context.Background())
+		logger.Info("WAF Event Watcher started - will trigger instant ModSec sync on WAF detection",
+			"poll_interval", "15s",
+			"sync_cooldown", "30s")
+	} else {
+		logger.Info("WAF Event Watcher not started - ModSec service not configured")
+	}
+
 	// v3.1: Initialize Sophos XGS Parser (XML-based decoders and rules)
 	var xgsParser *sophosparser.Parser
 	scenariosDir := "./scenarios"
@@ -343,6 +366,10 @@ func main() {
 	logger.Info("Detect2Ban engine auto-started", "interval", "30s")
 
 	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
+	// v3.51.101: Wire WAF watcher for status endpoint
+	if wafWatcherService != nil {
+		modsecHandler.SetWAFWatcher(wafWatcherService)
+	}
 	reportsHandler := handlers.NewReportsHandler(reportsService, notificationService)
 	blocklistsHandler := handlers.NewBlocklistsHandler(blocklistsService)
 	geoblockingHandler := handlers.NewGeoblockingHandler(geoblockingService)    // v2.0: Geoblocking
@@ -642,6 +669,7 @@ func main() {
 				r.Get("/hostnames", modsecHandler.GetHostnames)
 				r.Get("/rules/stats", modsecHandler.GetRuleStats)
 				r.Get("/attacks/stats", modsecHandler.GetAttackTypeStats)
+				r.Get("/watcher", modsecHandler.GetWAFWatcherStatus) // v3.51.101: WAF Event Watcher status
 			})
 
 			// IPS
