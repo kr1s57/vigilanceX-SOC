@@ -12,8 +12,9 @@ import {
   Activity,
   Target,
   Radio,
+  Ban,
 } from 'lucide-react'
-import { threatsApi } from '@/lib/api'
+import { threatsApi, bansApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, cn } from '@/lib/utils'
 import type { ThreatScore } from '@/types'
 
@@ -38,15 +39,48 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
+  const [banning, setBanning] = useState(false)
+  const [isBanned, setIsBanned] = useState(false)
+  const [banStatus, setBanStatus] = useState<string | null>(null)
+
+  const handleBanIP = async () => {
+    if (!ip) return
+    setBanning(true)
+    try {
+      await bansApi.create({
+        ip,
+        reason: `Manual ban from Threat Intel - Score: ${score?.aggregated_score || 'N/A'}`,
+        permanent: false,
+      })
+      setIsBanned(true)
+      setBanStatus('active')
+    } catch (err) {
+      console.error('Failed to ban IP:', err)
+    } finally {
+      setBanning(false)
+    }
+  }
 
   useEffect(() => {
     if (isOpen && ip) {
       setLoading(true)
       setError(null)
-      threatsApi.score(ip)
-        .then(data => setScore(data))
-        .catch(() => setError('Score not found in database'))
-        .finally(() => setLoading(false))
+      setIsBanned(false)
+      setBanStatus(null)
+
+      // Fetch both threat score and ban status in parallel
+      Promise.all([
+        threatsApi.score(ip).catch(() => null),
+        bansApi.get(ip).catch(() => null)
+      ]).then(([scoreData, banData]) => {
+        if (scoreData) setScore(scoreData)
+        else setError('Score not found in database')
+
+        if (banData && (banData.status === 'active' || banData.status === 'permanent')) {
+          setIsBanned(true)
+          setBanStatus(banData.status)
+        }
+      }).finally(() => setLoading(false))
     }
   }, [isOpen, ip])
 
@@ -91,6 +125,33 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isBanned ? (
+              <span className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium',
+                banStatus === 'permanent'
+                  ? 'bg-red-500/20 text-red-500'
+                  : 'bg-orange-500/20 text-orange-500'
+              )}>
+                <Ban className="w-4 h-4" />
+                {banStatus === 'permanent' ? 'Permanent Ban' : 'Banned'}
+              </span>
+            ) : (
+              <button
+                onClick={handleBanIP}
+                disabled={banning}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors text-sm font-medium bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                title="Ban this IP"
+              >
+                {banning ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Ban className="w-4 h-4" />
+                    Ban IP
+                  </>
+                )}
+              </button>
+            )}
             <button
               onClick={handleRefreshCheck}
               disabled={checking}
@@ -329,6 +390,17 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
               <div className="space-y-3">
                 {/* Badges */}
                 <div className="flex flex-wrap gap-2">
+                  {isBanned && (
+                    <span className={cn(
+                      'inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full font-medium',
+                      banStatus === 'permanent'
+                        ? 'bg-red-500/20 text-red-500'
+                        : 'bg-orange-500/20 text-orange-500'
+                    )}>
+                      <Ban className="w-3 h-3" />
+                      {banStatus === 'permanent' ? 'Permanent Ban' : 'Active Ban'}
+                    </span>
+                  )}
                   {score.is_tor && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-purple-500/10 text-purple-500">
                       <Globe className="w-3 h-3" />

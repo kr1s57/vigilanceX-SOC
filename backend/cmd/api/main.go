@@ -26,6 +26,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/auth"
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
+	"github.com/kr1s57/vigilancex/internal/usecase/detect2ban"
 	"github.com/kr1s57/vigilancex/internal/usecase/events"
 	"github.com/kr1s57/vigilancex/internal/usecase/geoblocking"
 	"github.com/kr1s57/vigilancex/internal/usecase/geoenrich"
@@ -283,6 +284,23 @@ func main() {
 	eventsService.SetGeoProvider(&geoProviderAdapter{geoService: geoService})
 	threatsService := threats.NewService(threatsRepo, threatAggregator)
 	bansService := bans.NewService(bansRepo, sophosClient)
+
+	// v3.51: Initialize Detect2Ban engine
+	detect2banEngine := detect2ban.NewEngine(
+		detect2ban.Config{ScenariosDir: scenariosDir, CheckInterval: 30 * time.Second},
+		eventsRepo,
+		bansService,
+		threatsService,
+	)
+	// Load detection scenarios
+	if scenariosDir != "" {
+		if err := detect2banEngine.LoadScenarios(scenariosDir); err != nil {
+			logger.Warn("Failed to load Detect2Ban scenarios", "error", err)
+		} else {
+			logger.Info("Detect2Ban engine initialized", "scenarios_dir", scenariosDir)
+		}
+	}
+
 	reportsService := reports.NewService(statsRepo, logger)
 	blocklistsService := blocklists.NewService(feedIngester)
 	geoblockingService := geoblocking.NewService(geoblockingRepo, geoIPClient) // v2.0: Geoblocking
@@ -305,6 +323,7 @@ func main() {
 	threatsHandler := handlers.NewThreatsHandler(threatsService)
 	threatsHandler.SetBlocklistsService(blocklistsService) // v1.6: Combined risk assessment
 	bansHandler := handlers.NewBansHandler(bansService)
+	detect2banHandler := handlers.NewDetect2BanHandler(detect2banEngine) // v3.51: Detect2Ban control
 	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
 	reportsHandler := handlers.NewReportsHandler(reportsService, notificationService)
 	blocklistsHandler := handlers.NewBlocklistsHandler(blocklistsService)
@@ -490,6 +509,15 @@ func main() {
 				r.Post("/", bansHandler.AddWhitelist)
 				r.Put("/{ip}", bansHandler.UpdateWhitelist)
 				r.Delete("/{ip}", bansHandler.RemoveWhitelist)
+			})
+
+			// Detect2Ban (v3.51 - Automated threat detection and response)
+			r.Route("/detect2ban", func(r chi.Router) {
+				r.Get("/status", detect2banHandler.GetStatus)
+				r.Post("/enable", detect2banHandler.Enable)
+				r.Post("/disable", detect2banHandler.Disable)
+				r.Post("/toggle", detect2banHandler.Toggle)
+				r.Get("/scenarios", detect2banHandler.GetScenarios)
 			})
 
 			// Blocklists (v1.6 - Feed Ingester)

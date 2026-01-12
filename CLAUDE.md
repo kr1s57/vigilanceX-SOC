@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.5.101 | **Derniere mise a jour**: 2026-01-12
+> **Version**: 3.50.101 | **Derniere mise a jour**: 2026-01-12
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -405,34 +405,34 @@ Description de la correction avec code avant/apres.
 3. Filtrage centralise → `shouldShowIP()` dans Context
 4. Conversion period → `getStartTimeFromPeriod()`
 
-### Regles de Versioning (X.Y.Z)
+### Regles de Versioning (X.YY.Z)
 
 Les projets **VigilanceX** et **VigilanceKey** suivent une numerotation stricte des versions.
 
-**Format**: `X.Y.Z` (exemple: `3.10.109`)
+**Format**: `X.YY.Z` (exemple: `3.50.101`)
 
 | Digit | Nom | Description | Reset |
 |-------|-----|-------------|-------|
 | **X** | MAJOR | Montee de version majeure (sur demande explicite) | - |
-| **Y** | FEATURE | Ajout de fonctionnalites, nouvelles features | → 0 lors d'un bump MAJOR |
+| **YY** | FEATURE | 2 digits, petites features incrementent de 1 (50→51→52) | → 0 lors d'un bump MAJOR |
 | **Z** | BUGFIX | Corrections de bugs, hotfixes (commence a 100) | → 100 lors d'un bump FEATURE |
 
-**Montee BUGFIX** (X.Y.Z → X.Y.Z+1):
+**Montee BUGFIX** (X.YY.Z → X.YY.Z+1):
 - Corrections de bugs et crashs
 - Hotfixes necessitant un rebuild
-- Exemple: `3.2.105` → `3.2.106`
+- Exemple: `3.50.101` → `3.50.102`
 
-**Montee FEATURE** (X.Y.Z → X.Y+1.100):
+**Montee FEATURE** (X.YY.Z → X.YY+1.100):
 - Ajout de nouvelles fonctionnalites
 - Ameliorations significatives
 - Le digit BUGFIX revient a 100
-- Exemple: `3.2.106` → `3.3.100`
+- Exemple: `3.50.105` → `3.51.100`
 
-**Montee MAJOR** (X.Y.Z → X+1.0.100):
+**Montee MAJOR** (X.YY.Z → X+1.0.100):
 - Uniquement sur demande explicite de l'utilisateur
 - Changements majeurs d'architecture
 - Les digits FEATURE et BUGFIX reviennent a 0 et 100
-- Exemple: `3.10.115` → `4.0.100`
+- Exemple: `3.59.115` → `4.0.100`
 
 > **Important**: A chaque release, mettre a jour:
 > - `CHANGELOG.md` - Historique des versions

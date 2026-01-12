@@ -195,6 +195,42 @@ export const bansApi = {
   },
 }
 
+// Detect2Ban API (v3.51 - Automated threat detection engine)
+export interface Detect2BanStatus {
+  enabled: boolean
+  running: boolean
+  scenario_count: number
+  loaded_scenarios: string[]
+  check_interval: string
+}
+
+export const detect2banApi = {
+  getStatus: async () => {
+    const response = await api.get<Detect2BanStatus>('/detect2ban/status')
+    return response.data
+  },
+
+  enable: async () => {
+    const response = await api.post<{ success: boolean; message: string; status: string }>('/detect2ban/enable')
+    return response.data
+  },
+
+  disable: async () => {
+    const response = await api.post<{ success: boolean; message: string; status: string }>('/detect2ban/disable')
+    return response.data
+  },
+
+  toggle: async () => {
+    const response = await api.post<{ success: boolean; message: string; status: string }>('/detect2ban/toggle')
+    return response.data
+  },
+
+  getScenarios: async () => {
+    const response = await api.get<{ scenarios: Array<{ name: string; description: string; enabled: boolean }> }>('/detect2ban/scenarios')
+    return response.data.scenarios
+  },
+}
+
 // Whitelist API
 export const whitelistApi = {
   list: async () => {

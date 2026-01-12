@@ -105,6 +105,21 @@ function AttackTypeIPsModal({
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ModSecRequestGroup[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [banningIP, setBanningIP] = useState<string | null>(null)
+  const [bannedIPs, setBannedIPs] = useState<Set<string>>(new Set())
+
+  const handleBanIP = async (ip: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setBanningIP(ip)
+    try {
+      await bansApi.create({ ip, reason: `Attack: ${attackTypeName}`, permanent: false })
+      setBannedIPs(prev => new Set([...prev, ip]))
+    } catch (err) {
+      console.error('Failed to ban IP:', err)
+    } finally {
+      setBanningIP(null)
+    }
+  }
 
   useEffect(() => {
     if (isOpen && attackType) {
@@ -199,7 +214,7 @@ function AttackTypeIPsModal({
                   <th className="text-left py-3 px-4 font-medium">Country</th>
                   <th className="text-right py-3 px-4 font-medium">Attacks</th>
                   <th className="text-left py-3 px-4 font-medium">Targets</th>
-                  <th className="text-center py-3 px-4 font-medium">Action</th>
+                  <th className="text-center py-3 px-4 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -236,12 +251,30 @@ function AttackTypeIPsModal({
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onIPLookup(item.ip) }}
-                        className="text-xs px-2 py-1 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors"
-                      >
-                        View Details
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={(e) => handleBanIP(item.ip, e)}
+                          disabled={banningIP === item.ip || bannedIPs.has(item.ip)}
+                          className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                            bannedIPs.has(item.ip)
+                              ? 'bg-green-500/10 text-green-500'
+                              : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                          }`}
+                        >
+                          {banningIP === item.ip ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Ban className="w-3 h-3" />
+                          )}
+                          {bannedIPs.has(item.ip) ? 'Banned' : 'Ban'}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onIPLookup(item.ip) }}
+                          className="text-xs px-2 py-1 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors"
+                        >
+                          Details
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -286,6 +319,24 @@ function AttackersModal({
   const [loadingBans, setLoadingBans] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortMode, setSortMode] = useState<'attacks' | 'blocked'>('attacks')
+  const [banningIP, setBanningIP] = useState<string | null>(null)
+  const [newlyBannedIPs, setNewlyBannedIPs] = useState<Set<string>>(new Set())
+
+  const handleBanIP = async (ip: string, reason: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setBanningIP(ip)
+    try {
+      await bansApi.create({ ip, reason, permanent: false })
+      setNewlyBannedIPs(prev => new Set([...prev, ip]))
+      // Refresh bans list
+      const updatedBans = await bansApi.list()
+      setBans(updatedBans)
+    } catch (err) {
+      console.error('Failed to ban IP:', err)
+    } finally {
+      setBanningIP(null)
+    }
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -454,6 +505,7 @@ function AttackersModal({
                   <th className="text-right py-3 px-4 font-medium">Blocked</th>
                   <th className="text-right py-3 px-4 font-medium">Rules</th>
                   <th className="text-left py-3 px-4 font-medium">Categories</th>
+                  <th className="text-center py-3 px-4 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -538,12 +590,34 @@ function AttackersModal({
                           )}
                         </div>
                       </td>
+                      <td className="py-3 px-4 text-center">
+                        {!ban ? (
+                          <button
+                            onClick={(e) => handleBanIP(attacker.ip, `Attack analysis: ${attacker.attack_count} attacks, ${attacker.categories.slice(0, 2).join(', ')}`, e)}
+                            disabled={banningIP === attacker.ip || newlyBannedIPs.has(attacker.ip)}
+                            className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors mx-auto ${
+                              newlyBannedIPs.has(attacker.ip)
+                                ? 'bg-green-500/10 text-green-500'
+                                : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                            }`}
+                          >
+                            {banningIP === attacker.ip ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Ban className="w-3 h-3" />
+                            )}
+                            {newlyBannedIPs.has(attacker.ip) ? 'Banned' : 'Ban'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Already banned</span>
+                        )}
+                      </td>
                     </tr>
                   )
                 })}
                 {filteredAttackers.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-8 text-center text-muted-foreground">
                       {searchTerm ? 'No matching attackers found' : 'No attacker data available'}
                     </td>
                   </tr>
@@ -599,6 +673,23 @@ export function AttacksAnalyzer() {
   const handleIPLookup = (ip: string) => {
     setSelectedIP(ip)
     setShowThreatModal(true)
+  }
+
+  // Ban state for inline banning
+  const [banningIP, setBanningIP] = useState<string | null>(null)
+  const [bannedIPs, setBannedIPs] = useState<Set<string>>(new Set())
+
+  const handleBanIP = async (ip: string, reason: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setBanningIP(ip)
+    try {
+      await bansApi.create({ ip, reason, permanent: false })
+      setBannedIPs(prev => new Set([...prev, ip]))
+    } catch (err) {
+      console.error('Failed to ban IP:', err)
+    } finally {
+      setBanningIP(null)
+    }
   }
 
   useEffect(() => {
@@ -1006,18 +1097,37 @@ export function AttacksAnalyzer() {
                     )}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className={cn(
-                    'text-sm font-medium',
-                    attacker.blocked_count > 0 ? 'text-red-500' : 'text-green-500'
-                  )}>
-                    {formatNumber(attacker.blocked_count)} blocked
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className={cn(
+                      'text-sm font-medium',
+                      attacker.blocked_count > 0 ? 'text-red-500' : 'text-green-500'
+                    )}>
+                      {formatNumber(attacker.blocked_count)} blocked
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {attacker.attack_count > 0
+                        ? ((attacker.blocked_count / attacker.attack_count) * 100).toFixed(0)
+                        : 0}% blocked
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {attacker.attack_count > 0
-                      ? ((attacker.blocked_count / attacker.attack_count) * 100).toFixed(0)
-                      : 0}% blocked
-                  </div>
+                  <button
+                    onClick={(e) => handleBanIP(attacker.ip, `Top attacker: ${attacker.attack_count} attacks`, e)}
+                    disabled={banningIP === attacker.ip || bannedIPs.has(attacker.ip)}
+                    className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                      bannedIPs.has(attacker.ip)
+                        ? 'bg-green-500/10 text-green-500'
+                        : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                    }`}
+                    title={bannedIPs.has(attacker.ip) ? 'Already banned' : `Ban ${attacker.ip}`}
+                  >
+                    {banningIP === attacker.ip ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Ban className="w-3 h-3" />
+                    )}
+                    {bannedIPs.has(attacker.ip) ? 'Banned' : 'Ban'}
+                  </button>
                 </div>
               </div>
             ))}

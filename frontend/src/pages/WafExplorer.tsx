@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye } from 'lucide-react'
-import { modsecApi } from '@/lib/api'
+import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye, Ban, Loader2 } from 'lucide-react'
+import { modsecApi, bansApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, getCountryName } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
 
 // Period options for WAF logs
-type WafPeriod = '24h' | '7d' | '14d' | '30d'
+type WafPeriod = '1h' | '24h' | '7d' | '14d' | '30d'
 
 // Attack type colors
 const attackTypeColors: Record<string, string> = {
@@ -60,6 +60,7 @@ function getDateKey(timestamp: string): string {
 function getStartTimeFromPeriod(period: WafPeriod): string {
   const now = new Date()
   const offsets: Record<WafPeriod, number> = {
+    '1h': 60 * 60 * 1000,
     '24h': 24 * 60 * 60 * 1000,
     '7d': 7 * 24 * 60 * 60 * 1000,
     '14d': 14 * 24 * 60 * 60 * 1000,
@@ -107,6 +108,22 @@ export function WafExplorer() {
   // Period and date selection
   const [period, setPeriod] = useState<WafPeriod>('7d')
   const [selectedDate, setSelectedDate] = useState<string>('') // YYYY-MM-DD format for single day view
+  // Ban state
+  const [banningIP, setBanningIP] = useState<string | null>(null)
+  const [bannedIPs, setBannedIPs] = useState<Set<string>>(new Set())
+
+  const handleBanIP = async (ip: string, reason: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setBanningIP(ip)
+    try {
+      await bansApi.create({ ip, reason, permanent: false })
+      setBannedIPs(prev => new Set([...prev, ip]))
+    } catch (err) {
+      console.error('Failed to ban IP:', err)
+    } finally {
+      setBanningIP(null)
+    }
+  }
 
   // Fetch sync status
   useEffect(() => {
@@ -390,11 +407,30 @@ export function WafExplorer() {
             </span>
           )}
         </td>
+        <td>
+          <button
+            onClick={(e) => handleBanIP(request.src_ip, `WAF: ${request.rules[0]?.rule_msg || 'Multiple violations'}`, e)}
+            disabled={banningIP === request.src_ip || bannedIPs.has(request.src_ip)}
+            className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+              bannedIPs.has(request.src_ip)
+                ? 'bg-green-500/10 text-green-500'
+                : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+            }`}
+            title={bannedIPs.has(request.src_ip) ? 'Already banned' : `Ban ${request.src_ip}`}
+          >
+            {banningIP === request.src_ip ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Ban className="w-3 h-3" />
+            )}
+            {bannedIPs.has(request.src_ip) ? 'Banned' : 'Ban'}
+          </button>
+        </td>
       </tr>
       {/* Expanded row showing all rules */}
       {expandedRows.has(request.unique_id) && (
         <tr className="bg-muted/30">
-          <td colSpan={7} className="p-4">
+          <td colSpan={8} className="p-4">
             <div className="space-y-3">
               <div className="text-sm font-medium text-muted-foreground mb-2">
                 Detection Chain (unique_id: <code className="text-xs bg-muted px-1 rounded">{request.unique_id}</code>)
@@ -488,7 +524,7 @@ export function WafExplorer() {
                 </span>
               ) : (
                 <span className="ml-2 text-xs">
-                  Last {period === '7d' ? '7 days' : period === '14d' ? '14 days' : '30 days'}
+                  Last {period === '1h' ? 'hour' : period === '24h' ? '24 hours' : period === '7d' ? '7 days' : period === '14d' ? '14 days' : '30 days'}
                 </span>
               )}
               {syncStatus && (
@@ -542,7 +578,7 @@ export function WafExplorer() {
       <div className="flex flex-wrap gap-4 p-4 bg-card rounded-xl border">
         {/* Period selector */}
         <div className="flex bg-muted rounded-lg p-1">
-          {(['24h', '7d', '14d', '30d'] as WafPeriod[]).map((p) => (
+          {(['1h', '24h', '7d', '14d', '30d'] as WafPeriod[]).map((p) => (
             <button
               key={p}
               onClick={() => {
@@ -557,7 +593,7 @@ export function WafExplorer() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {p === '24h' ? '24h' : p === '7d' ? '7 days' : p === '14d' ? '14 days' : '30 days'}
+              {p === '1h' ? '1h' : p === '24h' ? '24h' : p === '7d' ? '7 days' : p === '14d' ? '14 days' : '30 days'}
             </button>
           ))}
         </div>
@@ -758,6 +794,7 @@ export function WafExplorer() {
                             <th>Rules Triggered</th>
                             <th>Score</th>
                             <th>Status</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -802,6 +839,7 @@ export function WafExplorer() {
                   <th>Rules Triggered</th>
                   <th>Score</th>
                   <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>

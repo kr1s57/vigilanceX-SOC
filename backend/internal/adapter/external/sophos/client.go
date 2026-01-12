@@ -227,7 +227,7 @@ func (c *Client) AddIPToBlocklist(ip, reason string) error {
 	// Create host name from IP (format: bannedIP_x.x.x.x to match existing convention)
 	hostName := fmt.Sprintf("bannedIP_%s", ip)
 
-	// First, create the IP host object
+	// Step 1: Create the IP host object (without group assignment)
 	createReq := &APIRequest{
 		Set: &Set{
 			Operation: "add",
@@ -236,9 +236,6 @@ func (c *Client) AddIPToBlocklist(ip, reason string) error {
 				IPFamily:  "IPv4",
 				HostType:  "IP",
 				IPAddress: ip,
-				HostGroupList: &HostGroupList{
-					HostGroup: []string{c.groupName},
-				},
 			},
 		},
 	}
@@ -248,9 +245,62 @@ func (c *Client) AddIPToBlocklist(ip, reason string) error {
 		return fmt.Errorf("failed to add IP host: %w", err)
 	}
 
-	// Check for existing host (code 502 means already exists)
+	// Check for errors (502 = already exists, which is OK)
 	if resp.Status != nil && resp.Status.Code != 200 && resp.Status.Code != 502 {
-		return fmt.Errorf("API error: %s (code: %d)", resp.Status.Message, resp.Status.Code)
+		return fmt.Errorf("API error creating host: %s (code: %d)", resp.Status.Message, resp.Status.Code)
+	}
+
+	// Step 2: Get current group members
+	getReq := &APIRequest{
+		Get: &Get{
+			IPHostGroup: &IPHostGroupFilter{
+				Name: c.groupName,
+			},
+		},
+	}
+
+	resp, err = c.sendRequest(getReq)
+	if err != nil {
+		return fmt.Errorf("failed to get group: %w", err)
+	}
+
+	// Find our group and get current hosts
+	var currentHosts []string
+	for _, group := range resp.IPHostGroup {
+		if group.Name == c.groupName {
+			currentHosts = group.HostList.Host
+			break
+		}
+	}
+
+	// Check if host is already in group
+	for _, h := range currentHosts {
+		if h == hostName {
+			return nil // Already in group, nothing to do
+		}
+	}
+
+	// Step 3: Update group to add the new host
+	newHosts := append(currentHosts, hostName)
+	updateReq := &APIRequest{
+		Set: &Set{
+			Operation: "update",
+			IPHostGroup: &IPHostGroup{
+				Name: c.groupName,
+				HostList: &HostList{
+					Host: newHosts,
+				},
+			},
+		},
+	}
+
+	resp, err = c.sendRequest(updateReq)
+	if err != nil {
+		return fmt.Errorf("failed to update group: %w", err)
+	}
+
+	if resp.Status != nil && resp.Status.Code != 200 {
+		return fmt.Errorf("API error updating group: %s (code: %d)", resp.Status.Message, resp.Status.Code)
 	}
 
 	return nil
@@ -260,7 +310,68 @@ func (c *Client) AddIPToBlocklist(ip, reason string) error {
 func (c *Client) RemoveIPFromBlocklist(ip string) error {
 	hostName := fmt.Sprintf("bannedIP_%s", ip)
 
-	// Remove the IP host object
+	// Step 1: Get current group members
+	getReq := &APIRequest{
+		Get: &Get{
+			IPHostGroup: &IPHostGroupFilter{
+				Name: c.groupName,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(getReq)
+	if err != nil {
+		return fmt.Errorf("failed to get group: %w", err)
+	}
+
+	// Find our group and get current hosts
+	var currentHosts []string
+	for _, group := range resp.IPHostGroup {
+		if group.Name == c.groupName {
+			currentHosts = group.HostList.Host
+			break
+		}
+	}
+
+	// Step 2: Remove host from list
+	var newHosts []string
+	found := false
+	for _, h := range currentHosts {
+		if h == hostName {
+			found = true
+			continue // Skip this host
+		}
+		newHosts = append(newHosts, h)
+	}
+
+	// If host wasn't in group, nothing to do
+	if !found {
+		return nil
+	}
+
+	// Step 3: Update group with new host list
+	updateReq := &APIRequest{
+		Set: &Set{
+			Operation: "update",
+			IPHostGroup: &IPHostGroup{
+				Name: c.groupName,
+				HostList: &HostList{
+					Host: newHosts,
+				},
+			},
+		},
+	}
+
+	resp, err = c.sendRequest(updateReq)
+	if err != nil {
+		return fmt.Errorf("failed to update group: %w", err)
+	}
+
+	if resp.Status != nil && resp.Status.Code != 200 {
+		return fmt.Errorf("API error updating group: %s (code: %d)", resp.Status.Message, resp.Status.Code)
+	}
+
+	// Step 4: Delete the IP host object (cleanup)
 	removeReq := &APIRequest{
 		Remove: &Remove{
 			IPHost: &IPHostFilter{
@@ -269,14 +380,10 @@ func (c *Client) RemoveIPFromBlocklist(ip string) error {
 		},
 	}
 
-	resp, err := c.sendRequest(removeReq)
+	resp, err = c.sendRequest(removeReq)
 	if err != nil {
-		return fmt.Errorf("failed to remove IP host: %w", err)
-	}
-
-	// Check response (code 541 means not found, which is OK)
-	if resp.Status != nil && resp.Status.Code != 200 && resp.Status.Code != 541 {
-		return fmt.Errorf("API error: %s (code: %d)", resp.Status.Message, resp.Status.Code)
+		// Not critical if host deletion fails
+		return nil
 	}
 
 	return nil
@@ -285,6 +392,7 @@ func (c *Client) RemoveIPFromBlocklist(ip string) error {
 // GetBlocklistIPs retrieves all IPs in the blocklist group
 func (c *Client) GetBlocklistIPs() ([]string, error) {
 	// Get the blocklist group
+	// Note: Sophos API returns ALL groups when using Name filter, so we must filter in code
 	getReq := &APIRequest{
 		Get: &Get{
 			IPHostGroup: &IPHostGroupFilter{
@@ -299,8 +407,13 @@ func (c *Client) GetBlocklistIPs() ([]string, error) {
 	}
 
 	// Extract IPs from host names (format: bannedIP_x.x.x.x)
+	// IMPORTANT: Filter by group name since Sophos API returns all groups
 	var ips []string
 	for _, group := range resp.IPHostGroup {
+		// Only process our specific blocklist group
+		if group.Name != c.groupName {
+			continue
+		}
 		for _, hostName := range group.HostList.Host {
 			if strings.HasPrefix(hostName, "bannedIP_") {
 				// Extract IP from host name
@@ -328,9 +441,13 @@ func (c *Client) GetBlocklistCount() (int, error) {
 		return 0, fmt.Errorf("failed to get blocklist group: %w", err)
 	}
 
+	// IMPORTANT: Filter by group name since Sophos API returns all groups
 	count := 0
 	for _, group := range resp.IPHostGroup {
-		count += len(group.HostList.Host)
+		if group.Name == c.groupName {
+			count = len(group.HostList.Host)
+			break
+		}
 	}
 
 	return count, nil

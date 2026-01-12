@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,6 +17,101 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
 )
+
+// ProtectedNetworks defines IP ranges that should NEVER be banned
+// These are local/internal networks and critical infrastructure IPs
+var ProtectedNetworks = []string{
+	"10.0.0.0/8",     // Private Class A
+	"192.168.0.0/16", // Private Class C
+	"172.16.0.0/12",  // Private Class B (172.16.x.x - 172.31.x.x)
+	"127.0.0.0/8",    // Loopback
+	"169.254.0.0/16", // Link-local
+	"0.0.0.0/32",     // Invalid
+}
+
+// ProtectedIPs defines specific IPs that should NEVER be banned
+// Critical infrastructure IPs (XGS interfaces, gateways, etc.)
+var ProtectedIPs = []string{
+	"192.168.1.13", // Sophos XGS WAN interface
+	"192.168.1.1",  // Sophos XGS gateway/router
+	"0.0.0.0",
+	"127.0.0.1",
+}
+
+// parsedProtectedNetworks holds parsed CIDR networks (initialized once)
+var parsedProtectedNetworks []*net.IPNet
+
+func init() {
+	for _, cidr := range ProtectedNetworks {
+		_, network, err := net.ParseCIDR(cidr)
+		if err == nil {
+			parsedProtectedNetworks = append(parsedProtectedNetworks, network)
+		}
+	}
+}
+
+// IsProtectedIP checks if an IP should never be banned
+// Returns true for local/internal IPs and critical infrastructure
+func IsProtectedIP(ipStr string) bool {
+	// Check specific protected IPs first
+	for _, protectedIP := range ProtectedIPs {
+		if ipStr == protectedIP {
+			return true
+		}
+	}
+
+	// Parse the IP
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false // Invalid IP, let it through (will fail later)
+	}
+
+	// Check against protected networks
+	for _, network := range parsedProtectedNetworks {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// GetProtectionReason returns why an IP is protected (for logging)
+func GetProtectionReason(ipStr string) string {
+	// Check specific protected IPs
+	switch ipStr {
+	case "192.168.1.13":
+		return "Sophos XGS WAN interface"
+	case "192.168.1.1":
+		return "Sophos XGS gateway"
+	case "0.0.0.0", "127.0.0.1":
+		return "Loopback/Invalid"
+	}
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return ""
+	}
+
+	// Check networks
+	if ip.IsLoopback() {
+		return "Loopback address"
+	}
+	if ip.IsPrivate() {
+		return "Private/Internal network"
+	}
+	if ip.IsLinkLocalUnicast() {
+		return "Link-local address"
+	}
+
+	for _, network := range parsedProtectedNetworks {
+		if network.Contains(ip) {
+			return fmt.Sprintf("Protected network %s", network.String())
+		}
+	}
+
+	return ""
+}
 
 // Engine is the Detect2Ban detection engine
 type Engine struct {
@@ -300,6 +396,15 @@ func (e *Engine) conditionToSQL(cond Condition) string {
 func (e *Engine) handleMatch(ctx context.Context, scenario *Scenario, match ScenarioMatch) {
 	log.Printf("[DETECT2BAN] Scenario '%s' triggered for IP %s (count: %d)",
 		scenario.Name, match.IP, match.EventCount)
+
+	// CRITICAL: Check if IP is protected (local/internal/infrastructure)
+	// Detect2Ban only targets EXTERNAL threats - never ban internal IPs
+	if IsProtectedIP(match.IP) {
+		reason := GetProtectionReason(match.IP)
+		log.Printf("[DETECT2BAN] PROTECTED IP %s - %s (scenario: %s, events: %d) - SKIPPING BAN",
+			match.IP, reason, scenario.Name, match.EventCount)
+		return
+	}
 
 	// Check if already banned
 	existingBan, err := e.bansService.GetBan(ctx, match.IP)

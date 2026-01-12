@@ -2,6 +2,52 @@
 
 All notable changes to VIGILANCE X will be documented in this file.
 
+> **Note**: A partir de v3.50.101, le format de version utilise 2 digits pour le numero de feature (X.YY.Z).
+> Les features incrementent de 1 (.50 → .51 → .52...). Les versions majeures (3.60, 4.0) sont sur demande explicite.
+
+---
+
+## [3.50.101] - 2026-01-12
+
+### Sophos XGS Sync & Ban Strategy
+
+Correction complete de la synchronisation bidirectionnelle avec Sophos XGS et documentation de la strategie de bannissement.
+
+#### Corrections Majeures
+
+| Fix | Description |
+|-----|-------------|
+| XGS Sync Add | Corrige l'ajout d'IP au groupe (modifie IPHostGroup.HostList directement) |
+| XGS Sync Remove | Corrige la suppression du groupe avant delete du host |
+| XGS Reconciliation | Phase 3: Unban auto si IP retiree depuis XGS |
+| IPThreatModal Badge | Affiche le statut banned/permanent sur toutes les pages |
+| Stats Cards Cliquables | Cards Active Bans cliquables avec modal filtree |
+| Whitelist CIDR | Parse correctement 10.25.72.0/24 (ne retourne plus 0.0.0.0) |
+
+#### Nouveaux Fichiers
+
+| Fichier | Description |
+|---------|-------------|
+| `docs/POLICIEBAN.md` | Documentation complete strategie de bannissement |
+
+#### Fichiers Modifies
+
+**Backend:**
+- `internal/adapter/external/sophos/client.go` - Réécriture AddIPToBlocklist et RemoveIPFromBlocklist
+- `internal/usecase/bans/service.go` - Phase 3 reconciliation + "Unbanned by XGS"
+
+**Frontend:**
+- `src/components/IPThreatModal.tsx` - Badge ban status + check parallel
+- `src/pages/ActiveBans.tsx` - Stats cards cliquables avec modal
+- `src/pages/SoftWhitelist.tsx` - Parse CIDR notation
+
+#### Bugs Documentes (BUGFIX-KB.md)
+
+- BUG-007: XGS sync re-imports wrong IPs (API returns all groups)
+- BUG-008: XGS add fails for existing hosts (HostGroupList ignored on UPDATE)
+- BUG-009: XGS unban doesn't remove from group (must update HostList first)
+- BUG-010: IPThreatModal missing ban badge
+
 ---
 
 ## [3.5.101] - 2026-01-12

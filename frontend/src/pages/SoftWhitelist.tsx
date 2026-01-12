@@ -69,7 +69,24 @@ export function SoftWhitelist() {
     if (!newEntry.ip || !newEntry.reason) return
 
     try {
-      await softWhitelistApi.add(newEntry)
+      // Parse CIDR notation if present (e.g., "10.25.72.0/24" -> ip: "10.25.72.0", cidr_mask: 24)
+      let ip = newEntry.ip.trim()
+      let cidrMask = 32 // Default: single IP
+
+      if (ip.includes('/')) {
+        const parts = ip.split('/')
+        ip = parts[0]
+        const mask = parseInt(parts[1], 10)
+        if (!isNaN(mask) && mask >= 0 && mask <= 32) {
+          cidrMask = mask
+        }
+      }
+
+      await softWhitelistApi.add({
+        ...newEntry,
+        ip,
+        cidr_mask: cidrMask,
+      })
       setShowAddModal(false)
       setNewEntry({
         ip: '',

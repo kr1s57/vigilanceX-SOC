@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"sync"
 	"time"
 
@@ -11,6 +12,101 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/entity"
 )
+
+// ProtectedNetworks defines IP ranges that should NEVER be banned
+// These are local/internal networks and critical infrastructure IPs
+var ProtectedNetworks = []string{
+	"10.0.0.0/8",     // Private Class A
+	"192.168.0.0/16", // Private Class C
+	"172.16.0.0/12",  // Private Class B (172.16.x.x - 172.31.x.x)
+	"127.0.0.0/8",    // Loopback
+	"169.254.0.0/16", // Link-local
+	"0.0.0.0/32",     // Invalid
+}
+
+// ProtectedIPs defines specific IPs that should NEVER be banned
+// Critical infrastructure IPs (XGS interfaces, gateways, etc.)
+var ProtectedIPs = []string{
+	"192.168.1.13", // Sophos XGS WAN interface
+	"192.168.1.1",  // Sophos XGS gateway/router
+	"0.0.0.0",
+	"127.0.0.1",
+}
+
+// parsedProtectedNetworks holds parsed CIDR networks (initialized once)
+var parsedProtectedNetworks []*net.IPNet
+
+func init() {
+	for _, cidr := range ProtectedNetworks {
+		_, network, err := net.ParseCIDR(cidr)
+		if err == nil {
+			parsedProtectedNetworks = append(parsedProtectedNetworks, network)
+		}
+	}
+}
+
+// IsProtectedIP checks if an IP should never be banned
+// Returns true for local/internal IPs and critical infrastructure
+func IsProtectedIP(ipStr string) bool {
+	// Check specific protected IPs first
+	for _, protectedIP := range ProtectedIPs {
+		if ipStr == protectedIP {
+			return true
+		}
+	}
+
+	// Parse the IP
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false // Invalid IP, let it through (will fail later)
+	}
+
+	// Check against protected networks
+	for _, network := range parsedProtectedNetworks {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// GetProtectionReason returns why an IP is protected (for logging)
+func GetProtectionReason(ipStr string) string {
+	// Check specific protected IPs
+	switch ipStr {
+	case "192.168.1.13":
+		return "Sophos XGS WAN interface"
+	case "192.168.1.1":
+		return "Sophos XGS gateway"
+	case "0.0.0.0", "127.0.0.1":
+		return "Loopback/Invalid"
+	}
+
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return ""
+	}
+
+	// Check networks
+	if ip.IsLoopback() {
+		return "Loopback address"
+	}
+	if ip.IsPrivate() {
+		return "Private/Internal network"
+	}
+	if ip.IsLinkLocalUnicast() {
+		return "Link-local address"
+	}
+
+	for _, network := range parsedProtectedNetworks {
+		if network.Contains(ip) {
+			return fmt.Sprintf("Protected network %s", network.String())
+		}
+	}
+
+	return ""
+}
 
 // BansRepository interface for ban data access (enables unit testing)
 type BansRepository interface {
@@ -88,9 +184,18 @@ func (s *Service) GetHistory(ctx context.Context, ip string, limit int) ([]entit
 
 // BanIP bans an IP address with progressive duration based on recidivism
 // v2.0: Supports soft whitelist - soft whitelisted IPs generate alerts but may still be banned
+// v3.5: Added protection for local/internal IPs - external threats only
 func (s *Service) BanIP(ctx context.Context, req *entity.BanRequest) (*entity.BanStatus, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// CRITICAL: Check if IP is protected (local/internal/infrastructure)
+	// Never ban internal network IPs or critical infrastructure
+	if IsProtectedIP(req.IP) {
+		reason := GetProtectionReason(req.IP)
+		log.Printf("[BAN] REJECTED: Cannot ban protected IP %s - %s", req.IP, reason)
+		return nil, fmt.Errorf("cannot ban protected IP %s: %s", req.IP, reason)
+	}
 
 	// Check whitelist (v2.0 with soft whitelist support)
 	whitelistResult, err := s.repo.CheckWhitelistV2(ctx, req.IP)
@@ -339,6 +444,7 @@ func (s *Service) MakePermanent(ctx context.Context, ip, performedBy string) (*e
 // SyncToXGS performs bidirectional sync with Sophos XGS:
 // 1. Push unsynced bans from VIGILANCE X to Sophos
 // 2. Import IPs from Sophos that aren't in our database
+// 3. Remove bans from VIGILANCE X that are no longer in Sophos (reconciliation)
 func (s *Service) SyncToXGS(ctx context.Context) (*SyncResult, error) {
 	if s.sophos == nil {
 		return nil, fmt.Errorf("Sophos client not configured")
@@ -375,63 +481,117 @@ func (s *Service) SyncToXGS(ctx context.Context) (*SyncResult, error) {
 		result.Synced++
 	}
 
-	// PHASE 2: Import IPs from Sophos XGS that aren't in our database
+	// Get all IPs from XGS for Phase 2 and 3
 	xgsIPs, err := s.sophos.GetBlocklistIPs()
 	if err != nil {
 		log.Printf("[WARN] Failed to get IPs from XGS: %v", err)
-		result.Errors = append(result.Errors, fmt.Sprintf("XGS import: %v", err))
+		result.Errors = append(result.Errors, fmt.Sprintf("XGS fetch: %v", err))
+		return result, nil // Can't proceed with reconciliation without XGS data
+	}
+
+	// Build a set of XGS IPs for fast lookup
+	xgsIPSet := make(map[string]bool)
+	for _, ip := range xgsIPs {
+		xgsIPSet[ip] = true
+	}
+
+	// PHASE 2: Import IPs from Sophos XGS that aren't in our database
+	for _, ip := range xgsIPs {
+		// Check if this IP is already in our database
+		_, err := s.repo.GetBanByIP(ctx, ip)
+		if err == nil {
+			// Already exists, ensure it's marked as synced
+			if err := s.repo.UpdateSyncStatus(ctx, ip, true); err != nil {
+				log.Printf("[WARN] Failed to update sync status for existing %s: %v", ip, err)
+			}
+			continue
+		}
+
+		// Check if IP is whitelisted
+		whitelisted, _ := s.repo.IsWhitelisted(ctx, ip)
+		if whitelisted {
+			log.Printf("[SYNC] Skipping whitelisted IP from XGS: %s", ip)
+			continue
+		}
+
+		// Import this IP as a new ban (it exists in Sophos but not in our DB)
+		now := time.Now()
+		ban := &entity.BanStatus{
+			IP:        ip,
+			Status:    entity.BanStatusPermanent, // Assume permanent since we don't know expiry
+			BanCount:  1,
+			FirstBan:  now,
+			LastBan:   now,
+			Reason:    "Imported from Sophos XGS",
+			Source:    "xgs_import",
+			SyncedXGS: true,
+			UpdatedAt: now,
+		}
+
+		if err := s.repo.UpsertBan(ctx, ban); err != nil {
+			log.Printf("[ERROR] Failed to import ban %s from XGS: %v", ip, err)
+			result.Errors = append(result.Errors, fmt.Sprintf("import %s: %v", ip, err))
+			continue
+		}
+
+		// Record history
+		history := &entity.BanHistory{
+			IP:        ip,
+			Action:    entity.BanActionBan,
+			Reason:    "Imported from Sophos XGS",
+			Source:    "xgs_import",
+			SyncedXGS: true,
+			CreatedAt: now,
+		}
+		s.repo.RecordBanHistory(ctx, history)
+
+		result.Imported++
+		log.Printf("[SYNC] Imported ban from XGS: %s", ip)
+	}
+
+	// PHASE 3: Reconciliation - Remove bans from VIGILANCE X that are no longer in XGS
+	// This handles the case where an IP was removed directly from XGS
+	activeBans, err := s.repo.GetActiveBans(ctx)
+	if err != nil {
+		log.Printf("[WARN] Failed to get active bans for reconciliation: %v", err)
 	} else {
-		for _, ip := range xgsIPs {
-			// Check if this IP is already in our database
-			_, err := s.repo.GetBanByIP(ctx, ip)
-			if err == nil {
-				// Already exists, ensure it's marked as synced
-				if err := s.repo.UpdateSyncStatus(ctx, ip, true); err != nil {
-					log.Printf("[WARN] Failed to update sync status for existing %s: %v", ip, err)
-				}
+		for _, ban := range activeBans {
+			// Only reconcile bans that were synced to XGS
+			if !ban.SyncedXGS {
 				continue
 			}
 
-			// Check if IP is whitelisted
-			whitelisted, _ := s.repo.IsWhitelisted(ctx, ip)
-			if whitelisted {
-				log.Printf("[SYNC] Skipping whitelisted IP from XGS: %s", ip)
-				continue
+			// Check if this IP still exists in XGS
+			if xgsIPSet[ban.IP] {
+				continue // Still in XGS, keep it
 			}
 
-			// Import this IP as a new ban (it exists in Sophos but not in our DB)
+			// IP was removed from XGS, remove from VIGILANCE X too
+			log.Printf("[SYNC] Reconciliation: IP %s removed from XGS, unbanning in VIGILANCE X", ban.IP)
+
 			now := time.Now()
-			ban := &entity.BanStatus{
-				IP:        ip,
-				Status:    entity.BanStatusPermanent, // Assume permanent since we don't know expiry
-				BanCount:  1,
-				FirstBan:  now,
-				LastBan:   now,
-				Reason:    "Imported from Sophos XGS",
-				Source:    "xgs_import",
-				SyncedXGS: true,
-				UpdatedAt: now,
-			}
+			ban.Status = entity.BanStatusExpired
+			ban.Reason = "Unbanned by XGS"
+			ban.UpdatedAt = now
 
-			if err := s.repo.UpsertBan(ctx, ban); err != nil {
-				log.Printf("[ERROR] Failed to import ban %s from XGS: %v", ip, err)
-				result.Errors = append(result.Errors, fmt.Sprintf("import %s: %v", ip, err))
+			if err := s.repo.UpsertBan(ctx, &ban); err != nil {
+				log.Printf("[ERROR] Failed to unban %s during reconciliation: %v", ban.IP, err)
+				result.Errors = append(result.Errors, fmt.Sprintf("reconcile %s: %v", ban.IP, err))
 				continue
 			}
 
 			// Record history
 			history := &entity.BanHistory{
-				IP:        ip,
-				Action:    entity.BanActionBan,
-				Reason:    "Imported from Sophos XGS",
-				Source:    "xgs_import",
+				IP:        ban.IP,
+				Action:    entity.BanActionUnban,
+				Reason:    "Unbanned by XGS",
+				Source:    "xgs_reconcile",
 				SyncedXGS: true,
 				CreatedAt: now,
 			}
 			s.repo.RecordBanHistory(ctx, history)
 
-			result.Imported++
-			log.Printf("[SYNC] Imported ban from XGS: %s", ip)
+			result.Removed++
 		}
 	}
 
@@ -444,6 +604,7 @@ type SyncResult struct {
 	Synced   int      `json:"synced"`
 	Failed   int      `json:"failed"`
 	Imported int      `json:"imported"`
+	Removed  int      `json:"removed"`
 	Errors   []string `json:"errors,omitempty"`
 }
 

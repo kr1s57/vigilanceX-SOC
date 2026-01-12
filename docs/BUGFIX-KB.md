@@ -340,21 +340,246 @@ setThreats(threatsData || [])
 
 ---
 
+## Session: 2026-01-12 02:00
+
+### [BUG-007] XGS sync re-imports IPs from wrong groups
+
+**Date**: 2026-01-12
+**Version**: v3.5.100
+**Severite**: Critical
+**Composant**: Backend
+**Fichiers affectes**: `backend/internal/adapter/external/sophos/client.go`
+
+#### Symptome
+Apres avoir supprime tous les bans, un "Sync XGS" reimportait des IPs qui n'etaient plus dans notre groupe de blocklist (43 IPs d'un ancien groupe `grpIP_Banned_XGS-SOC`).
+
+#### Cause Racine
+L'API XML Sophos XGS ignore le filtre `Name` dans les requetes `Get IPHostGroup` et retourne TOUS les groupes. Le code iterait sur tous les groupes sans filtrer par nom.
+
+#### Solution
+Ajouter un filtre cote Go pour ne traiter que le groupe configure (`grp_SOC-BannedIP`).
+
+#### Code Avant/Apres
+```go
+// Avant - iterait sur tous les groupes
+for _, group := range resp.IPHostGroup {
+    for _, hostName := range group.HostList.Host {
+        // Importait de TOUS les groupes!
+    }
+}
+
+// Apres - filtre par nom de groupe
+for _, group := range resp.IPHostGroup {
+    if group.Name != c.groupName {
+        continue  // Skip other groups
+    }
+    for _, hostName := range group.HostList.Host {
+        // Importe uniquement du bon groupe
+    }
+}
+```
+
+#### Lecons Apprises
+- Ne jamais faire confiance aux filtres cote API externe - toujours revalider cote code
+- L'API Sophos XGS a des comportements non intuitifs
+
+#### Tags
+`#backend` `#sophos-xgs` `#api` `#filtering` `#security`
+
+---
+
+### [BUG-008] XGS add IP fails for pre-existing hosts
+
+**Date**: 2026-01-12
+**Version**: v3.5.100
+**Severite**: Critical
+**Composant**: Backend
+**Fichiers affectes**: `backend/internal/adapter/external/sophos/client.go`
+
+#### Symptome
+Bannir une IP qui avait deja ete bannie auparavant (host existant sur XGS) semblait reussir mais l'IP n'apparaissait pas dans le groupe. La reconciliation la supprimait ensuite.
+
+#### Cause Racine
+Quand on cree un IPHost avec `operation=add` et qu'il existe deja (code 502), on essayait de faire un UPDATE sur l'IPHost avec HostGroupList. Sophos XGS ignore le HostGroupList lors d'un UPDATE sur IPHost.
+
+#### Solution
+Modifier directement le IPHostGroup pour ajouter le host a sa HostList:
+1. Creer le host (ou 502 si existe)
+2. Recuperer la liste actuelle du groupe
+3. Ajouter le host a la liste si absent
+4. UPDATE le groupe avec la nouvelle liste
+
+#### Code Avant/Apres
+```go
+// Avant - UPDATE IPHost avec HostGroupList (ne marche pas)
+updateReq := &APIRequest{
+    Set: &Set{
+        Operation: "update",
+        IPHost: &IPHost{
+            Name: hostName,
+            HostGroupList: &HostGroupList{
+                HostGroup: []string{c.groupName},
+            },
+        },
+    },
+}
+
+// Apres - UPDATE IPHostGroup avec HostList
+// Step 1: Get current hosts in group
+// Step 2: Add new host to list
+newHosts := append(currentHosts, hostName)
+updateReq := &APIRequest{
+    Set: &Set{
+        Operation: "update",
+        IPHostGroup: &IPHostGroup{
+            Name: c.groupName,
+            HostList: &HostList{
+                Host: newHosts,
+            },
+        },
+    },
+}
+```
+
+#### Lecons Apprises
+- L'API Sophos XGS a une asymetrie: HostGroupList fonctionne a la creation mais pas a l'update
+- Pour modifier l'appartenance a un groupe, modifier le GROUPE pas le HOST
+- Toujours tester avec des objets pre-existants, pas seulement des nouveaux
+
+#### Tags
+`#backend` `#sophos-xgs` `#api` `#group-membership` `#idempotency`
+
+---
+
+### [BUG-009] XGS unban doesn't remove from group
+
+**Date**: 2026-01-12
+**Version**: v3.5.100
+**Severite**: High
+**Composant**: Backend
+**Fichiers affectes**: `backend/internal/adapter/external/sophos/client.go`
+
+#### Symptome
+Unbannir une IP depuis VigilanceX ne la retirait pas du groupe sur XGS. L'IP restait dans `grp_SOC-BannedIP`.
+
+#### Cause Racine
+La fonction `RemoveIPFromBlocklist` supprimait uniquement l'objet IPHost, sans le retirer du groupe d'abord. Sophos XGS ne retire pas automatiquement un host de ses groupes lors de sa suppression.
+
+#### Solution
+Modifier le groupe pour retirer le host AVANT de supprimer l'objet host:
+1. Recuperer la liste actuelle du groupe
+2. Retirer le host de la liste
+3. UPDATE le groupe avec la nouvelle liste
+4. Supprimer l'objet IPHost (cleanup)
+
+#### Code Avant/Apres
+```go
+// Avant - supprimait juste le host
+removeReq := &APIRequest{
+    Remove: &Remove{
+        IPHost: &IPHostFilter{Name: hostName},
+    },
+}
+
+// Apres - retire du groupe puis supprime le host
+// Step 1: Get current hosts
+// Step 2: Remove from list
+var newHosts []string
+for _, h := range currentHosts {
+    if h != hostName {
+        newHosts = append(newHosts, h)
+    }
+}
+// Step 3: Update group
+updateReq := &APIRequest{
+    Set: &Set{
+        Operation: "update",
+        IPHostGroup: &IPHostGroup{
+            Name: c.groupName,
+            HostList: &HostList{Host: newHosts},
+        },
+    },
+}
+// Step 4: Delete host object (cleanup)
+```
+
+#### Lecons Apprises
+- Toujours verifier le comportement de suppression des objets lies
+- Les APIs de firewall ont souvent des dependances implicites entre objets
+
+#### Tags
+`#backend` `#sophos-xgs` `#api` `#group-membership` `#cleanup`
+
+---
+
+### [BUG-010] IPThreatModal missing ban status badge
+
+**Date**: 2026-01-12
+**Version**: v3.5.100
+**Severite**: Medium
+**Composant**: Frontend
+**Fichiers affectes**: `frontend/src/components/IPThreatModal.tsx`
+
+#### Symptome
+Le modal de Threat Intel ne montrait pas si une IP etait actuellement bannie. L'utilisateur devait aller sur Active Bans pour verifier.
+
+#### Cause Racine
+Le modal ne verifiait que le score de menace (`threatsApi.score`), pas le statut de ban (`bansApi.get`).
+
+#### Solution
+Ajouter une verification du statut de ban en parallele du score, et afficher un badge "Banned" ou "Permanent Ban" si l'IP est bannie.
+
+#### Code Avant/Apres
+```typescript
+// Avant - ne verifiait que le score
+useEffect(() => {
+    threatsApi.score(ip)
+        .then(data => setScore(data))
+}, [ip])
+
+// Apres - verifie score ET statut ban
+useEffect(() => {
+    Promise.all([
+        threatsApi.score(ip).catch(() => null),
+        bansApi.get(ip).catch(() => null)
+    ]).then(([scoreData, banData]) => {
+        if (scoreData) setScore(scoreData)
+        if (banData && (banData.status === 'active' || banData.status === 'permanent')) {
+            setIsBanned(true)
+            setBanStatus(banData.status)
+        }
+    })
+}, [ip])
+```
+
+#### Lecons Apprises
+- Les informations contextuelles (statut ban) doivent etre visibles partout ou l'IP apparait
+- Utiliser Promise.all pour charger plusieurs donnees en parallele
+
+#### Tags
+`#frontend` `#ux` `#modal` `#ban-status` `#contextual-info`
+
+---
+
 ## Index des Tags
 
 | Tag | Description | Bugs |
 |-----|-------------|------|
-| `#frontend` | Bugs côté React/TypeScript | 001, 002, 003, 004, 005, 006 |
-| `#backend` | Bugs côté Go API | 003 |
+| `#frontend` | Bugs côté React/TypeScript | 001, 002, 003, 004, 005, 006, 010 |
+| `#backend` | Bugs côté Go API | 003, 007, 008, 009 |
+| `#sophos-xgs` | API Sophos XGS | 007, 008, 009 |
+| `#api` | Appels API / comportement externe | 004, 007, 008, 009 |
+| `#filtering` | Filtrage de données | 002, 007 |
+| `#group-membership` | Appartenance aux groupes | 008, 009 |
+| `#ux` | Expérience utilisateur | 001, 003, 010 |
+| `#modal` | Composants modal | 010 |
+| `#ban-status` | Statut de bannissement | 010 |
 | `#state-management` | Gestion d'état React | 001 |
-| `#ux` | Expérience utilisateur | 001, 003 |
 | `#sessionStorage` | Persistance session navigateur | 001 |
-| `#filtering` | Filtrage de données | 002 |
 | `#system-ips` | IPs système (0.0.0.0, localhost) | 002 |
 | `#xgs-logs` | Logs Sophos XGS | 002, 005 |
 | `#pagination` | Pagination API | 003 |
 | `#waf` | ModSecurity/WAF | 003 |
-| `#api` | Appels API | 004 |
 | `#time-filter` | Filtres temporels | 004 |
 | `#vpn` | Page VPN | 004 |
 | `#settings` | Page Settings | 005 |
@@ -362,6 +587,10 @@ setThreats(threatsData || [])
 | `#error-handling` | Gestion d'erreurs | 006 |
 | `#null-safety` | Protection null/undefined | 006 |
 | `#empty-state` | États vides/no data | 006 |
+| `#security` | Sécurité | 007 |
+| `#idempotency` | Opérations idempotentes | 008 |
+| `#cleanup` | Nettoyage de ressources | 009 |
+| `#contextual-info` | Information contextuelle | 010 |
 
 ---
 
@@ -419,6 +648,7 @@ function getStartTimeFromPeriod(period: string): string {
 | Date | Version | Bugs Fixés | Fichiers Modifiés |
 |------|---------|------------|-------------------|
 | 2026-01-10 | v3.2.101 | BUG-001 à BUG-006 | 8 fichiers |
+| 2026-01-12 | v3.5.100 | BUG-007 à BUG-010 | 4 fichiers (sophos/client.go, IPThreatModal.tsx, ActiveBans.tsx, SoftWhitelist.tsx) |
 
 ---
 

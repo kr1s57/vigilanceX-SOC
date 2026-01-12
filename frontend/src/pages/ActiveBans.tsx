@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Ban, Plus, RefreshCw, Clock, AlertCircle, X } from 'lucide-react'
-import { bansApi } from '@/lib/api'
+import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat } from 'lucide-react'
+import { bansApi, detect2banApi, type Detect2BanStatus } from '@/lib/api'
 import { IPThreatModal } from '@/components/IPThreatModal'
 import { formatDateTime } from '@/lib/utils'
 import type { BanStatus, BanStats } from '@/types'
+
+type StatsFilter = 'active' | 'permanent' | 'recent' | 'recidivist' | null
 
 export function ActiveBans() {
   const [bans, setBans] = useState<BanStatus[]>([])
@@ -14,9 +16,46 @@ export function ActiveBans() {
   const [selectedIP, setSelectedIP] = useState<string | null>(null)
   const [showThreatModal, setShowThreatModal] = useState(false)
 
+  // Stats modal state
+  const [statsFilter, setStatsFilter] = useState<StatsFilter>(null)
+
+  // Detect2Ban state
+  const [detect2banStatus, setDetect2banStatus] = useState<Detect2BanStatus | null>(null)
+  const [togglingDetect2ban, setTogglingDetect2ban] = useState(false)
+
   const handleIPLookup = (ip: string) => {
     setSelectedIP(ip)
     setShowThreatModal(true)
+  }
+
+  // Filter bans based on stats card clicked
+  const getFilteredBans = (): BanStatus[] => {
+    if (!statsFilter) return []
+    const now = new Date()
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+    switch (statsFilter) {
+      case 'active':
+        return bans.filter(b => b.status === 'active')
+      case 'permanent':
+        return bans.filter(b => b.status === 'permanent')
+      case 'recent':
+        return bans.filter(b => new Date(b.last_ban) >= twentyFourHoursAgo)
+      case 'recidivist':
+        return bans.filter(b => b.ban_count >= 2)
+      default:
+        return []
+    }
+  }
+
+  const getFilterTitle = (): string => {
+    switch (statsFilter) {
+      case 'active': return 'Active Bans'
+      case 'permanent': return 'Permanent Bans'
+      case 'recent': return 'Bans (Last 24h)'
+      case 'recidivist': return 'Recidivist IPs'
+      default: return ''
+    }
   }
 
   // Form states
@@ -27,6 +66,7 @@ export function ActiveBans() {
 
   useEffect(() => {
     fetchData()
+    fetchDetect2banStatus()
   }, [])
 
   async function fetchData() {
@@ -43,6 +83,27 @@ export function ActiveBans() {
       setBans([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function fetchDetect2banStatus() {
+    try {
+      const status = await detect2banApi.getStatus()
+      setDetect2banStatus(status)
+    } catch (err) {
+      console.error('Failed to fetch Detect2Ban status:', err)
+    }
+  }
+
+  async function handleToggleDetect2ban() {
+    setTogglingDetect2ban(true)
+    try {
+      await detect2banApi.toggle()
+      await fetchDetect2banStatus()
+    } catch (err) {
+      console.error('Failed to toggle Detect2Ban:', err)
+    } finally {
+      setTogglingDetect2ban(false)
     }
   }
 
@@ -112,6 +173,35 @@ export function ActiveBans() {
           </div>
         </div>
         <div className="flex gap-3">
+          {/* Detect2Ban Toggle - Core Security Engine */}
+          <button
+            onClick={handleToggleDetect2ban}
+            disabled={togglingDetect2ban}
+            title={detect2banStatus?.enabled
+              ? `Detect2Ban Active (${detect2banStatus.scenario_count} scenarios)`
+              : 'Detect2Ban Disabled - Click to enable automated threat detection'}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 ${
+              detect2banStatus?.enabled
+                ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/50 hover:bg-emerald-500/30'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-transparent'
+            }`}
+          >
+            <div className="relative">
+              <ShieldAlert className={`w-5 h-5 ${detect2banStatus?.enabled ? 'animate-pulse' : ''}`} />
+              <Power className={`w-2.5 h-2.5 absolute -bottom-0.5 -right-0.5 ${
+                detect2banStatus?.enabled ? 'text-emerald-400' : 'text-muted-foreground'
+              }`} />
+            </div>
+            <span className="font-medium">
+              {togglingDetect2ban ? 'Loading...' : detect2banStatus?.enabled ? 'D2B Active' : 'D2B Off'}
+            </span>
+            {detect2banStatus?.enabled && detect2banStatus.scenario_count > 0 && (
+              <span className="text-xs bg-emerald-500/30 px-1.5 py-0.5 rounded">
+                {detect2banStatus.scenario_count}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={handleSync}
             disabled={syncing}
@@ -130,25 +220,49 @@ export function ActiveBans() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Clickable */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-card rounded-xl border p-4">
-            <p className="text-sm text-muted-foreground">Active Bans</p>
+          <button
+            onClick={() => setStatsFilter('active')}
+            className="bg-card rounded-xl border p-4 text-left hover:bg-muted/50 hover:border-primary/50 transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Users className="w-4 h-4" />
+              Active Bans
+            </div>
             <p className="text-2xl font-bold">{stats.total_active_bans}</p>
-          </div>
-          <div className="bg-card rounded-xl border p-4">
-            <p className="text-sm text-muted-foreground">Permanent Bans</p>
-            <p className="text-2xl font-bold">{stats.total_permanent_bans}</p>
-          </div>
-          <div className="bg-card rounded-xl border p-4">
-            <p className="text-sm text-muted-foreground">Bans (24h)</p>
-            <p className="text-2xl font-bold text-red-500">+{stats.bans_last_24h}</p>
-          </div>
-          <div className="bg-card rounded-xl border p-4">
-            <p className="text-sm text-muted-foreground">Recidivists</p>
-            <p className="text-2xl font-bold text-orange-500">{stats.recidivist_ips}</p>
-          </div>
+          </button>
+          <button
+            onClick={() => setStatsFilter('permanent')}
+            className="bg-card rounded-xl border p-4 text-left hover:bg-muted/50 hover:border-red-500/50 transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Ban className="w-4 h-4" />
+              Permanent Bans
+            </div>
+            <p className="text-2xl font-bold text-red-500">{stats.total_permanent_bans}</p>
+          </button>
+          <button
+            onClick={() => setStatsFilter('recent')}
+            className="bg-card rounded-xl border p-4 text-left hover:bg-muted/50 hover:border-orange-500/50 transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Calendar className="w-4 h-4" />
+              Bans (24h)
+            </div>
+            <p className="text-2xl font-bold text-orange-500">+{stats.bans_last_24h}</p>
+          </button>
+          <button
+            onClick={() => setStatsFilter('recidivist')}
+            className="bg-card rounded-xl border p-4 text-left hover:bg-muted/50 hover:border-yellow-500/50 transition-all cursor-pointer"
+          >
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <Repeat className="w-4 h-4" />
+              Recidivists
+            </div>
+            <p className="text-2xl font-bold text-yellow-500">{stats.recidivist_ips}</p>
+          </button>
         </div>
       )}
 
@@ -327,6 +441,88 @@ export function ActiveBans() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Filter Modal */}
+      {statsFilter && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-xl border p-6 w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">{getFilterTitle()}</h3>
+              <button
+                onClick={() => setStatsFilter(null)}
+                className="p-1 hover:bg-muted rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto max-h-[60vh]">
+              {getFilteredBans().length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No IPs found</p>
+              ) : (
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-card">
+                    <tr className="border-b">
+                      <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">IP Address</th>
+                      <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Status</th>
+                      <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Ban Count</th>
+                      <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Last Ban</th>
+                      <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getFilteredBans().map((ban) => (
+                      <tr
+                        key={ban.ip}
+                        className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => {
+                          setStatsFilter(null)
+                          handleIPLookup(ban.ip)
+                        }}
+                      >
+                        <td className="py-2 px-3 font-mono text-sm">{ban.ip}</td>
+                        <td className="py-2 px-3">
+                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
+                            ban.status === 'permanent'
+                              ? 'bg-red-500/10 text-red-500'
+                              : 'bg-orange-500/10 text-orange-500'
+                          }`}>
+                            {ban.status}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium">{ban.ban_count}</span>
+                            {ban.ban_count >= 4 && (
+                              <AlertCircle className="w-3 h-3 text-red-500" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3 text-sm text-muted-foreground whitespace-nowrap">
+                          {formatDateTime(ban.last_ban)}
+                        </td>
+                        <td className="py-2 px-3 text-sm max-w-[200px] truncate" title={ban.reason}>
+                          {ban.reason}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="mt-4 pt-4 border-t flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">
+                {getFilteredBans().length} IP{getFilteredBans().length !== 1 ? 's' : ''} found
+              </span>
+              <button
+                onClick={() => setStatsFilter(null)}
+                className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
