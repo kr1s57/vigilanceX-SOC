@@ -251,8 +251,44 @@ Moteur de parsing propriétaire pour les logs Sophos XGS avec décodeurs XML et 
 ### Prérequis
 
 - Docker & Docker Compose
-- Accès API XML au Sophos XGS (port 4444)
+- Sophos XGS Firewall avec accès administrateur
 - Clés API Threat Intel (optionnel)
+
+### Configuration Sophos XGS
+
+#### 1. Créer un compte de service API
+
+1. Aller dans `Administration > Device access > Local service accounts`
+2. Créer un nouveau compte :
+   - **Nom** : `vigilance_api`
+   - **Type** : Administrateur
+3. Dans **Profil**, créer un nouveau profil `vigilance_profil` avec les permissions :
+   - **Lecture/Écriture** sur `System - Objets`
+
+#### 2. Configurer l'envoi des logs Syslog
+
+1. Aller dans `System services > Log settings`
+2. Ajouter un serveur Syslog :
+
+| Paramètre | Valeur |
+|-----------|--------|
+| **Serveur** | IP du serveur VIGILANCE X |
+| **Port** | 514 |
+| **Installation** | daemon |
+| **Niveau de gravité** | information |
+| **Format** | Standard Syslog Protocol |
+
+#### 3. Activer l'API XML
+
+1. Aller dans `Backup & firmware > API`
+2. **Activer** l'API
+3. Ajouter l'IP du serveur VIGILANCE X dans les IP autorisées
+
+#### 4. Créer le groupe de blocage
+
+1. Aller dans `Hosts and services > IP host group`
+2. Créer le groupe : `VIGILANCE_X_BLOCKLIST`
+3. Créer une règle Firewall **DROP** utilisant ce groupe
 
 ### Installation
 
@@ -271,13 +307,6 @@ docker-compose up -d
 # Vérifier les logs
 docker-compose logs -f
 ```
-
-### Configuration Sophos XGS
-
-1. Activer l'API XML : `System > Administration > API`
-2. Autoriser l'IP du serveur VIGILANCE X
-3. Créer le groupe IP : `VIGILANCE_X_BLOCKLIST`
-4. Créer une règle Firewall DROP utilisant ce groupe
 
 ### Accès
 
