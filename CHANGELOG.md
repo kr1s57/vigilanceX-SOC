@@ -7,6 +7,59 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.51.100] - 2026-01-12
+
+### SMTP/SMB Auto-Reconnect & Detect2Ban Immunity
+
+Correction de la reconnexion automatique des services SMTP et SMB au démarrage, et ajout du système d'immunité pour Detect2Ban.
+
+#### Nouvelles Fonctionnalités
+
+| Feature | Description |
+|---------|-------------|
+| Unban 24h | Bouton pour débannir avec 24h d'immunité contre l'auto-ban |
+| Immunity System | Champ `immune_until` pour protéger les IPs des faux positifs |
+| Quick Install Link | Lien vers le wiki dans README.md |
+
+#### Corrections
+
+| Fix | Description |
+|-----|-------------|
+| SMB Auto-Connect | Reconnexion automatique SMB si précédemment activé |
+| SMTP Auto-Connect | Persistance config SMTP pour reconnexion au restart |
+| SMTP Config Path | Config SMTP maintenant dans notification_settings.json |
+| Detect2Ban EventCount | Type corrigé int64 → uint64 (ClickHouse UInt64) |
+| Detect2Ban Query | Ajout préfixe database `vigilance_x.events` |
+| WAF Scenario | Suppression condition `action=drop` (events ont `action=unknown`) |
+
+#### Documentation
+
+| Document | Description |
+|----------|-------------|
+| README.md | Guide complet configuration Sophos XGS (compte API, Syslog, permissions) |
+
+#### Fichiers Modifiés
+
+**Backend:**
+- `cmd/api/main.go` - Auto-connect SMB/SMTP on startup, entity import
+- `internal/entity/ban.go` - ImmuneUntil field, IsImmune() method, BanActionUnbanImmunity
+- `internal/adapter/repository/clickhouse/bans_repo.go` - immune_until queries
+- `internal/usecase/bans/service.go` - UnbanIP with ImmunityHours
+- `internal/usecase/detect2ban/engine.go` - Immunity check, EventCount uint64, DB prefix
+- `internal/adapter/controller/http/handlers/bans.go` - immunity_hours query param
+
+**Frontend:**
+- `src/pages/ActiveBans.tsx` - Bouton "Unban 24h"
+- `src/lib/api.ts` - bansApi.delete avec immunityHours
+
+#### API Changes
+
+| Endpoint | Change |
+|----------|--------|
+| `DELETE /api/v1/bans/{ip}` | Nouveau param `?immunity_hours=24` |
+
+---
+
 ## [3.50.101] - 2026-01-12
 
 ### Sophos XGS Sync & Ban Strategy
