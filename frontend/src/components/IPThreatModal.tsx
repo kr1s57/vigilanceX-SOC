@@ -526,36 +526,37 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
 
                       // Determine source tag based on action and source
                       const getSourceTag = () => {
-                        // For unban actions
+                        // For unban actions - ALWAYS show a tag
                         if (entry.action === 'unban' || entry.action === 'unban_immunity') {
                           if (entry.synced_xgs) {
-                            return { label: 'XGS Synced', color: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400' }
+                            return { label: 'by XGS', color: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400' }
                           }
-                          if (entry.source === 'manual') {
-                            return { label: 'VGXUI', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' }
+                          if (entry.source === 'detect2ban' || entry.source === 'policy') {
+                            return { label: 'Unb_policyD2B', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' }
                           }
+                          // Default for manual or unknown source
+                          return { label: 'by VGXUI', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' }
                         }
                         // For expired bans (policy-based unban)
                         if (entry.action === 'expire') {
-                          return { label: 'Unb_policiesVGX', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' }
+                          return { label: 'Unb_policyD2B', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' }
                         }
                         // For bans, show the source
                         if (entry.action === 'ban') {
                           if (entry.source === 'detect2ban') {
-                            return { label: 'Detect2Ban', color: 'bg-red-500/10 text-red-600 dark:text-red-400' }
-                          }
-                          if (entry.source === 'manual') {
-                            return { label: 'VGXUI', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' }
+                            return { label: 'by D2B', color: 'bg-red-500/10 text-red-600 dark:text-red-400' }
                           }
                           if (entry.source === 'threat_intel') {
-                            return { label: 'ThreatIntel', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' }
+                            return { label: 'by ThreatIntel', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' }
                           }
+                          // Default for manual or unknown source
+                          return { label: 'by VGXUI', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' }
                         }
-                        // Default: show source if available and not manual
+                        // For other actions (extend, permanent)
                         if (entry.source && entry.source !== 'manual') {
                           return { label: entry.source, color: 'bg-muted text-muted-foreground' }
                         }
-                        return null
+                        return { label: 'by VGXUI', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' }
                       }
                       const sourceTag = getSourceTag()
 
