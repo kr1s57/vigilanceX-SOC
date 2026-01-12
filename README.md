@@ -2,9 +2,112 @@
 
 > **Version 3.51.100** | Security Operations Center pour Sophos XGS
 
-Solution de supervision de sécurité et de réponse active automatisée pour **Sophos XGS**.
+Solution de supervision de sécurité et de **réponse active centralisée** pour **Sophos XGS**.
 
 📖 **[Quick Install Guide](https://github.com/kr1s57/vigilanceX-SOC/wiki)** - Installation rapide et configuration
+
+---
+
+## Pourquoi VIGILANCE X ? (vs fail2ban)
+
+### Le problème avec fail2ban sur Linux
+
+| Limitation | Impact |
+|------------|--------|
+| **Configuration lourde** | Jails et policies complexes par serveur |
+| **Gestion décentralisée** | Chaque serveur = configuration isolée |
+| **Interface CLI uniquement** | Pas de visibilité globale, pas de dashboard |
+| **Pas de notifications** | Aucune alerte temps réel |
+| **Pas de corrélation** | Chaque serveur voit uniquement ses propres logs |
+| **Maintenance complexe** | Mise à jour des règles serveur par serveur |
+
+### La solution VIGILANCE X
+
+**VIGILANCE X centralise la réponse active** pour toute votre infrastructure :
+
+| Avantage | Description |
+|----------|-------------|
+| **Centralisation totale** | Un seul point de contrôle pour tous vos serveurs |
+| **Interface Web moderne** | Dashboard temps réel, graphiques, historique |
+| **Moteur Detect2Ban (D2B)** | Remplacement intelligent de fail2ban |
+| **Policies YAML** | Scénarios de détection configurables |
+| **Threat Intelligence** | Corrélation avec 11+ providers (CrowdSec, AbuseIPDB, VirusTotal...) |
+| **Notifications** | Alertes email temps réel, rapports programmés |
+| **Blocage au niveau firewall** | Blocage directement sur Sophos XGS (pas iptables local) |
+| **Historique et audit** | Traçabilité complète des bans/unbans |
+
+### Architecture Detect2Ban vs fail2ban
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    AVANT (fail2ban)                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   Server 1          Server 2          Server 3                  │
+│   ┌─────────┐       ┌─────────┐       ┌─────────┐              │
+│   │fail2ban │       │fail2ban │       │fail2ban │              │
+│   │ jails   │       │ jails   │       │ jails   │              │
+│   │iptables │       │iptables │       │iptables │              │
+│   └─────────┘       └─────────┘       └─────────┘              │
+│        ↓                 ↓                 ↓                    │
+│   Ban local         Ban local         Ban local                 │
+│   (isolé)           (isolé)           (isolé)                   │
+│                                                                 │
+│   ❌ Pas de vue globale                                         │
+│   ❌ Pas de corrélation cross-server                            │
+│   ❌ Maintenance x N serveurs                                   │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    APRÈS (VIGILANCE X)                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   Server 1          Server 2          Server 3                  │
+│   ┌─────────┐       ┌─────────┐       ┌─────────┐              │
+│   │ Syslog  │       │ Syslog  │       │ Syslog  │              │
+│   └────┬────┘       └────┬────┘       └────┬────┘              │
+│        │                 │                 │                    │
+│        └────────────────┬┴─────────────────┘                    │
+│                         ▼                                       │
+│              ┌─────────────────────┐                           │
+│              │   VIGILANCE X       │                           │
+│              │  ┌───────────────┐  │                           │
+│              │  │  Detect2Ban   │  │ ◄── Threat Intel APIs     │
+│              │  │  Engine       │  │     (CrowdSec, VT, etc.)  │
+│              │  └───────┬───────┘  │                           │
+│              │          │          │                           │
+│              │  ┌───────▼───────┐  │                           │
+│              │  │  Policies     │  │                           │
+│              │  │  YAML         │  │                           │
+│              │  └───────┬───────┘  │                           │
+│              └──────────┼──────────┘                           │
+│                         ▼                                       │
+│              ┌─────────────────────┐                           │
+│              │   Sophos XGS        │                           │
+│              │   (Ban global)      │                           │
+│              └─────────────────────┘                           │
+│                                                                 │
+│   ✅ Vue centralisée                                            │
+│   ✅ Corrélation multi-sources                                  │
+│   ✅ Dashboard temps réel                                       │
+│   ✅ Notifications et rapports                                  │
+│   ✅ Ban au niveau firewall (pas iptables)                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Fonctionnalités D2B avancées
+
+| Fonctionnalité | Description |
+|----------------|-------------|
+| **Scénarios YAML** | Règles de détection personnalisables |
+| **Validate Threat** | Vérification croisée avec APIs avant ban |
+| **Récidivisme** | Ban progressif (4 bans = permanent) |
+| **Immunité** | Protection temporaire contre auto-ban (Unban 24h) |
+| **Soft Whitelist** | Whitelist graduée (hard/soft/monitor) |
+| **Geoblocking** | Blocage par pays/ASN |
+| **XGS Sync** | Synchronisation bidirectionnelle avec firewall |
+
+---
 
 ## Stack Technique
 

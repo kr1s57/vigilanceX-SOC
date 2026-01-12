@@ -43,7 +43,6 @@ const navigation: NavItem[] = [
   { name: 'Whitelist', href: '/whitelist', icon: ShieldCheck, colorClass: 'text-green-500' },
   { name: 'Risk Scoring', href: '/scoring', icon: Activity, colorClass: 'text-yellow-500' },
   { name: 'Reports', href: '/reports', icon: FileText, colorClass: 'text-indigo-500', adminOnly: true },
-  { name: 'Users', href: '/users', icon: Users, colorClass: 'text-sky-500', adminOnly: true },
 ]
 
 export function Sidebar() {
@@ -169,6 +168,33 @@ export function Sidebar() {
             </NavLink>
           )}
         </div>
+
+        {/* Users - Admin only */}
+        {isAdmin && (
+          <NavLink
+            to="/users"
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Users
+                  className={cn(
+                    'w-5 h-5 transition-colors',
+                    useColorIcons && !isActive ? 'text-sky-500' : ''
+                  )}
+                />
+                Users
+              </>
+            )}
+          </NavLink>
+        )}
 
         {/* Settings - Admin only */}
         {isAdmin && (

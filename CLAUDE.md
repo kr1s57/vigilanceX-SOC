@@ -74,7 +74,49 @@ Ces mesures seraient requises uniquement si exposition Internet:
 
 ### Detect2Ban Engine (v3.51 - Active)
 
-Moteur de detection et ban automatique des menaces.
+Moteur de detection et ban automatique des menaces - **remplacement centralise de fail2ban**.
+
+#### Pourquoi D2B vs fail2ban ?
+
+**Problemes fail2ban sur Linux:**
+- Configuration lourde (jails, policies par serveur)
+- Gestion decentralisee (N serveurs = N configs)
+- Interface CLI uniquement, pas de dashboard
+- Pas de notifications temps reel
+- Pas de correlation cross-server
+- Ban local iptables (pas firewall)
+
+**Avantages Detect2Ban:**
+- Centralisation totale (1 console = tous serveurs)
+- Interface Web moderne (dashboard, graphiques, historique)
+- Correlation multi-sources (CrowdSec, AbuseIPDB, VirusTotal, etc.)
+- Notifications email temps reel
+- Ban au niveau firewall Sophos XGS (pas iptables local)
+- Policies YAML configurables
+- Tracabilite complete (audit trail)
+
+#### Architecture D2B
+
+```
+Servers/Apps (Syslog) ──► Vector.dev ──► ClickHouse
+                                              │
+                                              ▼
+                                    ┌─────────────────┐
+                                    │  Detect2Ban     │
+                                    │  Engine         │
+                                    │  ┌───────────┐  │
+                                    │  │ Scenarios │◄─┼── Threat Intel APIs
+                                    │  │ YAML      │  │   (11 providers)
+                                    │  └─────┬─────┘  │
+                                    └────────┼────────┘
+                                             ▼
+                                    ┌─────────────────┐
+                                    │  Sophos XGS     │
+                                    │  (Ban IP)       │
+                                    └─────────────────┘
+```
+
+#### Composants
 
 | Composant | Status |
 |-----------|--------|
