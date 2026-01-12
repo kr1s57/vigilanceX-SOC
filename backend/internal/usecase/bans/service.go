@@ -120,6 +120,7 @@ type BansRepository interface {
 	GetExpiredBans(ctx context.Context) ([]entity.BanStatus, error)
 	GetUnsyncedBans(ctx context.Context) ([]entity.BanStatus, error)
 	IsWhitelisted(ctx context.Context, ip string) (bool, error)
+	IsIPImmune(ctx context.Context, ip string) (bool, *time.Time, error)
 	CheckWhitelistV2(ctx context.Context, ip string) (*entity.WhitelistCheckResult, error)
 	GetWhitelist(ctx context.Context) ([]entity.WhitelistEntry, error)
 	GetWhitelistByType(ctx context.Context, whitelistType string) ([]entity.WhitelistEntry, error)
@@ -180,6 +181,12 @@ func (s *Service) GetStats(ctx context.Context) (*entity.BanStats, error) {
 // GetHistory returns ban history for an IP
 func (s *Service) GetHistory(ctx context.Context, ip string, limit int) ([]entity.BanHistory, error) {
 	return s.repo.GetBanHistory(ctx, ip, limit)
+}
+
+// IsIPImmune checks if an IP has active immunity from auto-ban
+// Returns true if the IP is immune, along with the expiration time
+func (s *Service) IsIPImmune(ctx context.Context, ip string) (bool, *time.Time, error) {
+	return s.repo.IsIPImmune(ctx, ip)
 }
 
 // BanIP bans an IP address with progressive duration based on recidivism
@@ -316,6 +323,7 @@ func (s *Service) BanIP(ctx context.Context, req *entity.BanRequest) (*entity.Ba
 }
 
 // UnbanIP removes a ban from an IP address
+// If ImmunityHours > 0, grants temporary immunity from auto-ban (Detect2Ban)
 func (s *Service) UnbanIP(ctx context.Context, req *entity.UnbanRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -332,19 +340,38 @@ func (s *Service) UnbanIP(ctx context.Context, req *entity.UnbanRequest) error {
 	existing.Status = entity.BanStatusExpired
 	existing.UpdatedAt = now
 
+	// Set immunity if requested
+	if req.ImmunityHours > 0 {
+		immuneUntil := now.Add(time.Duration(req.ImmunityHours) * time.Hour)
+		existing.ImmuneUntil = &immuneUntil
+		log.Printf("[BAN] IP %s unbanned with %dh immunity (until %v)", req.IP, req.ImmunityHours, immuneUntil)
+	}
+
 	if err := s.repo.UpsertBan(ctx, existing); err != nil {
 		return fmt.Errorf("update ban: %w", err)
 	}
 
 	// Record history
+	action := entity.BanActionUnban
+	reason := req.Reason
+	if req.ImmunityHours > 0 {
+		action = entity.BanActionUnbanImmunity
+		if reason == "" {
+			reason = fmt.Sprintf("Unbanned with %dh immunity", req.ImmunityHours)
+		} else {
+			reason = fmt.Sprintf("%s (with %dh immunity)", reason, req.ImmunityHours)
+		}
+	}
+
 	history := &entity.BanHistory{
-		IP:          req.IP,
-		Action:      entity.BanActionUnban,
-		Reason:      req.Reason,
-		Source:      "manual",
-		PerformedBy: req.PerformedBy,
-		SyncedXGS:   false,
-		CreatedAt:   now,
+		IP:            req.IP,
+		Action:        action,
+		Reason:        reason,
+		DurationHours: req.ImmunityHours, // Store immunity duration
+		Source:        "manual",
+		PerformedBy:   req.PerformedBy,
+		SyncedXGS:     false,
+		CreatedAt:     now,
 	}
 
 	if err := s.repo.RecordBanHistory(ctx, history); err != nil {

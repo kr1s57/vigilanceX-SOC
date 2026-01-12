@@ -129,6 +129,16 @@ export function ActiveBans() {
     }
   }
 
+  async function handleUnbanWithImmunity(ip: string, hours: number = 24) {
+    if (!confirm(`Unban ${ip} with ${hours}h immunity?\n\nThe IP will not be auto-banned by Detect2Ban for ${hours} hours.`)) return
+    try {
+      await bansApi.delete(ip, hours)
+      await fetchData()
+    } catch (err) {
+      console.error('Failed to unban with immunity:', err)
+    }
+  }
+
   async function handleAddBan(e: React.FormEvent) {
     e.preventDefault()
     setFormError('')
@@ -355,8 +365,19 @@ export function ActiveBans() {
                             handleUnban(ban.ip)
                           }}
                           className="px-2 py-1 text-xs bg-muted hover:bg-destructive hover:text-destructive-foreground rounded transition-colors"
+                          title="Remove ban immediately"
                         >
                           Unban
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleUnbanWithImmunity(ban.ip, 24)
+                          }}
+                          className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                          title="Remove ban and prevent auto-ban for 24 hours"
+                        >
+                          Unban 24h
                         </button>
                         {ban.status !== 'permanent' && (
                           <button

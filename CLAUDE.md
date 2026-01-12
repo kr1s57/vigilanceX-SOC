@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.50.101 | **Derniere mise a jour**: 2026-01-12
+> **Version**: 3.51.100 | **Derniere mise a jour**: 2026-01-12
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -82,10 +82,41 @@ Moteur de detection et ban automatique des menaces.
 | Scenarios YAML | 2 scenarios (waf_attacks, brute_force) |
 | Check Interval | 30 secondes |
 | Badge D2B | Header (vert/rouge) |
+| Immunity Support | v3.51+ (Unban 24h) |
 
 **Criteres de blocage:**
-- `waf_attacks`: 5+ drops WAF en 5 min + threat score >= 50
+- `waf_attacks`: 5+ events WAF en 5 min (validate_threat: false)
 - `brute_force`: 10+ auth failures en 10 min
+
+**Flux Ban/Unban/XGS:**
+
+```
+1. Detection (Detect2Ban)
+   ├── Verif IP protegee (local/infrastructure) → Skip
+   ├── Verif IP whitelistee (hard/soft) → Skip/Alert
+   ├── Verif IP immune (immune_until > now) → Skip
+   ├── Verif IP deja bannee → Skip
+   ├── Verif Threat Intel (si validate_threat: true) → Skip si score < threshold
+   └── BAN → ip_ban_status + Sync XGS
+
+2. Ban Manuel (API/UI)
+   └── POST /api/v1/bans → BanIP() → Sync XGS
+
+3. Unban Normal (UI: bouton "Unban")
+   └── DELETE /api/v1/bans/{ip} → UnbanIP() → Remove XGS
+
+4. Unban avec Immunite (UI: bouton "Unban 24h")
+   └── DELETE /api/v1/bans/{ip}?immunity_hours=24
+   └── UnbanIP(immunity_hours=24) → Set immune_until
+   └── Remove from XGS
+   └── Detect2Ban ne peut plus re-bannir pendant 24h
+```
+
+**Fichiers cles:**
+- `backend/internal/usecase/detect2ban/engine.go` - Detection engine
+- `backend/internal/usecase/bans/service.go` - Ban logic + immunity
+- `backend/scenarios/*.yaml` - Scenarios YAML
+- `backend/internal/entity/ban.go` - BanStatus avec immune_until
 
 ### Storage External (v3.51 - Wired)
 
@@ -841,6 +872,19 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.51.100 (2026-01-12)
+- **Detect2Ban Immunity**: Nouveau bouton "Unban 24h" pour faux positifs
+- IP unban avec immunite temporaire contre auto-ban
+- Nouveau champ `immune_until` dans `ip_ban_status`
+- Detect2Ban verifie immunite avant de re-bannir
+- API: `DELETE /api/v1/bans/{ip}?immunity_hours=24`
+- Frontend: Bouton bleu "Unban 24h" dans Active Bans
+- **Fix Detect2Ban**: EventCount int64 → uint64 (ClickHouse UInt64)
+- **Fix Detect2Ban**: Query `FROM events` → `FROM vigilance_x.events`
+- **Fix WAF Scenario**: Remove action=drop condition (events have action=unknown)
+- **Storage SMB**: Fix "Save & Enable" button (now calls enable endpoint)
+- **Storage SMB**: Added security options (RequireSigning, MinVersion 3.x)
 
 ### v3.5.100 (2026-01-12)
 - **Interactive Attack Map**: Nouvelle page de visualisation des attaques

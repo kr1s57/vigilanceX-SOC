@@ -353,14 +353,21 @@ export function Settings() {
     setSavingStorage(true)
     setStorageTestResult(null)
     try {
+      // 1. Save SMB config
       await storageApi.updateSMBConfig(smb)
-      // Refresh config
-      const config = await storageApi.getConfig()
+      // 2. Enable and connect
+      await storageApi.enable()
+      // 3. Refresh config and status
+      const [config, status] = await Promise.all([
+        storageApi.getConfig(),
+        storageApi.getStatus()
+      ])
       setStorageConfig(config)
-      setStorageTestResult({ success: true, message: 'Configuration saved' })
+      setStorageStatus(status)
+      setStorageTestResult({ success: true, message: 'Configuration saved and storage enabled' })
     } catch (err) {
-      console.error('Failed to save storage config:', err)
-      setStorageTestResult({ success: false, message: 'Failed to save configuration' })
+      console.error('Failed to save/enable storage:', err)
+      setStorageTestResult({ success: false, message: err instanceof Error ? err.message : 'Failed to enable storage' })
     } finally {
       setSavingStorage(false)
     }
@@ -1609,7 +1616,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.50.101</p>
+        <p>VIGILANCE X v3.51.100</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

@@ -160,8 +160,9 @@ export const bansApi = {
     return response.data.data
   },
 
-  delete: async (ip: string) => {
-    await api.delete(`/bans/${ip}`)
+  delete: async (ip: string, immunityHours?: number) => {
+    const params = immunityHours ? `?immunity_hours=${immunityHours}` : ''
+    await api.delete(`/bans/${ip}${params}`)
   },
 
   extend: async (ip: string, days: number) => {

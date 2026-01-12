@@ -24,6 +24,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
 	"github.com/kr1s57/vigilancex/internal/license" // v2.9: License system
+	"github.com/kr1s57/vigilancex/internal/usecase/archiver"
 	"github.com/kr1s57/vigilancex/internal/usecase/auth"
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
@@ -350,6 +351,15 @@ func main() {
 	}
 	storageHandler := handlers.NewStorageHandler(storageManager)
 	logger.Info("Storage Manager initialized", "config_path", storageConfigPath)
+
+	// v3.51: Initialize Archiver Service for log archiving to SMB/S3
+	archiverService := archiver.NewService(storageManager, eventsRepo)
+	storageHandler.SetArchiver(archiverService)
+	// Start archiver background service (archives events every 5 minutes)
+	archiverCtx, archiverCancel := context.WithCancel(context.Background())
+	defer archiverCancel()
+	go archiverService.Start(archiverCtx, 5*time.Minute)
+	logger.Info("Archiver service initialized", "interval", "5m")
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -693,6 +703,10 @@ func main() {
 				r.Post("/disconnect", storageHandler.Disconnect)
 				r.Post("/enable", storageHandler.Enable)
 				r.Post("/disable", storageHandler.Disable)
+				// Archiver endpoints
+				r.Get("/archiver/status", storageHandler.GetArchiverStatus)
+				r.Post("/archiver/run", storageHandler.RunArchiver)
+				r.Post("/archiver/test-write", storageHandler.WriteTestFile)
 			})
 		})
 	})

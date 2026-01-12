@@ -8,14 +8,11 @@ enabled: true
 cooldown: "60m"
 
 # Conditions that must be met (AND logic)
+# Note: WAF events from syslog may have action='unknown' if not properly parsed
 conditions:
   - field: log_type
     operator: eq
     value: WAF
-
-  - field: action
-    operator: eq
-    value: drop
 
 # Aggregation - count events per source IP
 aggregation:
@@ -27,6 +24,6 @@ aggregation:
 action:
   type: ban
   duration: "1h"
-  validate_threat: true
-  threat_threshold: 50
+  validate_threat: false
+  threat_threshold: 0
   reason: "WAF: Multiple attack attempts detected ({count} events in 5 min)"

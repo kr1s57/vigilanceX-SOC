@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kr1s57/vigilancex/internal/entity"
@@ -109,14 +110,26 @@ func (h *BansHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // Delete unbans an IP address
-// DELETE /api/v1/bans/{ip}
+// DELETE /api/v1/bans/{ip}?immunity_hours=24
+// Query params:
+//   - reason: optional unban reason
+//   - immunity_hours: optional hours of immunity from auto-ban (default: 0)
 func (h *BansHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ip := chi.URLParam(r, "ip")
 
+	// Parse immunity_hours (default 0 = no immunity)
+	immunityHours := 0
+	if ih := r.URL.Query().Get("immunity_hours"); ih != "" {
+		if parsed, err := strconv.Atoi(ih); err == nil && parsed > 0 {
+			immunityHours = parsed
+		}
+	}
+
 	req := &entity.UnbanRequest{
-		IP:     ip,
-		Reason: r.URL.Query().Get("reason"),
+		IP:            ip,
+		Reason:        r.URL.Query().Get("reason"),
+		ImmunityHours: immunityHours,
 	}
 
 	if err := h.service.UnbanIP(ctx, req); err != nil {
@@ -124,10 +137,16 @@ func (h *BansHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSONResponse(w, http.StatusOK, map[string]string{
+	response := map[string]interface{}{
 		"message": "IP unbanned successfully",
 		"ip":      ip,
-	})
+	}
+	if immunityHours > 0 {
+		response["immunity_hours"] = immunityHours
+		response["message"] = "IP unbanned with " + strconv.Itoa(immunityHours) + "h immunity"
+	}
+
+	JSONResponse(w, http.StatusOK, response)
 }
 
 // Extend extends a ban duration

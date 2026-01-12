@@ -353,3 +353,16 @@ func (m *Manager) Disable() error {
 
 	return m.Disconnect()
 }
+
+// WriteFile writes a file directly to storage (for testing/manual writes)
+func (m *Manager) WriteFile(ctx context.Context, path string, data []byte) error {
+	m.mu.RLock()
+	provider := m.provider
+	m.mu.RUnlock()
+
+	if provider == nil || !provider.IsConnected() {
+		return fmt.Errorf("storage not connected")
+	}
+
+	return provider.Write(ctx, path, data)
+}

@@ -86,6 +86,7 @@ func (r *BansRepository) GetBanByIP(ctx context.Context, ip string) (*entity.Ban
 			reason,
 			source,
 			synced_xgs,
+			immune_until,
 			updated_at
 		FROM ip_ban_status FINAL
 		WHERE ip = ?
@@ -96,6 +97,7 @@ func (r *BansRepository) GetBanByIP(ctx context.Context, ip string) (*entity.Ban
 
 	var ban entity.BanStatus
 	var expiresAt *time.Time
+	var immuneUntil *time.Time
 
 	if err := row.Scan(
 		&ban.IP,
@@ -107,6 +109,7 @@ func (r *BansRepository) GetBanByIP(ctx context.Context, ip string) (*entity.Ban
 		&ban.Reason,
 		&ban.Source,
 		&ban.SyncedXGS,
+		&immuneUntil,
 		&ban.UpdatedAt,
 	); err != nil {
 		return nil, fmt.Errorf("scan ban: %w", err)
@@ -115,8 +118,36 @@ func (r *BansRepository) GetBanByIP(ctx context.Context, ip string) (*entity.Ban
 	if expiresAt != nil {
 		ban.ExpiresAt = expiresAt
 	}
+	if immuneUntil != nil && !immuneUntil.IsZero() && immuneUntil.Year() > 1970 {
+		ban.ImmuneUntil = immuneUntil
+	}
 
 	return &ban, nil
+}
+
+// IsIPImmune checks if an IP has active immunity from auto-ban
+func (r *BansRepository) IsIPImmune(ctx context.Context, ip string) (bool, *time.Time, error) {
+	query := `
+		SELECT immune_until
+		FROM ip_ban_status FINAL
+		WHERE ip = ?
+		LIMIT 1
+	`
+
+	var immuneUntil *time.Time
+	if err := r.conn.DB().QueryRow(ctx, query, ip).Scan(&immuneUntil); err != nil {
+		return false, nil, nil // No record = not immune
+	}
+
+	if immuneUntil == nil || immuneUntil.IsZero() || immuneUntil.Year() <= 1970 {
+		return false, nil, nil
+	}
+
+	if time.Now().Before(*immuneUntil) {
+		return true, immuneUntil, nil
+	}
+
+	return false, nil, nil
 }
 
 // UpsertBan creates or updates a ban status
@@ -124,13 +155,18 @@ func (r *BansRepository) UpsertBan(ctx context.Context, ban *entity.BanStatus) e
 	query := `
 		INSERT INTO ip_ban_status (
 			ip, status, ban_count, first_ban, last_ban,
-			expires_at, reason, source, synced_xgs, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			expires_at, reason, source, synced_xgs, immune_until, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	var expiresAt time.Time
 	if ban.ExpiresAt != nil {
 		expiresAt = *ban.ExpiresAt
+	}
+
+	var immuneUntil time.Time
+	if ban.ImmuneUntil != nil {
+		immuneUntil = *ban.ImmuneUntil
 	}
 
 	if err := r.conn.DB().Exec(ctx, query,
@@ -143,6 +179,7 @@ func (r *BansRepository) UpsertBan(ctx context.Context, ban *entity.BanStatus) e
 		ban.Reason,
 		ban.Source,
 		ban.SyncedXGS,
+		immuneUntil,
 		time.Now(),
 	); err != nil {
 		return fmt.Errorf("upsert ban: %w", err)

@@ -19,6 +19,7 @@ type BanStatus struct {
 	TriggerRule  string     `json:"trigger_rule" ch:"trigger_rule"`
 	TriggerEvent uuid.UUID  `json:"trigger_event_id" ch:"trigger_event_id"`
 	SyncedXGS    bool       `json:"synced_xgs" ch:"synced_xgs"`
+	ImmuneUntil  *time.Time `json:"immune_until" ch:"immune_until"` // Immunity from auto-ban until this time
 	CreatedBy    string     `json:"created_by" ch:"created_by"`
 	UpdatedAt    time.Time  `json:"updated_at" ch:"updated_at"`
 	Version      uint64     `json:"-" ch:"version"`
@@ -103,9 +104,10 @@ type BanRequest struct {
 
 // UnbanRequest represents a request to unban an IP
 type UnbanRequest struct {
-	IP          string `json:"ip" validate:"required,ip"`
-	Reason      string `json:"reason"`
-	PerformedBy string `json:"performed_by"`
+	IP            string `json:"ip" validate:"required,ip"`
+	Reason        string `json:"reason"`
+	PerformedBy   string `json:"performed_by"`
+	ImmunityHours int    `json:"immunity_hours"` // Hours of immunity from auto-ban (0 = no immunity)
 }
 
 // ExtendBanRequest represents a request to extend a ban
@@ -142,11 +144,12 @@ const (
 
 // Ban action constants (for history)
 const (
-	BanActionBan       = "ban"
-	BanActionUnban     = "unban"
-	BanActionExtend    = "extend"
-	BanActionPermanent = "permanent"
-	BanActionExpire    = "expire"
+	BanActionBan           = "ban"
+	BanActionUnban         = "unban"
+	BanActionUnbanImmunity = "unban_immunity" // Unban with temporary immunity from auto-ban
+	BanActionExtend        = "extend"
+	BanActionPermanent     = "permanent"
+	BanActionExpire        = "expire"
 )
 
 // Progressive ban durations
@@ -176,6 +179,14 @@ func (b *BanStatus) IsExpired() bool {
 // IsRecidivist returns true if the IP has been banned multiple times
 func (b *BanStatus) IsRecidivist() bool {
 	return b.BanCount >= RecidivismThreshold
+}
+
+// IsImmune returns true if the IP has active immunity from auto-ban
+func (b *BanStatus) IsImmune() bool {
+	if b.ImmuneUntil == nil {
+		return false
+	}
+	return time.Now().Before(*b.ImmuneUntil)
 }
 
 // GetNextBanDuration returns the duration for the next ban based on recidivism

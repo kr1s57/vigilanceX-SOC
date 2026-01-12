@@ -282,7 +282,7 @@ func (e *Engine) runDetectionCycle(ctx context.Context) {
 // ScenarioMatch represents an IP that matched a scenario
 type ScenarioMatch struct {
 	IP         string
-	EventCount int64
+	EventCount uint64
 	FirstEvent time.Time
 	LastEvent  time.Time
 }
@@ -315,7 +315,7 @@ func (e *Engine) evaluateScenario(ctx context.Context, scenario *Scenario) ([]Sc
 			continue
 		}
 
-		if match.EventCount >= int64(scenario.Aggregation.Threshold) {
+		if match.EventCount >= uint64(scenario.Aggregation.Threshold) {
 			matches = append(matches, match)
 		}
 	}
@@ -346,7 +346,7 @@ func (e *Engine) buildQuery(scenario *Scenario, window time.Duration) string {
 			count() as event_count,
 			min(timestamp) as first_event,
 			max(timestamp) as last_event
-		FROM events
+		FROM vigilance_x.events
 		WHERE %s
 		GROUP BY %s
 		HAVING event_count >= %d
@@ -411,6 +411,13 @@ func (e *Engine) handleMatch(ctx context.Context, scenario *Scenario, match Scen
 	if err == nil && existingBan != nil {
 		if existingBan.Status == entity.BanStatusActive || existingBan.Status == entity.BanStatusPermanent {
 			log.Printf("[DETECT2BAN] IP %s already banned, skipping", match.IP)
+			return
+		}
+
+		// Check if IP has immunity (from manual unban with immunity)
+		if existingBan.IsImmune() {
+			log.Printf("[DETECT2BAN] IP %s has immunity until %v, skipping auto-ban",
+				match.IP, existingBan.ImmuneUntil.Format("2006-01-02 15:04:05"))
 			return
 		}
 	}

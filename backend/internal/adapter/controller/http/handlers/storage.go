@@ -3,15 +3,18 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/kr1s57/vigilancex/internal/adapter/external/storage"
+	"github.com/kr1s57/vigilancex/internal/usecase/archiver"
 )
 
 // StorageHandler handles storage-related HTTP requests
 type StorageHandler struct {
-	manager *storage.Manager
+	manager  *storage.Manager
+	archiver *archiver.Service
 }
 
 // NewStorageHandler creates a new storage handler
@@ -19,6 +22,11 @@ func NewStorageHandler(manager *storage.Manager) *StorageHandler {
 	return &StorageHandler{
 		manager: manager,
 	}
+}
+
+// SetArchiver sets the archiver service (called after initialization)
+func (h *StorageHandler) SetArchiver(a *archiver.Service) {
+	h.archiver = a
 }
 
 // GetConfig returns the current storage configuration
@@ -150,4 +158,66 @@ func (h *StorageHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSONResponse(w, http.StatusOK, map[string]string{"message": "Storage disabled"})
+}
+
+// GetArchiverStatus returns the archiver service status
+func (h *StorageHandler) GetArchiverStatus(w http.ResponseWriter, r *http.Request) {
+	if h.archiver == nil {
+		JSONResponse(w, http.StatusServiceUnavailable, map[string]string{"error": "Archiver not configured"})
+		return
+	}
+
+	status := h.archiver.GetStatus()
+	JSONResponse(w, http.StatusOK, status)
+}
+
+// RunArchiver triggers an immediate archive run
+func (h *StorageHandler) RunArchiver(w http.ResponseWriter, r *http.Request) {
+	if h.archiver == nil {
+		JSONResponse(w, http.StatusServiceUnavailable, map[string]string{"error": "Archiver not configured"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	count, err := h.archiver.ArchiveNow(ctx)
+	if err != nil {
+		JSONResponse(w, http.StatusBadRequest, map[string]interface{}{
+			"success":  false,
+			"error":    err.Error(),
+			"archived": count,
+		})
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"message":  fmt.Sprintf("Archived %d events", count),
+		"archived": count,
+	})
+}
+
+// WriteTestFile writes a test file to storage for verification
+func (h *StorageHandler) WriteTestFile(w http.ResponseWriter, r *http.Request) {
+	if h.archiver == nil {
+		JSONResponse(w, http.StatusServiceUnavailable, map[string]string{"error": "Archiver not configured"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	if err := h.archiver.WriteTestFile(ctx); err != nil {
+		JSONResponse(w, http.StatusBadRequest, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Test file written successfully - check test/ folder on storage",
+	})
 }
