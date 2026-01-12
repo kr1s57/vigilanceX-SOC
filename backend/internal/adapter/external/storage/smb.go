@@ -15,6 +15,33 @@ import (
 	"github.com/hirochachacha/go-smb2"
 )
 
+// SMB dialect constants (MS-SMB2 specification)
+const (
+	SMB2_DIALECT_202 uint16 = 0x0202 // SMB 2.0.2
+	SMB2_DIALECT_21  uint16 = 0x0210 // SMB 2.1
+	SMB3_DIALECT_30  uint16 = 0x0300 // SMB 3.0
+	SMB3_DIALECT_302 uint16 = 0x0302 // SMB 3.0.2
+	SMB3_DIALECT_311 uint16 = 0x0311 // SMB 3.1.1
+)
+
+// parseSMBVersion converts version string to dialect constant
+func parseSMBVersion(version string) uint16 {
+	switch version {
+	case "2.0", "2.0.2":
+		return SMB2_DIALECT_202
+	case "2.1":
+		return SMB2_DIALECT_21
+	case "3.0":
+		return SMB3_DIALECT_30
+	case "3.0.2":
+		return SMB3_DIALECT_302
+	case "3.1.1", "3.1":
+		return SMB3_DIALECT_311
+	default:
+		return SMB3_DIALECT_30 // Default to SMB 3.0 for security
+	}
+}
+
 // SMBProvider implements the Provider interface for SMB/CIFS storage
 type SMBProvider struct {
 	config       *SMBConfig
@@ -75,14 +102,25 @@ func (p *SMBProvider) Connect(ctx context.Context) error {
 	}
 	p.conn = conn
 
-	// Create SMB session
+	// Create SMB session with security options (v3.51)
 	d := &smb2.Dialer{
+		Negotiator: smb2.Negotiator{
+			RequireMessageSigning: p.config.RequireSigning,
+			SpecifiedDialect:      parseSMBVersion(p.config.MinVersion),
+		},
 		Initiator: &smb2.NTLMInitiator{
 			User:     p.config.Username,
 			Password: p.config.Password,
 			Domain:   p.config.Domain,
 		},
 	}
+
+	// Log security settings
+	slog.Info("[STORAGE] SMB security settings",
+		"require_signing", p.config.RequireSigning,
+		"min_version", p.config.MinVersion,
+		"dialect", fmt.Sprintf("0x%04x", parseSMBVersion(p.config.MinVersion)),
+	)
 
 	session, err := d.DialContext(ctx, conn)
 	if err != nil {

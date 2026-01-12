@@ -100,6 +100,10 @@ type SMBConfig struct {
 	Password string `json:"password"`
 	Domain   string `json:"domain"`
 	BasePath string `json:"base_path"` // Subdirectory within share
+
+	// Security options (v3.51)
+	RequireSigning bool   `json:"require_signing"` // Enforce message signing
+	MinVersion     string `json:"min_version"`     // Minimum SMB version: "3.0", "3.0.2", "3.1.1"
 }
 
 // S3Config holds S3/MinIO configuration (future implementation)
@@ -128,9 +132,11 @@ func DefaultConfig() *Config {
 		Enabled: false,
 		Type:    StorageTypeSMB,
 		SMB: &SMBConfig{
-			Port:     445,
-			Domain:   "WORKGROUP",
-			BasePath: "vigilancex",
+			Port:           445,
+			Domain:         "WORKGROUP",
+			BasePath:       "vigilancex",
+			RequireSigning: true,  // Security: enforce message signing
+			MinVersion:     "3.0", // Security: minimum SMB 3.0 (encrypted)
 		},
 		Archive: &ArchiveConfig{
 			Enabled:         true,

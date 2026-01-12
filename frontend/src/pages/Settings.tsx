@@ -1835,9 +1835,11 @@ function StorageSMBForm({
     password: config?.password || '',
     domain: config?.domain || 'WORKGROUP',
     base_path: config?.base_path || 'vigilancex',
+    require_signing: config?.require_signing ?? true,
+    min_version: config?.min_version || '3.0',
   })
 
-  const handleChange = (key: keyof StorageSMBConfig, value: string | number) => {
+  const handleChange = (key: keyof StorageSMBConfig, value: string | number | boolean) => {
     setFormData(prev => ({ ...prev, [key]: value }))
   }
 
@@ -1935,6 +1937,45 @@ function StorageSMBForm({
             disabled={!isAdmin}
             className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
           />
+        </div>
+      </div>
+
+      {/* Security Options (v3.51) */}
+      <div className="border-t border-border pt-4 mt-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Shield className="w-4 h-4 text-green-500" />
+          <span className="text-sm font-medium">Security Options</span>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Minimum SMB Version</label>
+            <select
+              value={formData.min_version}
+              onChange={(e) => handleChange('min_version', e.target.value)}
+              disabled={!isAdmin}
+              className="w-full px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm disabled:opacity-50"
+            >
+              <option value="3.0">SMB 3.0 (AES-128-CCM)</option>
+              <option value="3.0.2">SMB 3.0.2 (AES-128-CCM)</option>
+              <option value="3.1.1">SMB 3.1.1 (AES-128-GCM)</option>
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">SMB 3.x enables encryption</p>
+          </div>
+          <div className="flex items-center">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.require_signing}
+                onChange={(e) => handleChange('require_signing', e.target.checked)}
+                disabled={!isAdmin}
+                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary disabled:opacity-50"
+              />
+              <div>
+                <span className="text-sm font-medium">Require Message Signing</span>
+                <p className="text-xs text-muted-foreground">Protects against MITM attacks</p>
+              </div>
+            </label>
+          </div>
         </div>
       </div>
 

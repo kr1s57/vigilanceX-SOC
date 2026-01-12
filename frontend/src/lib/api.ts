@@ -934,6 +934,9 @@ export interface StorageSMBConfig {
   password: string
   domain: string
   base_path: string
+  // Security options (v3.51)
+  require_signing: boolean
+  min_version: string  // "3.0", "3.0.2", "3.1.1"
 }
 
 export interface StorageArchiveConfig {
