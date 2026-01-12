@@ -9,14 +9,16 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ## [3.51.100] - 2026-01-12
 
-### SMTP/SMB Auto-Reconnect & Detect2Ban Immunity
+### SMTP/SMB Auto-Reconnect, Detect2Ban Immunity & Ban History Modal
 
-Correction de la reconnexion automatique des services SMTP et SMB au démarrage, et ajout du système d'immunité pour Detect2Ban.
+Correction de la reconnexion automatique des services SMTP et SMB au démarrage, ajout du système d'immunité pour Detect2Ban, et affichage de l'historique des bans dans le modal IP.
 
 #### Nouvelles Fonctionnalités
 
 | Feature | Description |
 |---------|-------------|
+| **Ban History Modal** | Section "Ban History" dans IPThreatModal avec timeline des événements |
+| **Whitelist Badge** | Badge affichant le statut whitelist (Hard/Soft/Monitor) dans le modal |
 | Unban 24h | Bouton pour débannir avec 24h d'immunité contre l'auto-ban |
 | Immunity System | Champ `immune_until` pour protéger les IPs des faux positifs |
 | Quick Install Link | Lien vers le wiki dans README.md |
@@ -31,6 +33,9 @@ Correction de la reconnexion automatique des services SMTP et SMB au démarrage,
 | Detect2Ban EventCount | Type corrigé int64 → uint64 (ClickHouse UInt64) |
 | Detect2Ban Query | Ajout préfixe database `vigilance_x.events` |
 | WAF Scenario | Suppression condition `action=drop` (events ont `action=unknown`) |
+| Ban History API | Correction endpoint `/bans/{ip}/history` (était `/bans/history/{ip}`) |
+| Ban History Scan | Fix types ClickHouse UInt32/UInt8 → Go uint32/uint8 avec conversion |
+| Ban History Query | COALESCE pour Nullable(duration_hours) et source |
 
 #### Documentation
 
@@ -42,21 +47,27 @@ Correction de la reconnexion automatique des services SMTP et SMB au démarrage,
 
 **Backend:**
 - `cmd/api/main.go` - Auto-connect SMB/SMTP on startup, entity import
-- `internal/entity/ban.go` - ImmuneUntil field, IsImmune() method, BanActionUnbanImmunity
-- `internal/adapter/repository/clickhouse/bans_repo.go` - immune_until queries
-- `internal/usecase/bans/service.go` - UnbanIP with ImmunityHours
+- `internal/entity/ban.go` - BanHistory simplifié, ImmuneUntil, IsImmune(), BanActionUnbanImmunity
+- `internal/adapter/repository/clickhouse/bans_repo.go` - GetBanHistory avec COALESCE et scan uint32/uint8
+- `internal/usecase/bans/service.go` - UnbanIP with ImmunityHours, suppression CreatedAt
 - `internal/usecase/detect2ban/engine.go` - Immunity check, EventCount uint64, DB prefix
-- `internal/adapter/controller/http/handlers/bans.go` - immunity_hours query param
+- `internal/adapter/controller/http/handlers/bans.go` - immunity_hours param, logging history
 
 **Frontend:**
+- `src/components/IPThreatModal.tsx` - Section Ban History, badge Whitelist status
 - `src/pages/ActiveBans.tsx` - Bouton "Unban 24h"
-- `src/lib/api.ts` - bansApi.delete avec immunityHours
+- `src/lib/api.ts` - Fix endpoint history, bansApi.delete avec immunityHours
+- `src/types/index.ts` - BanHistory avec source, synced_xgs, actions étendues
+
+**Database:**
+- `docker/clickhouse/init-db.sql` - Colonnes source, synced_xgs dans ban_history
 
 #### API Changes
 
 | Endpoint | Change |
 |----------|--------|
 | `DELETE /api/v1/bans/{ip}` | Nouveau param `?immunity_hours=24` |
+| `GET /api/v1/bans/{ip}/history` | Retourne historique des ban/unban avec timestamps |
 
 ---
 

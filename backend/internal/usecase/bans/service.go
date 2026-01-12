@@ -309,7 +309,6 @@ func (s *Service) BanIP(ctx context.Context, req *entity.BanRequest) (*entity.Ba
 		Source:        "manual",
 		PerformedBy:   req.PerformedBy,
 		SyncedXGS:     false,
-		CreatedAt:     now,
 	}
 
 	if err := s.repo.RecordBanHistory(ctx, history); err != nil {
@@ -371,7 +370,6 @@ func (s *Service) UnbanIP(ctx context.Context, req *entity.UnbanRequest) error {
 		Source:        "manual",
 		PerformedBy:   req.PerformedBy,
 		SyncedXGS:     false,
-		CreatedAt:     now,
 	}
 
 	if err := s.repo.RecordBanHistory(ctx, history); err != nil {
@@ -419,7 +417,6 @@ func (s *Service) ExtendBan(ctx context.Context, req *entity.ExtendBanRequest) (
 		DurationHours: req.DurationDays * 24,
 		Source:        "manual",
 		PerformedBy:   req.PerformedBy,
-		CreatedAt:     now,
 	}
 
 	if err := s.repo.RecordBanHistory(ctx, history); err != nil {
@@ -458,7 +455,6 @@ func (s *Service) MakePermanent(ctx context.Context, ip, performedBy string) (*e
 		Reason:      "Escalated to permanent ban",
 		Source:      "manual",
 		PerformedBy: performedBy,
-		CreatedAt:   now,
 	}
 
 	if err := s.repo.RecordBanHistory(ctx, history); err != nil {
@@ -568,7 +564,6 @@ func (s *Service) SyncToXGS(ctx context.Context) (*SyncResult, error) {
 			Reason:    "Imported from Sophos XGS",
 			Source:    "xgs_import",
 			SyncedXGS: true,
-			CreatedAt: now,
 		}
 		s.repo.RecordBanHistory(ctx, history)
 
@@ -614,7 +609,6 @@ func (s *Service) SyncToXGS(ctx context.Context) (*SyncResult, error) {
 				Reason:    "Unbanned by XGS",
 				Source:    "xgs_reconcile",
 				SyncedXGS: true,
-				CreatedAt: now,
 			}
 			s.repo.RecordBanHistory(ctx, history)
 
@@ -701,11 +695,10 @@ func (s *Service) ProcessExpiredBans(ctx context.Context) (int, error) {
 
 		// Record history
 		history := &entity.BanHistory{
-			IP:        ban.IP,
-			Action:    entity.BanActionExpire,
-			Reason:    "Ban expired",
-			Source:    "system",
-			CreatedAt: time.Now(),
+			IP:     ban.IP,
+			Action: entity.BanActionExpire,
+			Reason: "Ban expired",
+			Source: "system",
 		}
 		s.repo.RecordBanHistory(ctx, history)
 

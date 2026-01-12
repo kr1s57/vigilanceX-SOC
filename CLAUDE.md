@@ -547,12 +547,94 @@ docker compose restart api     # Restart service
 ### Workflow Git (gitgo)
 
 Quand l'utilisateur dit "gitgo":
+
+**Etape 1 - Repo Private (origin):**
 1. `git status` - Verifier les changements
 2. `git add .` - Ajouter les fichiers
 3. `git commit` - Commit avec message descriptif
-4. `git push` - Pousser vers origin
+4. `git push origin main` - Pousser vers origin (private)
 5. Mettre a jour CHANGELOG.md si nouvelle version
-6. Mettre a jour README.md si nouvelles fonctionnalites
+6. Mettre a jour CLAUDE.md si nouvelles fonctionnalites
+
+**Etape 2 - Repo Public (vigilanceX-SOC):**
+7. Synchroniser vers public avec protection IP (voir regles ci-dessous)
+8. `git push public main` - Pousser vers public
+
+---
+
+### Protection Propriete Intellectuelle (IMPORTANT)
+
+**Strategie 2 repos:**
+
+| Repo | Visibilite | Contenu | Audience |
+|------|------------|---------|----------|
+| **vigilanceX** (private) | Interne | Code source + Full docs techniques | Developpeurs |
+| **vigilanceX-SOC** (public) | Client | Code + README client only | Clients/Admins |
+
+**Repo PRIVATE (vigilanceX) - Documentation complete:**
+- CLAUDE.md - Memoire technique complete
+- CHANGELOG.md - Historique detaille des versions
+- docs/ - Documentation technique complete
+- BUGFIXSESSION/ - Sessions de debug
+- FEATURESPROMPT/ - Prompts de features
+- Tous fichiers .md techniques
+
+**Repo PUBLIC (vigilanceX-SOC) - Protection IP:**
+
+Fichiers a SUPPRIMER/EXCLURE systematiquement:
+- `CLAUDE.md` - Process internes, methodologie
+- `CHANGELOG.md` - Details implementation
+- `DESCRIPTIFDET.md` - Descriptions techniques
+- `RELEASE.md` - Process de release
+- `project.md` - Notes de projet
+- `docs/` - Documentation interne
+- `BUGFIXSESSION/` - Sessions debug
+- `FEATURESPROMPT/` - Prompts features
+
+Fichier UNIQUE a maintenir:
+- `README.md` - Wiki client (voir structure ci-dessous)
+
+**Structure README.md Public (Client-Oriented):**
+```markdown
+# VigilanceX-SOC
+
+## Presentation
+- Description commerciale de VigilanceX
+- Fonctionnalites principales
+- Avantages securite
+
+## Pre-requis
+- Configuration systeme minimale
+- Ports reseau requis
+- Certificats SSL
+
+## Installation
+- Guide deploiement Docker
+- Configuration initiale
+- Premier demarrage
+
+## Configuration Admin VGX
+- Interface web
+- Parametres principaux
+- Integration Sophos XGS
+
+## Maintenance
+- Scripts utilitaires:
+  - reset-password.sh
+  - stop-vgx.sh / start-vgx.sh
+  - update-vgx.sh
+- Logs et diagnostics
+- Backup/Restore
+
+## Support
+- Contact et licence
+```
+
+**Meme regles sur Forgejo local:**
+- `itsadm/vigilanceX` = Master complet (private)
+- `itsadm/vigilanceX-SOC` = Copie client (public)
+
+---
 
 ### Workflow Deploiement (3 environnements)
 
@@ -579,8 +661,8 @@ docker compose up -d backend frontend --force-recreate
 ```
 
 **Synchronisation des 3 repos Git:**
-1. vigilanceX (private): Code source complet
-2. vigilanceX-SOC (public): Deploiement et documentation
+1. vigilanceX (private): Code source complet + full documentation
+2. vigilanceX-SOC (public): Code + README client uniquement
 3. vigilanceKey (private): Serveur de licences
 
 A chaque release, creer les GitHub Releases via API pour afficher "Latest".
@@ -880,6 +962,12 @@ tail -f /tmp/claude-hooks.log
 - Detect2Ban verifie immunite avant de re-bannir
 - API: `DELETE /api/v1/bans/{ip}?immunity_hours=24`
 - Frontend: Bouton bleu "Unban 24h" dans Active Bans
+- **Ban History Modal**: Section historique des bans dans IPThreatModal
+- Affiche tous les evenements: ban, unban, unban_immunity, extend, permanent, expire
+- Icones colorees par type d'action (rouge=ban, vert=unban, bleu=immunity, etc.)
+- Nouveau badge Whitelist (Hard/Soft/Monitor) dans le modal
+- **Fix API Endpoint**: `/bans/${ip}/history` (etait `/bans/history/${ip}`)
+- **Fix ClickHouse Types**: UInt32 → uint32, UInt8 → uint8 pour scan correct
 - **Fix Detect2Ban**: EventCount int64 → uint64 (ClickHouse UInt64)
 - **Fix Detect2Ban**: Query `FROM events` → `FROM vigilance_x.events`
 - **Fix WAF Scenario**: Remove action=drop condition (events have action=unknown)

@@ -205,7 +205,7 @@ func (r *BansRepository) RecordBanHistory(ctx context.Context, history *entity.B
 	query := `
 		INSERT INTO ban_history (
 			ip, action, reason, duration_hours, source,
-			performed_by, synced_xgs, created_at
+			performed_by, synced_xgs, timestamp
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
@@ -233,11 +233,13 @@ func (r *BansRepository) GetBanHistory(ctx context.Context, ip string, limit int
 
 	query := `
 		SELECT
-			ip, action, reason, duration_hours, source,
-			performed_by, synced_xgs, created_at
+			id, timestamp, ip, action, reason,
+			COALESCE(duration_hours, 0) as duration_hours,
+			COALESCE(source, 'manual') as source,
+			performed_by, synced_xgs
 		FROM ban_history
 		WHERE ip = ?
-		ORDER BY created_at DESC
+		ORDER BY timestamp DESC
 		LIMIT ?
 	`
 
@@ -250,18 +252,23 @@ func (r *BansRepository) GetBanHistory(ctx context.Context, ip string, limit int
 	var history []entity.BanHistory
 	for rows.Next() {
 		var h entity.BanHistory
+		var durationHours uint32
+		var syncedXGS uint8
 		if err := rows.Scan(
+			&h.ID,
+			&h.Timestamp,
 			&h.IP,
 			&h.Action,
 			&h.Reason,
-			&h.DurationHours,
+			&durationHours,
 			&h.Source,
 			&h.PerformedBy,
-			&h.SyncedXGS,
-			&h.CreatedAt,
+			&syncedXGS,
 		); err != nil {
 			return nil, fmt.Errorf("scan history row: %w", err)
 		}
+		h.DurationHours = int(durationHours)
+		h.SyncedXGS = syncedXGS == 1
 		history = append(history, h)
 	}
 

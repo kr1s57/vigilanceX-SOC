@@ -13,10 +13,15 @@ import {
   Target,
   Radio,
   Ban,
+  History,
+  Clock,
+  Shield,
+  ShieldCheck,
+  ShieldX,
 } from 'lucide-react'
-import { threatsApi, bansApi } from '@/lib/api'
+import { threatsApi, bansApi, softWhitelistApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, cn } from '@/lib/utils'
-import type { ThreatScore } from '@/types'
+import type { ThreatScore, BanHistory, WhitelistCheckResult } from '@/types'
 
 // Threat level colors
 const threatLevelColors: Record<string, { bg: string; text: string; border: string }> = {
@@ -42,6 +47,8 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
   const [banning, setBanning] = useState(false)
   const [isBanned, setIsBanned] = useState(false)
   const [banStatus, setBanStatus] = useState<string | null>(null)
+  const [banHistory, setBanHistory] = useState<BanHistory[]>([])
+  const [whitelistStatus, setWhitelistStatus] = useState<WhitelistCheckResult | null>(null)
 
   const handleBanIP = async () => {
     if (!ip) return
@@ -67,18 +74,30 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
       setError(null)
       setIsBanned(false)
       setBanStatus(null)
+      setBanHistory([])
+      setWhitelistStatus(null)
 
-      // Fetch both threat score and ban status in parallel
+      // Fetch threat score, ban status, ban history, and whitelist status in parallel
       Promise.all([
         threatsApi.score(ip).catch(() => null),
-        bansApi.get(ip).catch(() => null)
-      ]).then(([scoreData, banData]) => {
+        bansApi.get(ip).catch(() => null),
+        bansApi.history(ip).catch(() => []),
+        softWhitelistApi.check(ip).catch(() => null)
+      ]).then(([scoreData, banData, historyData, whitelistData]) => {
         if (scoreData) setScore(scoreData)
         else setError('Score not found in database')
 
         if (banData && (banData.status === 'active' || banData.status === 'permanent')) {
           setIsBanned(true)
           setBanStatus(banData.status)
+        }
+
+        if (historyData && historyData.length > 0) {
+          setBanHistory(historyData)
+        }
+
+        if (whitelistData) {
+          setWhitelistStatus(whitelistData)
         }
       }).finally(() => setLoading(false))
     }
@@ -401,6 +420,24 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                       {banStatus === 'permanent' ? 'Permanent Ban' : 'Active Ban'}
                     </span>
                   )}
+                  {whitelistStatus?.is_whitelisted && (
+                    <span className={cn(
+                      'inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full font-medium',
+                      whitelistStatus.effective_type === 'hard'
+                        ? 'bg-green-500/20 text-green-500'
+                        : whitelistStatus.effective_type === 'soft'
+                        ? 'bg-blue-500/20 text-blue-500'
+                        : 'bg-gray-500/20 text-gray-500'
+                    )}>
+                      <ShieldCheck className="w-3 h-3" />
+                      {whitelistStatus.effective_type === 'hard' ? 'Hard Whitelist' :
+                       whitelistStatus.effective_type === 'soft' ? 'Soft Whitelist' :
+                       'Monitor Only'}
+                      {whitelistStatus.effective_type === 'soft' && whitelistStatus.score_modifier > 0 && (
+                        <span className="ml-1">(-{whitelistStatus.score_modifier}%)</span>
+                      )}
+                    </span>
+                  )}
                   {score.is_tor && (
                     <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-purple-500/10 text-purple-500">
                       <Globe className="w-3 h-3" />
@@ -464,6 +501,69 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                   </div>
                 </div>
               </div>
+
+              {/* Ban History Section */}
+              {banHistory.length > 0 && (
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <History className="w-4 h-4 text-muted-foreground" />
+                    <span className="font-medium">Ban History</span>
+                    <span className="text-xs text-muted-foreground">({banHistory.length} events)</span>
+                  </div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {banHistory.map((entry) => {
+                      // Determine icon and color based on action
+                      const actionConfig: Record<string, { icon: typeof Ban; color: string; label: string }> = {
+                        ban: { icon: Ban, color: 'text-red-500 bg-red-500/10', label: 'Banned' },
+                        unban: { icon: ShieldCheck, color: 'text-green-500 bg-green-500/10', label: 'Unbanned' },
+                        unban_immunity: { icon: Shield, color: 'text-blue-500 bg-blue-500/10', label: 'Unbanned (24h immunity)' },
+                        extend: { icon: Clock, color: 'text-orange-500 bg-orange-500/10', label: 'Extended' },
+                        permanent: { icon: ShieldX, color: 'text-purple-500 bg-purple-500/10', label: 'Made Permanent' },
+                        expire: { icon: ShieldOff, color: 'text-gray-500 bg-gray-500/10', label: 'Expired' },
+                      }
+                      const config = actionConfig[entry.action] || { icon: History, color: 'text-gray-500 bg-gray-500/10', label: entry.action }
+                      const Icon = config.icon
+
+                      return (
+                        <div key={entry.id} className="flex items-start gap-3 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                          <div className={cn('p-1.5 rounded', config.color.split(' ')[1])}>
+                            <Icon className={cn('w-3.5 h-3.5', config.color.split(' ')[0])} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={cn('font-medium', config.color.split(' ')[0])}>{config.label}</span>
+                              {entry.synced_xgs && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">XGS Synced</span>
+                              )}
+                              {entry.source && entry.source !== 'manual' && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{entry.source}</span>
+                              )}
+                            </div>
+                            {entry.reason && (
+                              <p className="text-xs text-muted-foreground truncate" title={entry.reason}>{entry.reason}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                              <span>{formatDateTime(entry.timestamp)}</span>
+                              {entry.performed_by && (
+                                <>
+                                  <span>•</span>
+                                  <span>by {entry.performed_by}</span>
+                                </>
+                              )}
+                              {entry.duration_hours && entry.duration_hours > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span>{entry.duration_hours}h</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* External Links */}
               <div className="flex flex-wrap gap-2 pt-2 border-t">

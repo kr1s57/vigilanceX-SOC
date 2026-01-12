@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -72,10 +73,13 @@ func (h *BansHandler) History(w http.ResponseWriter, r *http.Request) {
 
 	history, err := h.service.GetHistory(ctx, ip, 50)
 	if err != nil {
+		// Log the actual error for debugging
+		log.Printf("[ERROR] Failed to fetch ban history for %s: %v", ip, err)
 		ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch history", err)
 		return
 	}
 
+	log.Printf("[DEBUG] Ban history for %s: %d entries", ip, len(history))
 	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": history})
 }
 

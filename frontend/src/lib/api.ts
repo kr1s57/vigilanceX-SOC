@@ -175,9 +175,8 @@ export const bansApi = {
     return response.data.data
   },
 
-  history: async (ip?: string) => {
-    const url = ip ? `/bans/history/${ip}` : '/bans/history'
-    const response = await api.get<{ data: BanHistory[] }>(url)
+  history: async (ip: string) => {
+    const response = await api.get<{ data: BanHistory[] }>(`/bans/${ip}/history`)
     return response.data.data
   },
 

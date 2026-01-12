@@ -233,12 +233,14 @@ CREATE TABLE IF NOT EXISTS ban_history (
     id UUID DEFAULT generateUUIDv4(),
     timestamp DateTime DEFAULT now(),
     ip IPv4,
-    action LowCardinality(String),            -- ban, unban, extend, permanent
+    action LowCardinality(String),            -- ban, unban, unban_immunity, extend, permanent, expire
     previous_status String,
     new_status String,
     duration_hours Nullable(UInt32),
     reason String,
+    source LowCardinality(String) DEFAULT 'manual',  -- manual, detect2ban, threat_intel, policy
     performed_by String,
+    synced_xgs UInt8 DEFAULT 0,               -- 1 = synced to Sophos XGS
     metadata String                           -- JSON additionnel
 )
 ENGINE = MergeTree()

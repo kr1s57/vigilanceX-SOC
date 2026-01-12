@@ -27,19 +27,15 @@ type BanStatus struct {
 
 // BanHistory represents a ban/unban action in the audit trail
 type BanHistory struct {
-	ID             uuid.UUID `json:"id" ch:"id"`
-	Timestamp      time.Time `json:"timestamp" ch:"timestamp"`
-	IP             string    `json:"ip" ch:"ip"`
-	Action         string    `json:"action" ch:"action"`
-	PreviousStatus string    `json:"previous_status" ch:"previous_status"`
-	NewStatus      string    `json:"new_status" ch:"new_status"`
-	DurationHours  int       `json:"duration_hours" ch:"duration_hours"`
-	Reason         string    `json:"reason" ch:"reason"`
-	Source         string    `json:"source" ch:"source"`
-	PerformedBy    string    `json:"performed_by" ch:"performed_by"`
-	SyncedXGS      bool      `json:"synced_xgs" ch:"synced_xgs"`
-	CreatedAt      time.Time `json:"created_at" ch:"created_at"`
-	Metadata       string    `json:"metadata" ch:"metadata"`
+	ID            uuid.UUID `json:"id" ch:"id"`
+	Timestamp     time.Time `json:"timestamp" ch:"timestamp"`
+	IP            string    `json:"ip" ch:"ip"`
+	Action        string    `json:"action" ch:"action"`
+	DurationHours int       `json:"duration_hours" ch:"duration_hours"`
+	Reason        string    `json:"reason" ch:"reason"`
+	Source        string    `json:"source" ch:"source"` // manual, detect2ban, threat_intel, policy
+	PerformedBy   string    `json:"performed_by" ch:"performed_by"`
+	SyncedXGS     bool      `json:"synced_xgs" ch:"synced_xgs"`
 }
 
 // WhitelistEntry represents a whitelisted IP with soft whitelist support (v2.0)

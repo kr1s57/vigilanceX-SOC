@@ -87,12 +87,12 @@ export interface BanHistory {
   id: string
   timestamp: string
   ip: string
-  action: 'ban' | 'unban' | 'extend' | 'permanent'
-  previous_status: string
-  new_status: string
+  action: 'ban' | 'unban' | 'unban_immunity' | 'extend' | 'permanent' | 'expire'
   duration_hours: number | null
   reason: string
+  source: string  // manual, detect2ban, threat_intel, policy
   performed_by: string
+  synced_xgs: boolean
 }
 
 export interface BanStats {
