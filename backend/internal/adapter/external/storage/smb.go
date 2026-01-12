@@ -1,0 +1,384 @@
+package storage
+
+import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/hirochachacha/go-smb2"
+)
+
+// SMBProvider implements the Provider interface for SMB/CIFS storage
+type SMBProvider struct {
+	config       *SMBConfig
+	conn         net.Conn
+	session      *smb2.Session
+	share        *smb2.Share
+	mu           sync.RWMutex
+	status       *Status
+	bytesWritten int64
+	filesWritten int64
+}
+
+// NewSMBProvider creates a new SMB storage provider
+func NewSMBProvider(config *SMBConfig) *SMBProvider {
+	return &SMBProvider{
+		config: config,
+		status: &Status{
+			Type: StorageTypeSMB,
+			Host: config.Host,
+		},
+	}
+}
+
+// Connect establishes connection to the SMB share
+func (p *SMBProvider) Connect(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Close any existing connection
+	if p.share != nil {
+		p.share.Umount()
+	}
+	if p.session != nil {
+		p.session.Logoff()
+	}
+	if p.conn != nil {
+		p.conn.Close()
+	}
+
+	// Determine port
+	port := p.config.Port
+	if port == 0 {
+		port = 445
+	}
+
+	// Connect to SMB server
+	addr := fmt.Sprintf("%s:%d", p.config.Host, port)
+	slog.Info("[STORAGE] Connecting to SMB", "host", p.config.Host, "port", port, "share", p.config.Share)
+
+	dialer := &net.Dialer{
+		Timeout: 10 * time.Second,
+	}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		p.status.LastError = fmt.Sprintf("Connection failed: %v", err)
+		p.status.Connected = false
+		return fmt.Errorf("failed to connect to SMB server: %w", err)
+	}
+	p.conn = conn
+
+	// Create SMB session
+	d := &smb2.Dialer{
+		Initiator: &smb2.NTLMInitiator{
+			User:     p.config.Username,
+			Password: p.config.Password,
+			Domain:   p.config.Domain,
+		},
+	}
+
+	session, err := d.DialContext(ctx, conn)
+	if err != nil {
+		p.conn.Close()
+		p.status.LastError = fmt.Sprintf("SMB auth failed: %v", err)
+		p.status.Connected = false
+		return fmt.Errorf("failed to create SMB session: %w", err)
+	}
+	p.session = session
+
+	// Mount share
+	share, err := session.Mount(p.config.Share)
+	if err != nil {
+		p.session.Logoff()
+		p.conn.Close()
+		p.status.LastError = fmt.Sprintf("Mount failed: %v", err)
+		p.status.Connected = false
+		return fmt.Errorf("failed to mount share: %w", err)
+	}
+	p.share = share
+
+	// Create base path if specified
+	if p.config.BasePath != "" {
+		if err := p.share.MkdirAll(p.config.BasePath, 0755); err != nil {
+			slog.Warn("[STORAGE] Could not create base path", "path", p.config.BasePath, "error", err)
+		}
+	}
+
+	p.status.Connected = true
+	p.status.LastError = ""
+	p.status.Share = p.config.Share
+	p.status.LastSuccess = time.Now()
+
+	slog.Info("[STORAGE] SMB connected successfully", "share", p.config.Share)
+	return nil
+}
+
+// Disconnect closes the SMB connection
+func (p *SMBProvider) Disconnect() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.share != nil {
+		p.share.Umount()
+		p.share = nil
+	}
+	if p.session != nil {
+		p.session.Logoff()
+		p.session = nil
+	}
+	if p.conn != nil {
+		p.conn.Close()
+		p.conn = nil
+	}
+
+	p.status.Connected = false
+	slog.Info("[STORAGE] SMB disconnected")
+	return nil
+}
+
+// IsConnected returns true if connected to SMB
+func (p *SMBProvider) IsConnected() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.share != nil && p.status.Connected
+}
+
+// fullPath returns the full path including base path
+func (p *SMBProvider) fullPath(path string) string {
+	if p.config.BasePath == "" {
+		return path
+	}
+	return filepath.Join(p.config.BasePath, path)
+}
+
+// Write writes data to a file
+func (p *SMBProvider) Write(ctx context.Context, path string, data []byte) error {
+	p.mu.RLock()
+	share := p.share
+	p.mu.RUnlock()
+
+	if share == nil {
+		return fmt.Errorf("not connected to SMB")
+	}
+
+	fullPath := p.fullPath(path)
+
+	// Ensure parent directory exists
+	dir := filepath.Dir(fullPath)
+	if err := share.MkdirAll(dir, 0755); err != nil {
+		slog.Warn("[STORAGE] Could not create directory", "path", dir, "error", err)
+	}
+
+	// Create/overwrite file
+	f, err := share.Create(fullPath)
+	if err != nil {
+		p.mu.Lock()
+		p.status.LastError = fmt.Sprintf("Create failed: %v", err)
+		p.mu.Unlock()
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer f.Close()
+
+	n, err := f.Write(data)
+	if err != nil {
+		p.mu.Lock()
+		p.status.LastError = fmt.Sprintf("Write failed: %v", err)
+		p.mu.Unlock()
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	p.mu.Lock()
+	p.bytesWritten += int64(n)
+	p.filesWritten++
+	p.status.BytesWritten = p.bytesWritten
+	p.status.FilesWritten = p.filesWritten
+	p.status.LastSuccess = time.Now()
+	p.status.LastError = ""
+	p.mu.Unlock()
+
+	slog.Debug("[STORAGE] File written", "path", fullPath, "bytes", n)
+	return nil
+}
+
+// WriteStream writes from a reader to a file
+func (p *SMBProvider) WriteStream(ctx context.Context, path string, reader io.Reader) error {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("failed to read stream: %w", err)
+	}
+	return p.Write(ctx, path, data)
+}
+
+// WriteCompressed writes gzip-compressed data to a file
+func (p *SMBProvider) WriteCompressed(ctx context.Context, path string, data []byte) error {
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+
+	if _, err := gw.Write(data); err != nil {
+		return fmt.Errorf("failed to compress: %w", err)
+	}
+	if err := gw.Close(); err != nil {
+		return fmt.Errorf("failed to close gzip: %w", err)
+	}
+
+	// Add .gz extension if not present
+	if filepath.Ext(path) != ".gz" {
+		path += ".gz"
+	}
+
+	return p.Write(ctx, path, buf.Bytes())
+}
+
+// Read reads a file and returns its contents
+func (p *SMBProvider) Read(ctx context.Context, path string) ([]byte, error) {
+	p.mu.RLock()
+	share := p.share
+	p.mu.RUnlock()
+
+	if share == nil {
+		return nil, fmt.Errorf("not connected to SMB")
+	}
+
+	fullPath := p.fullPath(path)
+	f, err := share.Open(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	return io.ReadAll(f)
+}
+
+// Delete removes a file
+func (p *SMBProvider) Delete(ctx context.Context, path string) error {
+	p.mu.RLock()
+	share := p.share
+	p.mu.RUnlock()
+
+	if share == nil {
+		return fmt.Errorf("not connected to SMB")
+	}
+
+	fullPath := p.fullPath(path)
+	return share.Remove(fullPath)
+}
+
+// List lists files in a directory
+func (p *SMBProvider) List(ctx context.Context, path string) ([]FileInfo, error) {
+	p.mu.RLock()
+	share := p.share
+	p.mu.RUnlock()
+
+	if share == nil {
+		return nil, fmt.Errorf("not connected to SMB")
+	}
+
+	fullPath := p.fullPath(path)
+	entries, err := share.ReadDir(fullPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list directory: %w", err)
+	}
+
+	var files []FileInfo
+	for _, entry := range entries {
+		files = append(files, FileInfo{
+			Name:         entry.Name(),
+			Path:         filepath.Join(path, entry.Name()),
+			Size:         entry.Size(),
+			IsDir:        entry.IsDir(),
+			ModifiedTime: entry.ModTime(),
+		})
+	}
+
+	return files, nil
+}
+
+// Exists checks if a file exists
+func (p *SMBProvider) Exists(ctx context.Context, path string) (bool, error) {
+	p.mu.RLock()
+	share := p.share
+	p.mu.RUnlock()
+
+	if share == nil {
+		return false, fmt.Errorf("not connected to SMB")
+	}
+
+	fullPath := p.fullPath(path)
+	_, err := share.Stat(fullPath)
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+// MkdirAll creates a directory and all parent directories
+func (p *SMBProvider) MkdirAll(ctx context.Context, path string) error {
+	p.mu.RLock()
+	share := p.share
+	p.mu.RUnlock()
+
+	if share == nil {
+		return fmt.Errorf("not connected to SMB")
+	}
+
+	fullPath := p.fullPath(path)
+	return share.MkdirAll(fullPath, 0755)
+}
+
+// GetStatus returns the current status
+func (p *SMBProvider) GetStatus() *Status {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	return &Status{
+		Type:         StorageTypeSMB,
+		Connected:    p.status.Connected,
+		Host:         p.status.Host,
+		Share:        p.status.Share,
+		LastError:    p.status.LastError,
+		LastSuccess:  p.status.LastSuccess,
+		BytesWritten: p.bytesWritten,
+		FilesWritten: p.filesWritten,
+	}
+}
+
+// Type returns the storage type
+func (p *SMBProvider) Type() StorageType {
+	return StorageTypeSMB
+}
+
+// TestConnection tests the SMB connection with a write/read/delete cycle
+func (p *SMBProvider) TestConnection(ctx context.Context) error {
+	testFile := fmt.Sprintf(".vigilancex_test_%d.tmp", time.Now().UnixNano())
+	testData := []byte("VIGILANCE X Storage Test")
+
+	// Write
+	if err := p.Write(ctx, testFile, testData); err != nil {
+		return fmt.Errorf("write test failed: %w", err)
+	}
+
+	// Read
+	data, err := p.Read(ctx, testFile)
+	if err != nil {
+		return fmt.Errorf("read test failed: %w", err)
+	}
+
+	if string(data) != string(testData) {
+		return fmt.Errorf("data mismatch")
+	}
+
+	// Delete
+	if err := p.Delete(ctx, testFile); err != nil {
+		return fmt.Errorf("delete test failed: %w", err)
+	}
+
+	slog.Info("[STORAGE] SMB connection test passed")
+	return nil
+}

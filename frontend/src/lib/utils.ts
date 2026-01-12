@@ -29,6 +29,17 @@ export function formatDateTime(date: string | Date): string {
   })
 }
 
+export function formatDateTimeFull(date: string | Date): string {
+  const d = new Date(date)
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
 export function formatDateOnly(date: string | Date): string {
   const d = new Date(date)
   return d.toLocaleDateString('en-US', {

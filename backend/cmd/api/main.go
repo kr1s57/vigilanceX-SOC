@@ -324,6 +324,13 @@ func main() {
 	threatsHandler.SetBlocklistsService(blocklistsService) // v1.6: Combined risk assessment
 	bansHandler := handlers.NewBansHandler(bansService)
 	detect2banHandler := handlers.NewDetect2BanHandler(detect2banEngine) // v3.51: Detect2Ban control
+
+	// v3.51: Auto-start Detect2Ban engine
+	detect2banCtx, detect2banCancel := context.WithCancel(context.Background())
+	go detect2banEngine.Start(detect2banCtx, 30*time.Second)
+	detect2banHandler.SetAutoStarted(detect2banCtx, detect2banCancel)
+	logger.Info("Detect2Ban engine auto-started", "interval", "30s")
+
 	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
 	reportsHandler := handlers.NewReportsHandler(reportsService, notificationService)
 	blocklistsHandler := handlers.NewBlocklistsHandler(blocklistsService)

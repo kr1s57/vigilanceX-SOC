@@ -70,8 +70,44 @@ Ces mesures seraient requises uniquement si exposition Internet:
 - **Policies de bans**: Logique de decision non finalisee
 - **Detect2Ban engine**: Scenarios YAML a completer
 - **Recidivisme automatique**: A configurer selon besoins
+- **Storage SMB/S3**: Interface prete, tests a valider (v3.50)
 
 > **Note**: Ne pas modifier la logique des bans sans consultation prealable.
+
+### Storage External (v3.50 - Preparation)
+
+Archivage des logs vers stockage externe SMB/S3.
+
+| Composant | Fichier | Status |
+|-----------|---------|--------|
+| Provider Interface | `internal/adapter/external/storage/provider.go` | Ready |
+| SMB Client | `internal/adapter/external/storage/smb.go` | Ready |
+| Storage Manager | `internal/adapter/external/storage/manager.go` | Ready |
+| HTTP Handlers | `internal/adapter/controller/http/handlers/storage.go` | Ready |
+| Settings UI | `frontend/src/pages/Settings.tsx` | Ready |
+| API Client | `frontend/src/lib/api.ts` | Ready |
+| Risk Analysis | `docs/STORAGE-SMB-RISK.md` | Done |
+
+**Dependance requise**: `github.com/hirochachacha/go-smb2`
+
+**Endpoints API**:
+```
+GET    /api/v1/storage/config   # Get configuration
+PUT    /api/v1/storage/config   # Update configuration
+PUT    /api/v1/storage/smb      # Update SMB config
+GET    /api/v1/storage/status   # Get connection status
+POST   /api/v1/storage/test     # Test SMB connection
+POST   /api/v1/storage/connect  # Connect to storage
+POST   /api/v1/storage/disconnect # Disconnect
+POST   /api/v1/storage/enable   # Enable archiving
+POST   /api/v1/storage/disable  # Disable archiving
+```
+
+**Prochaines etapes**:
+1. Ajouter `go-smb2` au go.mod
+2. Wirer les routes dans main.go
+3. Tester connexion SMB
+4. Valider archivage logs
 
 ---
 

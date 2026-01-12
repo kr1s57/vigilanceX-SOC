@@ -1,66 +1,38 @@
 # VIGILANCE X - Detect2Ban Scenario
 # Brute Force Attack Detection
+# Format compatible with engine.go loader
 
 name: brute_force
-description: Detect and ban IPs performing brute force attacks
+description: Detect and ban IPs performing brute force attacks (10+ auth failures in 10 minutes)
 enabled: true
-priority: 5  # Higher priority than WAF attacks
+cooldown: "30m"
 
-window: 10  # 10 minute window
-
+# Conditions that must be met (AND logic)
 conditions:
-  - type: log_type
+  - field: log_type
     operator: in
-    values:
+    value:
       - VPN
       - WAF
       - Firewall
 
-  # Focus on authentication failures
-  - type: category
+  - field: category
     operator: in
-    values:
+    value:
       - Auth Failure
       - Brute Force
       - Login Failure
 
-  # OR message contains specific patterns
-  - type: message
-    operator: contains_any
-    values:
-      - "authentication failed"
-      - "login failed"
-      - "invalid password"
-      - "invalid credentials"
-      - "access denied"
+# Aggregation - count events per source IP
+aggregation:
+  group_by: src_ip
+  window: "10m"
+  threshold: 10
 
-  # Minimum failures
-  - type: count
-    operator: gte
-    value: 10
-
-group_by:
-  - src_ip
-
-scoring:
-  base_score: 30
-  per_event_score: 3
-  max_additional_score: 50
-
-actions:
-  - type: check_whitelist
-    params:
-      skip_if_whitelisted: true
-
-  - type: ban
-    params:
-      reason: "Brute Force: Multiple authentication failures"
-      use_progressive_duration: true
-      sync_sophos: true
-
-  - type: log
-    params:
-      level: error
-      message: "Brute force attack detected and blocked"
-
-cooldown: 30
+# Action to execute when conditions are met
+action:
+  type: ban
+  duration: "4h"
+  validate_threat: false
+  threat_threshold: 0
+  reason: "Brute Force: Multiple authentication failures ({count} attempts in 10 min)"

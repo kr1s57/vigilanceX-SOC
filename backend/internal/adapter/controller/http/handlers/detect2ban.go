@@ -27,6 +27,16 @@ func NewDetect2BanHandler(engine *detect2ban.Engine) *Detect2BanHandler {
 	}
 }
 
+// SetAutoStarted marks the engine as auto-started (called from main.go)
+// This syncs the handler state with the externally started engine
+func (h *Detect2BanHandler) SetAutoStarted(ctx context.Context, cancel context.CancelFunc) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.ctx = ctx
+	h.cancelFunc = cancel
+	h.running = true
+}
+
 // Detect2BanStatus represents the engine status response
 type Detect2BanStatus struct {
 	Enabled         bool     `json:"enabled"`

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, RefreshCw, Wifi, WifiOff, Server, ServerOff, AlertTriangle, X } from 'lucide-react'
+import { Bell, RefreshCw, Wifi, WifiOff, Server, ServerOff, AlertTriangle, X, Shield, ShieldOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWebSocket, useRealtimeEvents } from '@/hooks/useWebSocket'
-import { statusApi, alertsApi } from '@/lib/api'
+import { statusApi, alertsApi, detect2banApi, type Detect2BanStatus } from '@/lib/api'
 import type { SyslogStatus, CriticalAlert } from '@/types'
 
 export function Header() {
@@ -11,6 +11,7 @@ export function Header() {
   const { isConnected } = useWebSocket()
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const [syslogStatus, setSyslogStatus] = useState<SyslogStatus | null>(null)
+  const [d2bStatus, setD2bStatus] = useState<Detect2BanStatus | null>(null)
   const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlert[]>([])
   const [readAlertIds, setReadAlertIds] = useState<Set<string>>(new Set())
   const [showNotifications, setShowNotifications] = useState(false)
@@ -21,7 +22,7 @@ export function Header() {
     setLastUpdate(new Date())
   })
 
-  // Fetch syslog status and critical alerts
+  // Fetch syslog status, D2B status, and critical alerts
   useEffect(() => {
     async function fetchStatus() {
       try {
@@ -33,6 +34,14 @@ export function Header() {
         setCriticalAlerts(alerts.data || [])
       } catch (err) {
         console.error('Failed to fetch status:', err)
+      }
+
+      // Fetch D2B status separately (requires auth, may fail)
+      try {
+        const d2b = await detect2banApi.getStatus()
+        setD2bStatus(d2b)
+      } catch {
+        // D2B status requires auth, ignore errors
       }
     }
 
@@ -135,6 +144,24 @@ export function Header() {
               <span>Syslog Off</span>
             </>
           )}
+        </div>
+
+        {/* Detect2Ban status */}
+        <div
+          className={cn(
+            'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm cursor-help',
+            d2bStatus?.running
+              ? 'bg-green-500/10 text-green-500'
+              : 'bg-red-500/10 text-red-500'
+          )}
+          title={d2bStatus ? `Detect2Ban: ${d2bStatus.running ? 'Active' : 'Disabled'} - ${d2bStatus.scenario_count} scenarios loaded` : 'Detect2Ban status unknown'}
+        >
+          {d2bStatus?.running ? (
+            <Shield className="w-4 h-4" />
+          ) : (
+            <ShieldOff className="w-4 h-4" />
+          )}
+          <span>D2B</span>
         </div>
 
         {/* Last update */}

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye, Ban, Loader2 } from 'lucide-react'
 import { modsecApi, bansApi } from '@/lib/api'
-import { formatDateTime, getCountryFlag, getCountryName } from '@/lib/utils'
+import { formatDateTime, formatDateTimeFull, getCountryFlag, getCountryName } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
 
@@ -341,7 +341,7 @@ export function WafExplorer() {
           )}
         </td>
         <td className="whitespace-nowrap">
-          <span className="text-sm">{formatDateTime(request.timestamp)}</span>
+          <span className="text-sm font-mono">{formatDateTimeFull(request.timestamp)}</span>
         </td>
         <td>
           <div className="flex flex-col">
@@ -356,12 +356,16 @@ export function WafExplorer() {
           </div>
         </td>
         <td>
-          <div className="max-w-[200px]">
-            <span className="text-sm font-medium">{request.hostname || 'Unknown'}</span>
-            {request.uri && (
-              <p className="text-xs text-muted-foreground truncate" title={request.uri}>
+          <span className="text-sm font-medium">{request.hostname || 'Unknown'}</span>
+        </td>
+        <td>
+          <div className="max-w-[250px]">
+            {request.uri ? (
+              <code className="text-xs font-mono text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded block truncate" title={request.uri}>
                 {request.uri}
-              </p>
+              </code>
+            ) : (
+              <span className="text-xs text-muted-foreground">-</span>
             )}
           </div>
         </td>
@@ -430,7 +434,7 @@ export function WafExplorer() {
       {/* Expanded row showing all rules */}
       {expandedRows.has(request.unique_id) && (
         <tr className="bg-muted/30">
-          <td colSpan={8} className="p-4">
+          <td colSpan={9} className="p-4">
             <div className="space-y-3">
               <div className="text-sm font-medium text-muted-foreground mb-2">
                 Detection Chain (unique_id: <code className="text-xs bg-muted px-1 rounded">{request.unique_id}</code>)
@@ -791,6 +795,7 @@ export function WafExplorer() {
                             <th>Time</th>
                             <th>Source IP</th>
                             <th>Target</th>
+                            <th>Path</th>
                             <th>Rules Triggered</th>
                             <th>Score</th>
                             <th>Status</th>
@@ -836,6 +841,7 @@ export function WafExplorer() {
                   <th>Time</th>
                   <th>Source IP</th>
                   <th>Target</th>
+                  <th>Path</th>
                   <th>Rules Triggered</th>
                   <th>Score</th>
                   <th>Status</th>
