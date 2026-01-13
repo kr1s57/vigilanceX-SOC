@@ -525,3 +525,286 @@ func (c *Client) GetSyncStatus() (*SyncStatus, error) {
 
 	return status, nil
 }
+
+// ========== Methods with custom group name (for CrowdSec integration) ==========
+
+// EnsureGroupExists creates a group if it doesn't exist (custom group name)
+func (c *Client) EnsureGroupExists(groupName, description string) error {
+	createReq := &APIRequest{
+		Set: &Set{
+			Operation: "add",
+			IPHostGroup: &IPHostGroup{
+				Name:        groupName,
+				Description: description,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(createReq)
+	if err != nil {
+		return fmt.Errorf("failed to create group: %w", err)
+	}
+
+	// Code 502 means already exists, which is OK
+	if resp.Status != nil && resp.Status.Code != 200 && resp.Status.Code != 502 {
+		return fmt.Errorf("API error: %s (code: %d)", resp.Status.Message, resp.Status.Code)
+	}
+
+	return nil
+}
+
+// GetGroupIPs retrieves all IPs in a specific group
+func (c *Client) GetGroupIPs(groupName string) ([]string, error) {
+	getReq := &APIRequest{
+		Get: &Get{
+			IPHostGroup: &IPHostGroupFilter{
+				Name: groupName,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(getReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get group: %w", err)
+	}
+
+	var ips []string
+	for _, group := range resp.IPHostGroup {
+		if group.Name != groupName {
+			continue
+		}
+		for _, hostName := range group.HostList.Host {
+			// Extract IP from various naming conventions
+			if strings.HasPrefix(hostName, "bannedIP_") {
+				ips = append(ips, strings.TrimPrefix(hostName, "bannedIP_"))
+			} else if strings.HasPrefix(hostName, "crowdsec_") {
+				ips = append(ips, strings.TrimPrefix(hostName, "crowdsec_"))
+			} else {
+				// Fallback: check if it looks like an IP
+				ips = append(ips, hostName)
+			}
+		}
+	}
+
+	return ips, nil
+}
+
+// AddIPToGroup adds an IP to a specific group with custom host prefix
+func (c *Client) AddIPToGroup(ip, groupName, hostPrefix string) error {
+	hostName := fmt.Sprintf("%s_%s", hostPrefix, ip)
+
+	// Step 1: Create the IP host object
+	createReq := &APIRequest{
+		Set: &Set{
+			Operation: "add",
+			IPHost: &IPHost{
+				Name:      hostName,
+				IPFamily:  "IPv4",
+				HostType:  "IP",
+				IPAddress: ip,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(createReq)
+	if err != nil {
+		return fmt.Errorf("failed to add IP host: %w", err)
+	}
+
+	// Check for errors (502 = already exists, which is OK)
+	if resp.Status != nil && resp.Status.Code != 200 && resp.Status.Code != 502 {
+		return fmt.Errorf("API error creating host: %s (code: %d)", resp.Status.Message, resp.Status.Code)
+	}
+
+	// Step 2: Get current group members
+	getReq := &APIRequest{
+		Get: &Get{
+			IPHostGroup: &IPHostGroupFilter{
+				Name: groupName,
+			},
+		},
+	}
+
+	resp, err = c.sendRequest(getReq)
+	if err != nil {
+		return fmt.Errorf("failed to get group: %w", err)
+	}
+
+	// Find our group and get current hosts
+	var currentHosts []string
+	for _, group := range resp.IPHostGroup {
+		if group.Name == groupName {
+			currentHosts = group.HostList.Host
+			break
+		}
+	}
+
+	// Check if host is already in group
+	for _, h := range currentHosts {
+		if h == hostName {
+			return nil // Already in group
+		}
+	}
+
+	// Step 3: Update group to add the new host
+	newHosts := append(currentHosts, hostName)
+	updateReq := &APIRequest{
+		Set: &Set{
+			Operation: "update",
+			IPHostGroup: &IPHostGroup{
+				Name: groupName,
+				HostList: &HostList{
+					Host: newHosts,
+				},
+			},
+		},
+	}
+
+	resp, err = c.sendRequest(updateReq)
+	if err != nil {
+		return fmt.Errorf("failed to update group: %w", err)
+	}
+
+	if resp.Status != nil && resp.Status.Code != 200 {
+		return fmt.Errorf("API error updating group: %s (code: %d)", resp.Status.Message, resp.Status.Code)
+	}
+
+	return nil
+}
+
+// RemoveIPFromGroup removes an IP from a specific group
+func (c *Client) RemoveIPFromGroup(ip, groupName, hostPrefix string) error {
+	hostName := fmt.Sprintf("%s_%s", hostPrefix, ip)
+
+	// Step 1: Get current group members
+	getReq := &APIRequest{
+		Get: &Get{
+			IPHostGroup: &IPHostGroupFilter{
+				Name: groupName,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(getReq)
+	if err != nil {
+		return fmt.Errorf("failed to get group: %w", err)
+	}
+
+	// Find our group and get current hosts
+	var currentHosts []string
+	for _, group := range resp.IPHostGroup {
+		if group.Name == groupName {
+			currentHosts = group.HostList.Host
+			break
+		}
+	}
+
+	// Step 2: Remove host from list
+	var newHosts []string
+	found := false
+	for _, h := range currentHosts {
+		if h == hostName {
+			found = true
+			continue
+		}
+		newHosts = append(newHosts, h)
+	}
+
+	if !found {
+		return nil // Not in group
+	}
+
+	// Step 3: Update group with new host list
+	updateReq := &APIRequest{
+		Set: &Set{
+			Operation: "update",
+			IPHostGroup: &IPHostGroup{
+				Name: groupName,
+				HostList: &HostList{
+					Host: newHosts,
+				},
+			},
+		},
+	}
+
+	resp, err = c.sendRequest(updateReq)
+	if err != nil {
+		return fmt.Errorf("failed to update group: %w", err)
+	}
+
+	if resp.Status != nil && resp.Status.Code != 200 {
+		return fmt.Errorf("API error updating group: %s (code: %d)", resp.Status.Message, resp.Status.Code)
+	}
+
+	// Step 4: Delete the IP host object (cleanup)
+	removeReq := &APIRequest{
+		Remove: &Remove{
+			IPHost: &IPHostFilter{
+				Name: hostName,
+			},
+		},
+	}
+
+	c.sendRequest(removeReq) // Ignore errors on cleanup
+
+	return nil
+}
+
+// SyncGroupIPs synchronizes a group to contain exactly the given IPs
+// Returns: (added count, removed count, error)
+func (c *Client) SyncGroupIPs(groupName, hostPrefix string, targetIPs []string) (int, int, error) {
+	// Get current IPs in group
+	currentIPs, err := c.GetGroupIPs(groupName)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get current IPs: %w", err)
+	}
+
+	// Build sets for comparison
+	currentSet := make(map[string]bool)
+	for _, ip := range currentIPs {
+		currentSet[ip] = true
+	}
+
+	targetSet := make(map[string]bool)
+	for _, ip := range targetIPs {
+		targetSet[ip] = true
+	}
+
+	// Find IPs to add
+	var toAdd []string
+	for _, ip := range targetIPs {
+		if !currentSet[ip] {
+			toAdd = append(toAdd, ip)
+		}
+	}
+
+	// Find IPs to remove
+	var toRemove []string
+	for _, ip := range currentIPs {
+		if !targetSet[ip] {
+			toRemove = append(toRemove, ip)
+		}
+	}
+
+	// Perform adds
+	added := 0
+	for _, ip := range toAdd {
+		if err := c.AddIPToGroup(ip, groupName, hostPrefix); err != nil {
+			// Log but continue
+			continue
+		}
+		added++
+	}
+
+	// Perform removes
+	removed := 0
+	for _, ip := range toRemove {
+		if err := c.RemoveIPFromGroup(ip, groupName, hostPrefix); err != nil {
+			// Log but continue
+			continue
+		}
+		removed++
+	}
+
+	return added, removed, nil
+}

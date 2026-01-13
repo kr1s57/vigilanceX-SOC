@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.52.102 | **Derniere mise a jour**: 2026-01-13
+> **Version**: 3.53.101 | **Derniere mise a jour**: 2026-01-13
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -110,6 +110,7 @@ Ces mesures seraient requises uniquement si exposition Internet:
 - Log Retention (cleanup automatique configurable)
 
 ### En Developpement (Coquille)
+- **CrowdSec Blocklist**: Integration 90% complete, tests sync XGS en cours
 - **Policies de bans**: Logique de decision non finalisee
 - **Recidivisme automatique**: A configurer selon besoins
 
@@ -1371,6 +1372,73 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.53.101 (2026-01-13)
+- **abuse.ch Auth-Key Support**: ThreatFox et URLhaus necessitent maintenant un Auth-Key
+  - Nouvelle variable `ABUSECH_API_KEY` (meme cle pour les 2 APIs)
+  - Modifie `ThreatFoxClient` et `URLhausClient` pour ajouter header `Auth-Key`
+  - Corrige le decodage JSON ThreatFox (data peut etre string ou array)
+- **API Tracking Callback Wiring**: Connection aggregator → apiUsageService
+  - Callback `trackAPICall()` ajoute apres chaque appel provider (11 providers)
+  - Compteurs success/errors mis a jour en temps reel dans ClickHouse
+  - `last_success` et `last_error_message` traces par provider
+- **Settings UI - CrowdSec APIs**:
+  - CrowdSec CTI et CrowdSec Blocklist positionnes ensemble
+  - Chaque API editable separement
+- **CrowdSec CTI**: Fonctionne avec la cle `46JAnA7b...`
+- **CrowdSec Blocklist**: Necessite une Service API Key separee (scope Blocklist)
+
+### v3.53.100 (2026-01-13)
+- **API Usage Tracking System**: Tracking quotas et compteurs par provider TI
+- Nouveau systeme de gestion des cles API via Settings UI (pas de cles hardcodees)
+- **Tables ClickHouse** (Migration 010):
+  - `api_provider_config`: Configuration par provider (quota, cle, enabled)
+  - `api_usage_daily`: Compteurs quotidiens success/errors
+  - `api_request_log`: Log detaille des requetes (7 jours TTL)
+- **Backend Components**:
+  - Repository: `internal/adapter/repository/clickhouse/api_usage_repo.go`
+  - Service: `internal/usecase/apiusage/service.go` (cache + quota check)
+  - Handler: `internal/adapter/controller/http/handlers/api_usage.go`
+- **API Endpoints**:
+  - `GET /api/v1/integrations/providers` - Liste tous les providers avec quotas
+  - `GET /api/v1/integrations/providers/{id}` - Status d'un provider
+  - `PUT /api/v1/integrations/providers/{id}` - Update config provider
+- **Frontend Settings.tsx**:
+  - Affichage quota `X / Y /day` pour chaque provider TI
+  - Indicateur erreur orange avec "Last OK: date"
+  - Mapping providers vers plugin ID pour edition
+- **12 Providers Tracked**:
+  | Provider | Quota | Needs API Key |
+  |----------|-------|---------------|
+  | AbuseIPDB | 1000/day | Yes |
+  | VirusTotal | 500/day | Yes |
+  | GreyNoise | 500/day | Yes |
+  | CrowdSec CTI | 50/day | Yes |
+  | Pulsedive | 100/day | Yes |
+  | CriminalIP | 100/day | Yes |
+  | AlienVault OTX | Unlimited | Yes |
+  | IPsum | Unlimited | No |
+  | Shodan InternetDB | Unlimited | No |
+  | ThreatFox | Unlimited | Yes (v3.53.101) |
+  | URLhaus | Unlimited | Yes (v3.53.101) |
+  | CrowdSec Blocklist | Unlimited | Yes (Service Key) |
+
+### v3.52.103 (2026-01-13)
+- **CrowdSec Blocklist Integration**: Synchronisation des blocklists premium vers XGS
+- Nouveau client API CrowdSec Blocklist (`internal/adapter/external/crowdsec/blocklist_client.go`)
+- Service de synchronisation (`internal/usecase/crowdsec/blocklist_service.go`)
+- Handlers HTTP (`internal/adapter/controller/http/handlers/crowdsec_blocklist.go`)
+- Plugin Settings UI (`crowdsec_blocklist` dans Settings.tsx)
+- Groupe XGS dedié: `grp_VGX-CrowdSec` (créé sur XGS)
+- **API Endpoints**:
+  - `GET /api/v1/crowdsec/blocklist/config` - Configuration
+  - `PUT /api/v1/crowdsec/blocklist/config` - Update config (api_key, enabled, enabled_lists)
+  - `POST /api/v1/crowdsec/blocklist/test` - Test connexion API
+  - `GET /api/v1/crowdsec/blocklist/lists` - Liste blocklists (subscribed + available)
+  - `GET /api/v1/crowdsec/blocklist/status` - Status du service
+  - `GET /api/v1/crowdsec/blocklist/history` - Historique syncs
+  - `POST /api/v1/crowdsec/blocklist/sync` - Sync all enabled
+  - `POST /api/v1/crowdsec/blocklist/sync/{id}` - Sync blocklist specifique
 
 ### v3.52.102 (2026-01-13)
 - **Log Retention - Safe by Default**: Auto-cleanup desactive par defaut

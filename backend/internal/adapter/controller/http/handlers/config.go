@@ -20,9 +20,9 @@ type SMTPReloadFunc func(host string, port int, security, fromEmail, username, p
 
 // ConfigHandler handles configuration management
 type ConfigHandler struct {
-	configPath     string
-	mu             sync.RWMutex
-	onSMTPReload   SMTPReloadFunc
+	configPath   string
+	mu           sync.RWMutex
+	onSMTPReload SMTPReloadFunc
 }
 
 // NewConfigHandler creates a new config handler
@@ -160,8 +160,10 @@ func (h *ConfigHandler) testIntegration(pluginID string, fields map[string]strin
 		return h.testSophosAPI(fields)
 	case "sophos_ssh":
 		return h.testSophosSSH(fields)
-	case "abuseipdb", "virustotal", "alienvault", "greynoise", "criminalip", "pulsedive":
+	case "abuseipdb", "virustotal", "alienvault", "greynoise", "crowdsec", "criminalip", "pulsedive":
 		return h.testThreatIntelAPI(pluginID, fields)
+	case "crowdsec_blocklist":
+		return h.testCrowdSecBlocklist(fields)
 	case "smtp":
 		return h.testSMTP(fields)
 	default:
@@ -292,6 +294,9 @@ func (h *ConfigHandler) testThreatIntelAPI(pluginID string, fields map[string]st
 	case "greynoise":
 		apiKey = fields["GREYNOISE_API_KEY"]
 		apiName = "GreyNoise"
+	case "crowdsec":
+		apiKey = fields["CROWDSEC_API_KEY"]
+		apiName = "CrowdSec CTI"
 	case "criminalip":
 		apiKey = fields["CRIMINALIP_API_KEY"]
 		apiName = "Criminal IP"
@@ -375,6 +380,82 @@ func (h *ConfigHandler) testSMTP(fields map[string]string) ConfigTestResponse {
 	return ConfigTestResponse{
 		Success: true,
 		Message: fmt.Sprintf("SMTP server %s reachable (no credentials configured)", address),
+		Status:  "connected",
+	}
+}
+
+// testCrowdSecBlocklist tests CrowdSec Blocklist API connection
+func (h *ConfigHandler) testCrowdSecBlocklist(fields map[string]string) ConfigTestResponse {
+	apiKey := fields["CROWDSEC_BLOCKLIST_API_KEY"]
+
+	if apiKey == "" {
+		return ConfigTestResponse{
+			Success: false,
+			Message: "Blocklist API key is required",
+			Status:  "invalid",
+		}
+	}
+
+	// Basic validation - CrowdSec Service API keys are 64 character hex strings
+	if len(apiKey) < 32 {
+		return ConfigTestResponse{
+			Success: false,
+			Message: "API key appears to be too short (expected 64 characters)",
+			Status:  "invalid",
+		}
+	}
+
+	// Test actual connection to CrowdSec API
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET", "https://admin.api.crowdsec.net/v1/blocklists?page_size=1", nil)
+	if err != nil {
+		return ConfigTestResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to create request: %v", err),
+			Status:  "failed",
+		}
+	}
+
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ConfigTestResponse{
+			Success: false,
+			Message: fmt.Sprintf("Connection failed: %v", err),
+			Status:  "failed",
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return ConfigTestResponse{
+			Success: false,
+			Message: "Invalid API key - check your CrowdSec Service API key",
+			Status:  "failed",
+		}
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return ConfigTestResponse{
+			Success: false,
+			Message: "API key does not have Blocklist read permission",
+			Status:  "failed",
+		}
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return ConfigTestResponse{
+			Success: false,
+			Message: fmt.Sprintf("API error (status %d)", resp.StatusCode),
+			Status:  "failed",
+		}
+	}
+
+	return ConfigTestResponse{
+		Success: true,
+		Message: "CrowdSec Blocklist API connected successfully",
 		Status:  "connected",
 	}
 }

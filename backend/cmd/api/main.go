@@ -14,6 +14,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/http/middleware"
 	"github.com/kr1s57/vigilancex/internal/adapter/controller/ws"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/blocklist"
+	crowdsecext "github.com/kr1s57/vigilancex/internal/adapter/external/crowdsec"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geoip"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/geolocation"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/smtp"
@@ -24,9 +25,11 @@ import (
 	"github.com/kr1s57/vigilancex/internal/config"
 	"github.com/kr1s57/vigilancex/internal/entity"  // v3.51.100: For SMTP config persistence
 	"github.com/kr1s57/vigilancex/internal/license" // v2.9: License system
+	"github.com/kr1s57/vigilancex/internal/usecase/apiusage"
 	"github.com/kr1s57/vigilancex/internal/usecase/auth"
 	"github.com/kr1s57/vigilancex/internal/usecase/bans"
 	"github.com/kr1s57/vigilancex/internal/usecase/blocklists"
+	crowdsecuc "github.com/kr1s57/vigilancex/internal/usecase/crowdsec"
 	"github.com/kr1s57/vigilancex/internal/usecase/detect2ban"
 	"github.com/kr1s57/vigilancex/internal/usecase/events"
 	"github.com/kr1s57/vigilancex/internal/usecase/geoblocking"
@@ -74,11 +77,17 @@ func main() {
 	modsecRepo := clickhouse.NewModSecRepository(chConn, logger)
 	statsRepo := clickhouse.NewStatsRepository(chConn.Conn(), logger)
 	blocklistRepo := clickhouse.NewBlocklistRepository(chConn)
-	geoblockingRepo := clickhouse.NewGeoblockingRepository(chConn) // v2.0: Geoblocking
-	usersRepo := clickhouse.NewUsersRepository(chConn)             // v2.6: Authentication
-	geozoneRepo := clickhouse.NewGeoZoneRepository(chConn)         // v3.52: D2B v2 GeoZone config
-	pendingBansRepo := clickhouse.NewPendingBansRepository(chConn) // v3.52: D2B v2 Pending bans
-	retentionRepo := clickhouse.NewRetentionRepository(chConn)     // v3.52: Log retention settings
+	geoblockingRepo := clickhouse.NewGeoblockingRepository(chConn)             // v2.0: Geoblocking
+	usersRepo := clickhouse.NewUsersRepository(chConn)                         // v2.6: Authentication
+	geozoneRepo := clickhouse.NewGeoZoneRepository(chConn)                     // v3.52: D2B v2 GeoZone config
+	pendingBansRepo := clickhouse.NewPendingBansRepository(chConn)             // v3.52: D2B v2 Pending bans
+	retentionRepo := clickhouse.NewRetentionRepository(chConn)                 // v3.52: Log retention settings
+	crowdsecBlocklistRepo := clickhouse.NewCrowdSecBlocklistRepository(chConn) // v3.53: CrowdSec Blocklist
+	apiUsageRepo := clickhouse.NewAPIUsageRepository(chConn)                   // v3.53: API Usage Tracking
+
+	// v3.53: API Usage Tracking Service
+	apiUsageService := apiusage.NewService(apiUsageRepo)
+	apiUsageHandler := handlers.NewAPIUsageHandler(apiUsageService)
 
 	// v3.0: Initialize License Client with Firewall Binding
 	var licenseClient *license.Client
@@ -147,6 +156,9 @@ func main() {
 	} else {
 		// Local providers mode (v2.9.6: 11 providers with cascade tiers)
 		threatAggregator = threatintel.NewAggregator(threatintel.AggregatorConfig{
+			// Tier 1 providers
+			OTXKey:     cfg.ThreatIntel.AlienVaultKey,
+			AbuseCHKey: cfg.ThreatIntel.AbuseCHKey, // v3.53: ThreatFox + URLhaus
 			// Tier 2 providers (moderate limits)
 			AbuseIPDBKey: cfg.ThreatIntel.AbuseIPDBKey,
 			GreyNoiseKey: cfg.ThreatIntel.GreyNoiseKey,
@@ -155,8 +167,6 @@ func main() {
 			VirusTotalKey: cfg.ThreatIntel.VirusTotalKey,
 			CriminalIPKey: cfg.ThreatIntel.CriminalIPKey,
 			PulsediveKey:  cfg.ThreatIntel.PulsediveKey,
-			// Tier 1: OTX needs key, others (IPSum, ThreatFox, URLhaus, ShodanIDB) are free
-			OTXKey: cfg.ThreatIntel.AlienVaultKey,
 			// Cache settings
 			CacheTTL: cfg.ThreatIntel.CacheTTL,
 			// v2.9.5: Cascade configuration
@@ -167,6 +177,16 @@ func main() {
 			},
 		})
 	}
+
+	// v3.53: Wire API usage tracking callback to threat aggregator
+	threatAggregator.SetTrackingCallback(func(providerID string, success bool, errorMsg string) {
+		ctx := context.Background()
+		if success {
+			apiUsageService.RecordSuccess(ctx, providerID)
+		} else {
+			apiUsageService.RecordError(ctx, providerID, errorMsg)
+		}
+	})
 
 	// Log configured providers
 	providers := threatAggregator.GetConfiguredProviders()
@@ -385,6 +405,20 @@ func main() {
 	retentionService := retention.NewService(retentionRepo, logger)             // v3.52: Log retention service
 	retentionHandler := handlers.NewRetentionHandler(retentionService)          // v3.52: Log retention API
 	_ = pendingBansRepo                                                         // v3.52: Will be used in Phase 2
+
+	// v3.53: CrowdSec Blocklist integration
+	// Load API key from env var first, then fall back to persisted config
+	crowdsecAPIKey := os.Getenv("CROWDSEC_BLOCKLIST_API_KEY")
+	crowdsecBlocklistClient := crowdsecext.NewBlocklistClient(crowdsecext.BlocklistConfig{
+		APIKey: crowdsecAPIKey,
+	})
+	crowdsecBlocklistService := crowdsecuc.NewBlocklistService(crowdsecBlocklistClient, sophosClient, crowdsecBlocklistRepo)
+	// Load persisted config and set API key if not from env
+	if crowdsecConfig, err := crowdsecBlocklistRepo.GetConfig(context.Background()); err == nil && crowdsecConfig.APIKey != "" && crowdsecAPIKey == "" {
+		crowdsecBlocklistClient.SetAPIKey(crowdsecConfig.APIKey)
+		logger.Info("CrowdSec Blocklist API key loaded from persisted config")
+	}
+	crowdsecBlocklistHandler := handlers.NewCrowdSecBlocklistHandler(crowdsecBlocklistService)
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -625,6 +659,25 @@ func main() {
 				r.Get("/status", retentionHandler.GetStatus)
 				r.Get("/storage", retentionHandler.GetStorageStats)
 				r.Post("/cleanup", retentionHandler.RunCleanup)
+			})
+
+			// CrowdSec Blocklist (v3.53 - Premium blocklist sync)
+			r.Route("/crowdsec/blocklist", func(r chi.Router) {
+				r.Get("/config", crowdsecBlocklistHandler.GetConfig)
+				r.Put("/config", crowdsecBlocklistHandler.UpdateConfig)
+				r.Post("/test", crowdsecBlocklistHandler.TestConnection)
+				r.Get("/lists", crowdsecBlocklistHandler.ListBlocklists)
+				r.Get("/status", crowdsecBlocklistHandler.GetStatus)
+				r.Get("/history", crowdsecBlocklistHandler.GetHistory)
+				r.Post("/sync", crowdsecBlocklistHandler.SyncAll)
+				r.Post("/sync/*", crowdsecBlocklistHandler.SyncBlocklist)
+			})
+
+			// API Integrations (v3.53 - Provider status and quota tracking)
+			r.Route("/integrations", func(r chi.Router) {
+				r.Get("/providers", apiUsageHandler.GetAllProviders)
+				r.Get("/providers/*", apiUsageHandler.GetProvider)
+				r.Put("/providers/*", apiUsageHandler.UpdateProvider)
 			})
 
 			// Anomalies

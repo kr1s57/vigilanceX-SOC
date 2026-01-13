@@ -94,6 +94,9 @@ type SophosConfig struct {
 }
 
 type ThreatIntelConfig struct {
+	// Tier 1 providers
+	AlienVaultKey string // AlienVault OTX
+	AbuseCHKey    string // v3.53: abuse.ch Auth-Key (ThreatFox + URLhaus)
 	// Tier 2 providers (moderate limits)
 	AbuseIPDBKey string
 	GreyNoiseKey string
@@ -102,8 +105,6 @@ type ThreatIntelConfig struct {
 	VirusTotalKey string
 	CriminalIPKey string
 	PulsediveKey  string
-	// Tier 1: OTX needs key, others (IPSum, ThreatFox, URLhaus, ShodanIDB) don't
-	AlienVaultKey string
 
 	// Cache settings
 	CacheTTL       time.Duration
@@ -178,6 +179,9 @@ func Load() (*Config, error) {
 			Timeout:        viper.GetDuration("SOPHOS_TIMEOUT"),
 		},
 		ThreatIntel: ThreatIntelConfig{
+			// Tier 1 providers
+			AlienVaultKey: viper.GetString("ALIENVAULT_API_KEY"),
+			AbuseCHKey:    viper.GetString("ABUSECH_API_KEY"), // v3.53: ThreatFox + URLhaus
 			// Tier 2 providers (moderate limits)
 			AbuseIPDBKey: viper.GetString("ABUSEIPDB_API_KEY"),
 			GreyNoiseKey: viper.GetString("GREYNOISE_API_KEY"),
@@ -186,8 +190,6 @@ func Load() (*Config, error) {
 			VirusTotalKey: viper.GetString("VIRUSTOTAL_API_KEY"),
 			CriminalIPKey: viper.GetString("CRIMINALIP_API_KEY"),
 			PulsediveKey:  viper.GetString("PULSEDIVE_API_KEY"),
-			// Tier 1: only OTX needs key
-			AlienVaultKey: viper.GetString("ALIENVAULT_API_KEY"),
 			// Cache settings
 			CacheTTL:       viper.GetDuration("THREAT_INTEL_CACHE_TTL"),
 			RateLimitDelay: viper.GetDuration("THREAT_INTEL_RATE_LIMIT"),
@@ -270,6 +272,9 @@ func bindEnvVars() {
 	viper.BindEnv("SOPHOS_PERMANENT_GROUP")
 	viper.BindEnv("SOPHOS_TIMEOUT")
 
+	// Threat Intel - Tier 1 providers
+	viper.BindEnv("ALIENVAULT_API_KEY")
+	viper.BindEnv("ABUSECH_API_KEY") // v3.53: ThreatFox + URLhaus
 	// Threat Intel - Tier 2 providers (moderate limits)
 	viper.BindEnv("ABUSEIPDB_API_KEY")
 	viper.BindEnv("GREYNOISE_API_KEY")
@@ -278,8 +283,6 @@ func bindEnvVars() {
 	viper.BindEnv("VIRUSTOTAL_API_KEY")
 	viper.BindEnv("CRIMINALIP_API_KEY")
 	viper.BindEnv("PULSEDIVE_API_KEY")
-	// Threat Intel - Tier 1 (only OTX needs key)
-	viper.BindEnv("ALIENVAULT_API_KEY")
 	// Threat Intel - Cache settings
 	viper.BindEnv("THREAT_INTEL_CACHE_TTL")
 	viper.BindEnv("THREAT_INTEL_RATE_LIMIT")

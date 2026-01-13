@@ -10,12 +10,18 @@ import (
 	"time"
 )
 
+// URLhausConfig holds configuration for URLhaus client
+type URLhausConfig struct {
+	APIKey string // Auth-Key from auth.abuse.ch (same as ThreatFox)
+}
+
 // URLhausClient queries abuse.ch URLhaus API for malicious URLs/hosts
-// Free API - no authentication required
+// Requires Auth-Key header (free key from auth.abuse.ch)
 // Tier 1 provider (unlimited)
 type URLhausClient struct {
 	httpClient *http.Client
 	baseURL    string
+	apiKey     string
 }
 
 // URLhausHostResponse represents the host lookup response
@@ -62,18 +68,24 @@ type URLhausResult struct {
 }
 
 // NewURLhausClient creates a new URLhaus client
-func NewURLhausClient() *URLhausClient {
+func NewURLhausClient(cfg URLhausConfig) *URLhausClient {
 	return &URLhausClient{
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 		baseURL: "https://urlhaus-api.abuse.ch/v1/",
+		apiKey:  cfg.APIKey,
 	}
 }
 
-// IsConfigured returns true (URLhaus is always available - no API key needed)
+// IsConfigured returns true if Auth-Key is configured
 func (c *URLhausClient) IsConfigured() bool {
-	return true
+	return c.apiKey != ""
+}
+
+// GetProviderName returns the provider name
+func (c *URLhausClient) GetProviderName() string {
+	return "URLhaus"
 }
 
 // GetTier returns the provider tier (1 = unlimited)
@@ -93,6 +105,7 @@ func (c *URLhausClient) CheckIP(ctx context.Context, ip string) (*URLhausResult,
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Auth-Key", c.apiKey) // Required by abuse.ch
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

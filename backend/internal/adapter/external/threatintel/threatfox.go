@@ -10,18 +10,47 @@ import (
 	"time"
 )
 
+// ThreatFoxConfig holds configuration for ThreatFox client
+type ThreatFoxConfig struct {
+	APIKey string // Auth-Key from auth.abuse.ch
+}
+
 // ThreatFoxClient queries abuse.ch ThreatFox API for IOC data
-// Free API - no authentication required
+// Requires Auth-Key header (free key from auth.abuse.ch)
 // Tier 1 provider (unlimited)
 type ThreatFoxClient struct {
 	httpClient *http.Client
 	baseURL    string
+	apiKey     string
 }
 
 // ThreatFoxResponse represents the API response
+// Data can be either []ThreatFoxIOC (when found) or string (when not found)
 type ThreatFoxResponse struct {
-	QueryStatus string         `json:"query_status"`
-	Data        []ThreatFoxIOC `json:"data"`
+	QueryStatus string          `json:"query_status"`
+	Data        []ThreatFoxIOC  `json:"-"` // Custom unmarshal
+	DataRaw     json.RawMessage `json:"data"`
+}
+
+// UnmarshalJSON handles the variable data field type
+func (r *ThreatFoxResponse) UnmarshalJSON(data []byte) error {
+	type Alias ThreatFoxResponse
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	// Try to unmarshal as array first
+	if len(r.DataRaw) > 0 && r.DataRaw[0] == '[' {
+		if err := json.Unmarshal(r.DataRaw, &r.Data); err != nil {
+			return err
+		}
+	}
+	// If DataRaw is a string (no_result), Data stays empty
+	return nil
 }
 
 // ThreatFoxIOC represents an indicator of compromise
@@ -58,18 +87,24 @@ type ThreatFoxResult struct {
 }
 
 // NewThreatFoxClient creates a new ThreatFox client
-func NewThreatFoxClient() *ThreatFoxClient {
+func NewThreatFoxClient(cfg ThreatFoxConfig) *ThreatFoxClient {
 	return &ThreatFoxClient{
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 		baseURL: "https://threatfox-api.abuse.ch/api/v1/",
+		apiKey:  cfg.APIKey,
 	}
 }
 
-// IsConfigured returns true (ThreatFox is always available - no API key needed)
+// IsConfigured returns true if Auth-Key is configured
 func (c *ThreatFoxClient) IsConfigured() bool {
-	return true
+	return c.apiKey != ""
+}
+
+// GetProviderName returns the provider name
+func (c *ThreatFoxClient) GetProviderName() string {
+	return "ThreatFox"
 }
 
 // GetTier returns the provider tier (1 = unlimited)
@@ -96,6 +131,7 @@ func (c *ThreatFoxClient) CheckIP(ctx context.Context, ip string) (*ThreatFoxRes
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Auth-Key", c.apiKey) // Required by abuse.ch
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

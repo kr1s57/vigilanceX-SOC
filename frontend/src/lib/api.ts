@@ -1026,6 +1026,113 @@ export const retentionApi = {
   },
 }
 
+// CrowdSec Blocklist API (v3.53 - Premium blocklist sync)
+export interface CrowdSecBlocklistConfig {
+  enabled: boolean
+  api_key: string
+  sync_interval_hours: number
+  xgs_group_name: string
+  enabled_lists: string[]
+  last_sync: string
+  total_ips: number
+}
+
+export interface CrowdSecBlocklistInfo {
+  id: string
+  name: string
+  label: string
+  description: string
+  ip_count: number
+  subscribers: number
+  is_private: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CrowdSecSyncResult {
+  blocklist_id: string
+  blocklist_name: string
+  ips_downloaded: number
+  ips_synced: number
+  ips_new: number
+  ips_removed: number
+  duration_ms: number
+  synced_at: string
+  error?: string
+}
+
+export interface CrowdSecSyncHistory {
+  id: string
+  timestamp: string
+  blocklist_id: string
+  blocklist_name: string
+  ips_downloaded: number
+  ips_added: number
+  ips_removed: number
+  duration_ms: number
+  success: boolean
+  error?: string
+}
+
+export const crowdsecBlocklistApi = {
+  // Get current config
+  getConfig: async (): Promise<CrowdSecBlocklistConfig> => {
+    const response = await api.get<CrowdSecBlocklistConfig>('/crowdsec/blocklist/config')
+    return response.data
+  },
+
+  // Update config
+  updateConfig: async (config: Partial<CrowdSecBlocklistConfig>): Promise<{ success: boolean; message: string }> => {
+    const response = await api.put<{ success: boolean; message: string }>('/crowdsec/blocklist/config', config)
+    return response.data
+  },
+
+  // Test API connection
+  testConnection: async (): Promise<{ success: boolean; message: string }> => {
+    const response = await api.post<{ success: boolean; message: string }>('/crowdsec/blocklist/test')
+    return response.data
+  },
+
+  // List available blocklists
+  listBlocklists: async (): Promise<{ subscribed: CrowdSecBlocklistInfo[]; available: CrowdSecBlocklistInfo[] }> => {
+    const response = await api.get<{ subscribed: CrowdSecBlocklistInfo[]; available: CrowdSecBlocklistInfo[] }>('/crowdsec/blocklist/lists')
+    return response.data
+  },
+
+  // Get service status
+  getStatus: async (): Promise<{
+    configured: boolean
+    enabled: boolean
+    sync_running: boolean
+    last_sync: string
+    total_ips: number
+    group_name: string
+    enabled_lists?: string[]
+  }> => {
+    const response = await api.get('/crowdsec/blocklist/status')
+    return response.data
+  },
+
+  // Get sync history
+  getHistory: async (): Promise<{ history: CrowdSecSyncHistory[] }> => {
+    const response = await api.get<{ history: CrowdSecSyncHistory[] }>('/crowdsec/blocklist/history')
+    return response.data
+  },
+
+  // Sync all enabled blocklists
+  syncAll: async (): Promise<{ success: boolean; results: CrowdSecSyncResult[] }> => {
+    const response = await api.post<{ success: boolean; results: CrowdSecSyncResult[] }>('/crowdsec/blocklist/sync')
+    return response.data
+  },
+
+  // Sync a specific blocklist
+  syncBlocklist: async (blocklistId: string, name?: string): Promise<{ success: boolean; result: CrowdSecSyncResult }> => {
+    const params = name ? `?name=${encodeURIComponent(name)}` : ''
+    const response = await api.post<{ success: boolean; result: CrowdSecSyncResult }>(`/crowdsec/blocklist/sync/${blocklistId}${params}`)
+    return response.data
+  },
+}
+
 // Soft Whitelist API (v2.0)
 export const softWhitelistApi = {
   // List all whitelisted IPs (optional filter by type)
@@ -1062,6 +1169,53 @@ export const softWhitelistApi = {
   // Remove from whitelist
   remove: async (ip: string) => {
     const response = await api.delete<{ message: string; ip: string }>(`/whitelist/${ip}`)
+    return response.data
+  },
+}
+
+// API Provider Status (v3.53 - Integration tracking with quotas)
+export interface APIProviderConfig {
+  provider_id: string
+  api_key: string
+  daily_quota: number // -1 = unlimited
+  enabled: boolean
+  last_success: string
+  last_error: string
+  last_error_message: string
+  display_name: string
+  description: string
+  updated_at: string
+}
+
+export interface APIProviderStatus {
+  config: APIProviderConfig
+  today_success: number
+  today_errors: number
+  quota_used: number
+  quota_max: number // -1 = unlimited
+  has_error: boolean
+}
+
+export const integrationsApi = {
+  // Get all providers status
+  getProviders: async (): Promise<{ providers: APIProviderStatus[] }> => {
+    const response = await api.get<{ providers: APIProviderStatus[] }>('/integrations/providers')
+    return response.data
+  },
+
+  // Get single provider status
+  getProvider: async (providerId: string): Promise<APIProviderStatus> => {
+    const response = await api.get<APIProviderStatus>(`/integrations/providers/${providerId}`)
+    return response.data
+  },
+
+  // Update provider configuration
+  updateProvider: async (providerId: string, config: {
+    api_key?: string
+    daily_quota?: number
+    enabled?: boolean
+  }): Promise<{ success: boolean; message: string }> => {
+    const response = await api.put<{ success: boolean; message: string }>(`/integrations/providers/${providerId}`, config)
     return response.data
   },
 }

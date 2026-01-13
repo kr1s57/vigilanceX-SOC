@@ -13,6 +13,27 @@ type ThreatIntelProvider interface {
 	IsConfigured() bool
 }
 
+// APITrackingCallback is called after each provider API call for usage tracking
+// providerID: the database provider_id (e.g., "abuseipdb", "virustotal")
+// success: true if the API call succeeded
+// errorMsg: error message if failed, empty if success
+type APITrackingCallback func(providerID string, success bool, errorMsg string)
+
+// providerNameToID maps display names to database provider_ids
+var providerNameToID = map[string]string{
+	"IPSum":             "ipsum",
+	"AlienVault OTX":    "otx",
+	"ThreatFox":         "threatfox",
+	"URLhaus":           "urlhaus",
+	"Shodan InternetDB": "shodan_internetdb",
+	"AbuseIPDB":         "abuseipdb",
+	"GreyNoise":         "greynoise",
+	"CrowdSec":          "crowdsec_cti",
+	"VirusTotal":        "virustotal",
+	"CriminalIP":        "criminalip",
+	"Pulsedive":         "pulsedive",
+}
+
 // Aggregator combines multiple threat intelligence sources
 // v1.6: Added GreyNoise, IPSum, CriminalIP, Pulsedive
 // v2.9: Added proxy mode support
@@ -45,6 +66,9 @@ type Aggregator struct {
 
 	cache   *ThreatCache
 	weights AggregationWeights
+
+	// v3.53: API usage tracking callback
+	trackingCallback APITrackingCallback
 }
 
 // CascadeConfig defines thresholds for tiered API querying
@@ -105,7 +129,11 @@ func DefaultCascadeConfig() CascadeConfig {
 
 // AggregatorConfig holds configuration for the aggregator
 // v2.9.6: Added CrowdSec
+// v3.53: Added AbuseCHKey for ThreatFox/URLhaus
 type AggregatorConfig struct {
+	// Tier 1 providers
+	OTXKey     string // AlienVault OTX
+	AbuseCHKey string // v3.53: abuse.ch Auth-Key (ThreatFox + URLhaus)
 	// Tier 2 providers (need API keys)
 	AbuseIPDBKey string
 	GreyNoiseKey string
@@ -114,9 +142,6 @@ type AggregatorConfig struct {
 	VirusTotalKey string
 	CriminalIPKey string
 	PulsediveKey  string
-	// Tier 1 providers: OTX needs key, others are free
-	OTXKey string
-	// ThreatFox, URLhaus, ShodanIDB, IPSum don't need keys
 
 	CacheTTL      time.Duration
 	Weights       *AggregationWeights
@@ -149,8 +174,12 @@ func NewAggregator(cfg AggregatorConfig) *Aggregator {
 		otx: NewOTXClient(OTXConfig{
 			APIKey: cfg.OTXKey,
 		}),
-		threatFox: NewThreatFoxClient(),
-		urlhaus:   NewURLhausClient(),
+		threatFox: NewThreatFoxClient(ThreatFoxConfig{
+			APIKey: cfg.AbuseCHKey,
+		}),
+		urlhaus: NewURLhausClient(URLhausConfig{
+			APIKey: cfg.AbuseCHKey,
+		}),
 		shodanIDB: NewShodanInternetDBClient(),
 
 		// Tier 2 providers (moderate limits)
@@ -193,6 +222,28 @@ func NewAggregatorWithProxy(proxyClient *OSINTProxyClient, cacheTTL time.Duratio
 		useProxy:    true,
 		cache:       NewThreatCache(cacheTTL),
 		weights:     DefaultWeights(),
+	}
+}
+
+// SetTrackingCallback sets the API usage tracking callback
+// v3.53: For recording API usage statistics
+func (a *Aggregator) SetTrackingCallback(cb APITrackingCallback) {
+	a.trackingCallback = cb
+}
+
+// trackAPICall records an API call for usage tracking
+func (a *Aggregator) trackAPICall(providerName string, err error) {
+	if a.trackingCallback == nil {
+		return
+	}
+	providerID, ok := providerNameToID[providerName]
+	if !ok {
+		return
+	}
+	if err != nil {
+		a.trackingCallback(providerID, false, err.Error())
+	} else {
+		a.trackingCallback(providerID, true, "")
 	}
 }
 
@@ -359,6 +410,7 @@ func (a *Aggregator) queryTier1(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			ipsResult, err := a.ipSum.CheckIP(ctx, ip)
+			a.trackAPICall("IPSum", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "IPSum", Weight: a.weights.IPSum, Available: err == nil, Tier: 1}
@@ -383,6 +435,7 @@ func (a *Aggregator) queryTier1(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			otxResult, err := a.otx.CheckIP(ctx, ip)
+			a.trackAPICall("AlienVault OTX", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "AlienVault OTX", Weight: a.weights.OTX, Available: err == nil, Tier: 1}
@@ -412,6 +465,7 @@ func (a *Aggregator) queryTier1(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			tfResult, err := a.threatFox.CheckIP(ctx, ip)
+			a.trackAPICall("ThreatFox", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "ThreatFox", Weight: a.weights.ThreatFox, Available: err == nil, Tier: 1}
@@ -440,6 +494,7 @@ func (a *Aggregator) queryTier1(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			uhResult, err := a.urlhaus.CheckIP(ctx, ip)
+			a.trackAPICall("URLhaus", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "URLhaus", Weight: a.weights.URLhaus, Available: err == nil, Tier: 1}
@@ -464,6 +519,7 @@ func (a *Aggregator) queryTier1(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			sResult, err := a.shodanIDB.CheckIP(ctx, ip)
+			a.trackAPICall("Shodan InternetDB", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "Shodan InternetDB", Weight: a.weights.ShodanIDB, Available: err == nil, Tier: 1}
@@ -505,6 +561,7 @@ func (a *Aggregator) queryTier2(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			abuseResult, err := a.abuseIPDB.CheckIP(ctx, ip)
+			a.trackAPICall("AbuseIPDB", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "AbuseIPDB", Weight: a.weights.AbuseIPDB, Available: err == nil, Tier: 2}
@@ -535,6 +592,7 @@ func (a *Aggregator) queryTier2(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			gnResult, err := a.greyNoise.CheckIP(ctx, ip)
+			a.trackAPICall("GreyNoise", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "GreyNoise", Weight: a.weights.GreyNoise, Available: err == nil, Tier: 2}
@@ -566,6 +624,7 @@ func (a *Aggregator) queryTier2(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			csResult, err := a.crowdSec.CheckIP(ctx, ip)
+			a.trackAPICall("CrowdSec", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "CrowdSec", Weight: a.weights.CrowdSec, Available: err == nil, Tier: 2}
@@ -622,6 +681,7 @@ func (a *Aggregator) queryTier3(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			vtResult, err := a.virusTotal.CheckIP(ctx, ip)
+			a.trackAPICall("VirusTotal", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "VirusTotal", Weight: a.weights.VirusTotal, Available: err == nil, Tier: 3}
@@ -649,6 +709,7 @@ func (a *Aggregator) queryTier3(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			cipResult, err := a.criminalIP.CheckIP(ctx, ip)
+			a.trackAPICall("CriminalIP", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "CriminalIP", Weight: a.weights.CriminalIP, Available: err == nil, Tier: 3}
@@ -681,6 +742,7 @@ func (a *Aggregator) queryTier3(ctx context.Context, ip string, result *Aggregat
 		go func() {
 			defer wg.Done()
 			pdResult, err := a.pulsedive.CheckIP(ctx, ip)
+			a.trackAPICall("Pulsedive", err) // v3.53: Track API usage
 			mu.Lock()
 			defer mu.Unlock()
 			source := SourceResult{Provider: "Pulsedive", Weight: a.weights.Pulsedive, Available: err == nil, Tier: 3}

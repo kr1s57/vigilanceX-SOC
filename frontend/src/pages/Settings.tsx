@@ -44,7 +44,7 @@ import {
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, retentionApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig, type RetentionSettings, type StorageStats } from '@/lib/api'
+import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, retentionApi, integrationsApi, crowdsecBlocklistApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig, type RetentionSettings, type StorageStats, type APIProviderStatus, type CrowdSecBlocklistConfig } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ThreatProvider {
@@ -134,10 +134,18 @@ const defaultPluginConfigs: PluginConfig[] = [
   },
   {
     id: 'crowdsec',
-    name: 'CrowdSec',
+    name: 'CrowdSec CTI',
     type: 'threat_intel',
     fields: [
       { key: 'CROWDSEC_API_KEY', label: 'CTI API Key', type: 'password', value: '', placeholder: 'Enter CrowdSec CTI API key...' },
+    ],
+  },
+  {
+    id: 'crowdsec_blocklist',
+    name: 'CrowdSec Blocklist',
+    type: 'threat_intel',
+    fields: [
+      { key: 'CROWDSEC_BLOCKLIST_API_KEY', label: 'Service API Key', type: 'password', value: '', placeholder: 'Enter CrowdSec Service API key (Blocklist scope)...' },
     ],
   },
   {
@@ -178,6 +186,12 @@ export function Settings() {
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
   const [loadingIntegrations, setLoadingIntegrations] = useState(true)
   const [saved, setSaved] = useState(false)
+
+  // v3.53: API Provider status with quotas
+  const [apiProviders, setApiProviders] = useState<APIProviderStatus[]>([])
+
+  // v3.53: CrowdSec Blocklist config (separate from CTI)
+  const [crowdsecBlocklistConfig, setCrowdsecBlocklistConfig] = useState<CrowdSecBlocklistConfig | null>(null)
 
   // License status state
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
@@ -300,6 +314,32 @@ export function Settings() {
     }
 
     fetchIntegrations()
+  }, [])
+
+  // v3.53: Fetch API providers status with quotas
+  useEffect(() => {
+    async function fetchApiProviders() {
+      try {
+        const response = await integrationsApi.getProviders()
+        setApiProviders(response.providers || [])
+      } catch (err) {
+        console.error('Failed to fetch API providers:', err)
+      }
+    }
+    fetchApiProviders()
+  }, [])
+
+  // v3.53: Fetch CrowdSec Blocklist config (separate integration)
+  useEffect(() => {
+    async function fetchCrowdsecBlocklist() {
+      try {
+        const config = await crowdsecBlocklistApi.getConfig()
+        setCrowdsecBlocklistConfig(config)
+      } catch (err) {
+        console.error('Failed to fetch CrowdSec Blocklist config:', err)
+      }
+    }
+    fetchCrowdsecBlocklist()
   }, [])
 
   // Fetch license status
@@ -638,8 +678,11 @@ export function Settings() {
       'VirusTotal': 'virustotal',
       'AlienVault OTX': 'alienvault',
       'GreyNoise': 'greynoise',
-      'CrowdSec': 'crowdsec', // v2.9.6
-      'Criminal IP': 'criminalip',
+      'CrowdSec': 'crowdsec', // v2.9.6 - CTI API
+      'CrowdSec CTI': 'crowdsec', // v3.53 - alias
+      'CrowdSec Blocklist': 'crowdsec_blocklist', // v3.53 - Blocklist API
+      'CriminalIP': 'criminalip', // No space - API returns CriminalIP
+      'Criminal IP': 'criminalip', // Legacy alias
       'Pulsedive': 'pulsedive',
       'IPSum': null as unknown as string, // No API key needed
       'ThreatFox': null as unknown as string, // No API key needed
@@ -647,6 +690,34 @@ export function Settings() {
       'Shodan InternetDB': null as unknown as string, // No API key needed
     }
     return nameMap[name] || null
+  }
+
+  // v3.53: Map provider display name to API provider_id
+  const getApiProviderId = (name: string): string | null => {
+    const idMap: Record<string, string> = {
+      'AbuseIPDB': 'abuseipdb',
+      'VirusTotal': 'virustotal',
+      'AlienVault OTX': 'otx',
+      'GreyNoise': 'greynoise',
+      'CrowdSec': 'crowdsec_cti',
+      'CrowdSec CTI': 'crowdsec_cti',
+      'CrowdSec Blocklist': 'crowdsec_blocklist',
+      'CriminalIP': 'criminalip', // No space - API returns CriminalIP
+      'Criminal IP': 'criminalip', // Legacy alias
+      'Pulsedive': 'pulsedive',
+      'IPSum': 'ipsum',
+      'ThreatFox': 'threatfox',
+      'URLhaus': 'urlhaus',
+      'Shodan InternetDB': 'shodan_internetdb',
+    }
+    return idMap[name] || null
+  }
+
+  // v3.53: Get API provider status by provider_id
+  const getApiProviderStatus = (name: string): APIProviderStatus | undefined => {
+    const providerId = getApiProviderId(name)
+    if (!providerId) return undefined
+    return apiProviders.find(p => p.config.provider_id === providerId)
   }
 
   return (
@@ -1881,9 +1952,12 @@ export function Settings() {
               onEdit={isAdmin ? () => handleEditPlugin('sophos_api') : undefined}
             />
 
-            {/* Threat Intel Providers */}
-            {integrations?.threatProviders.map((provider) => {
+            {/* Threat Intel Providers (excluding CrowdSec - shown separately below) */}
+            {integrations?.threatProviders
+              .filter(p => p.name !== 'CrowdSec') // CrowdSec CTI shown with Blocklist
+              .map((provider) => {
               const pluginId = findPluginByName(provider.name)
+              const apiStatus = getApiProviderStatus(provider.name)
               return (
                 <IntegrationRow
                   key={provider.name}
@@ -1892,9 +1966,55 @@ export function Settings() {
                   connected={provider.configured}
                   icon={<Shield className="w-4 h-4" />}
                   onEdit={isAdmin && pluginId ? () => handleEditPlugin(pluginId) : undefined}
+                  quotaUsed={apiStatus?.quota_used}
+                  quotaMax={apiStatus?.quota_max}
+                  hasError={apiStatus?.has_error}
+                  lastSuccess={apiStatus?.config.last_success}
+                  lastError={apiStatus?.config.last_error_message}
                 />
               )
             })}
+
+            {/* CrowdSec APIs (CTI + Blocklist together) */}
+            {(() => {
+              const crowdsecCTI = integrations?.threatProviders.find(p => p.name === 'CrowdSec')
+              const ctiStatus = getApiProviderStatus('CrowdSec')
+              return (
+                <>
+                  {crowdsecCTI && (
+                    <IntegrationRow
+                      name="CrowdSec CTI"
+                      description={crowdsecCTI.description}
+                      connected={crowdsecCTI.configured}
+                      icon={<Shield className="w-4 h-4" />}
+                      onEdit={isAdmin ? () => handleEditPlugin('crowdsec') : undefined}
+                      quotaUsed={ctiStatus?.quota_used}
+                      quotaMax={ctiStatus?.quota_max}
+                      hasError={ctiStatus?.has_error}
+                      lastSuccess={ctiStatus?.config.last_success}
+                      lastError={ctiStatus?.config.last_error_message}
+                    />
+                  )}
+                  <IntegrationRow
+                    name="CrowdSec Blocklist"
+                    description={
+                      crowdsecBlocklistConfig?.api_key
+                        ? crowdsecBlocklistConfig.enabled
+                          ? `Syncing to ${crowdsecBlocklistConfig.xgs_group_name}`
+                          : 'Configured but disabled'
+                        : 'Premium blocklist sync to XGS'
+                    }
+                    connected={!!crowdsecBlocklistConfig?.api_key}
+                    icon={<Globe className="w-4 h-4" />}
+                    onEdit={isAdmin ? () => handleEditPlugin('crowdsec_blocklist') : undefined}
+                    syncInfo={crowdsecBlocklistConfig ? {
+                      lastSync: crowdsecBlocklistConfig.last_sync,
+                      totalIPs: crowdsecBlocklistConfig.total_ips
+                    } : undefined}
+                  />
+                </>
+              )
+            })()}
           </>
         )}
       </SettingsSection>
@@ -2006,7 +2126,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.52.102</p>
+        <p>VIGILANCE X v3.53.100</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
@@ -2157,13 +2277,55 @@ function IntegrationRow({
   connected,
   icon,
   onEdit,
+  quotaUsed,
+  quotaMax,
+  hasError,
+  lastSuccess,
+  lastError,
+  syncInfo,
 }: {
   name: string
   description: string
   connected: boolean
   icon: React.ReactNode
   onEdit?: () => void
+  quotaUsed?: number
+  quotaMax?: number // -1 = unlimited
+  hasError?: boolean
+  lastSuccess?: string
+  lastError?: string
+  syncInfo?: { lastSync: string; totalIPs: number } // For blocklist-type integrations
 }) {
+  // Format quota display
+  const formatQuota = () => {
+    if (quotaMax === undefined || quotaMax === null) return null
+    if (quotaMax === -1) return `${quotaUsed || 0} / ∞`
+    return `${quotaUsed || 0} / ${quotaMax}`
+  }
+
+  // Format sync info display
+  const formatSyncInfo = () => {
+    if (!syncInfo) return null
+    const lastSyncDate = syncInfo.lastSync && syncInfo.lastSync !== '1970-01-01T00:00:00Z'
+      ? new Date(syncInfo.lastSync).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+      : 'Never'
+    return { lastSync: lastSyncDate, totalIPs: syncInfo.totalIPs }
+  }
+
+  // Format last success date
+  const formatLastSuccess = (dateStr: string | undefined) => {
+    if (!dateStr || dateStr === '1970-01-01T00:00:00Z') return 'Never'
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } catch {
+      return 'Unknown'
+    }
+  }
+
+  const quota = formatQuota()
+  const syncDisplay = formatSyncInfo()
+
   return (
     <div className="flex items-center justify-between px-6 py-4">
       <div className="flex items-center gap-3">
@@ -2174,6 +2336,32 @@ function IntegrationRow({
         </div>
       </div>
       <div className="flex items-center gap-3">
+        {/* Sync info for blocklist-type integrations */}
+        {syncDisplay && (
+          <div className="flex items-center gap-2 px-2 py-1 bg-muted/50 rounded-lg text-xs font-medium">
+            <RefreshCw className="w-3 h-3 text-muted-foreground" />
+            <span className="text-foreground">{syncDisplay.totalIPs} IPs</span>
+            <span className="text-muted-foreground">|</span>
+            <Clock className="w-3 h-3 text-muted-foreground" />
+            <span className="text-muted-foreground">{syncDisplay.lastSync}</span>
+          </div>
+        )}
+
+        {/* Quota counter for API-based integrations */}
+        {!syncDisplay && quota && (
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded-lg text-xs font-medium">
+            <Hash className="w-3 h-3 text-muted-foreground" />
+            <span className={cn(
+              quotaMax !== -1 && quotaUsed !== undefined && quotaUsed >= (quotaMax || 0) * 0.9
+                ? 'text-orange-500'
+                : 'text-foreground'
+            )}>
+              {quota}
+            </span>
+            <span className="text-muted-foreground">/day</span>
+          </div>
+        )}
+
         {onEdit && (
           <button
             onClick={onEdit}
@@ -2183,24 +2371,36 @@ function IntegrationRow({
             <Pencil className="w-4 h-4" />
           </button>
         )}
-        <div
-          className={cn(
-            'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
-            connected ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
-          )}
-        >
-          {connected ? (
-            <>
-              <CheckCircle className="w-4 h-4" />
-              Connected
-            </>
-          ) : (
-            <>
-              <XCircle className="w-4 h-4" />
-              Not configured
-            </>
-          )}
-        </div>
+
+        {/* Error indicator with last success */}
+        {hasError && lastSuccess ? (
+          <div
+            className="flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-orange-500/10 text-orange-500"
+            title={`Last error: ${lastError || 'Unknown'}`}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span className="text-xs">Last OK: {formatLastSuccess(lastSuccess)}</span>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
+              connected ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+            )}
+          >
+            {connected ? (
+              <>
+                <CheckCircle className="w-4 h-4" />
+                Connected
+              </>
+            ) : (
+              <>
+                <XCircle className="w-4 h-4" />
+                Not configured
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
