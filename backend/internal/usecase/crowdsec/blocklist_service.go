@@ -20,18 +20,19 @@ const (
 	DefaultSyncInterval = 2 * time.Hour
 )
 
-// BlocklistService manages CrowdSec blocklist download and storage (Phase 1)
-// Phase 1: Download blocklists, store in files and DB - NO XGS sync
+// BlocklistService manages CrowdSec blocklist download, storage and XGS sync
 type BlocklistService struct {
 	client         *crowdsec.BlocklistClient
 	repo           BlocklistRepository
 	geoIP          GeoIPLookup
+	xgs            XGSClient
 	mu             sync.RWMutex
 	config         *BlocklistConfig
 	worker         *syncWorker
 	stopChan       chan struct{}
 	syncInProgress bool
 	syncMu         sync.Mutex
+	xgsGroupReady  bool // Track if XGS group has been verified/created
 }
 
 // BlocklistConfig holds the service configuration
@@ -64,6 +65,20 @@ type BlocklistRepository interface {
 type GeoIPLookup interface {
 	LookupCountry(ctx context.Context, ip string) (string, error)
 }
+
+// XGSClient interface for Sophos XGS integration
+type XGSClient interface {
+	EnsureGroupExists(groupName, description string) error
+	GetGroupIPs(groupName string) ([]string, error)
+	SyncGroupIPs(groupName, hostPrefix string, targetIPs []string) (int, int, error)
+}
+
+// XGS Group configuration
+const (
+	XGSGroupName        = "grp_VGX-CrowdSBlockL"
+	XGSGroupDescription = "CrowdSec Blocklist IPs - Managed by VIGILANCE X Neural-Sync"
+	XGSHostPrefix       = "CS" // Prefix for IP host names: CS_1.2.3.4
+)
 
 // BlocklistIP represents an IP entry in the database
 type BlocklistIP struct {
@@ -133,6 +148,117 @@ func NewBlocklistService(client *crowdsec.BlocklistClient, repo BlocklistReposit
 // SetGeoIPClient sets the GeoIP client for country enrichment
 func (s *BlocklistService) SetGeoIPClient(geoIP GeoIPLookup) {
 	s.geoIP = geoIP
+}
+
+// SetXGSClient sets the Sophos XGS client for firewall sync
+func (s *BlocklistService) SetXGSClient(xgs XGSClient) {
+	s.xgs = xgs
+	slog.Info("[CROWDSEC_BL] XGS client configured for Neural-Sync")
+}
+
+// EnsureXGSGroup ensures the XGS group exists, creates it if not
+func (s *BlocklistService) EnsureXGSGroup() error {
+	if s.xgs == nil {
+		return fmt.Errorf("XGS client not configured")
+	}
+
+	slog.Info("[CROWDSEC_BL] Checking XGS group", "group", XGSGroupName)
+
+	// Try to create the group - EnsureGroupExists handles "already exists"
+	err := s.xgs.EnsureGroupExists(XGSGroupName, XGSGroupDescription)
+	if err != nil {
+		// Check if error is "already exists" which is OK
+		if err.Error() != "" && (err.Error() == "Configuration already present" ||
+			err.Error() == "already exists" ||
+			contains(err.Error(), "already") ||
+			contains(err.Error(), "exists")) {
+			slog.Info("[CROWDSEC_BL] XGS group already exists", "group", XGSGroupName)
+			s.xgsGroupReady = true
+			return nil
+		}
+		return fmt.Errorf("failed to ensure XGS group: %w", err)
+	}
+
+	slog.Info("[CROWDSEC_BL] XGS group created successfully", "group", XGSGroupName)
+	s.xgsGroupReady = true
+	return nil
+}
+
+// contains checks if a string contains a substring (case-insensitive)
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsCI(s, substr))
+}
+
+func containsCI(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if equalFoldASCII(s[i:i+len(substr)], substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func equalFoldASCII(s, t string) bool {
+	if len(s) != len(t) {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		sr := s[i]
+		tr := t[i]
+		if sr >= 'A' && sr <= 'Z' {
+			sr = sr + 32
+		}
+		if tr >= 'A' && tr <= 'Z' {
+			tr = tr + 32
+		}
+		if sr != tr {
+			return false
+		}
+	}
+	return true
+}
+
+// SyncToXGS synchronizes all blocklist IPs to the XGS group
+func (s *BlocklistService) SyncToXGS(ctx context.Context) (added, removed int, err error) {
+	if s.xgs == nil {
+		return 0, 0, fmt.Errorf("XGS client not configured")
+	}
+
+	// Ensure group exists first
+	if !s.xgsGroupReady {
+		if err := s.EnsureXGSGroup(); err != nil {
+			return 0, 0, err
+		}
+	}
+
+	// Get all IPs from database
+	allIPs, err := s.repo.GetAllIPs(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get IPs from DB: %w", err)
+	}
+
+	// Extract just the IP addresses
+	ipList := make([]string, 0, len(allIPs))
+	for _, ip := range allIPs {
+		ipList = append(ipList, ip.IP)
+	}
+
+	slog.Info("[CROWDSEC_BL] Syncing to XGS",
+		"group", XGSGroupName,
+		"ip_count", len(ipList))
+
+	// Sync to XGS
+	added, removed, err = s.xgs.SyncGroupIPs(XGSGroupName, XGSHostPrefix, ipList)
+	if err != nil {
+		return 0, 0, fmt.Errorf("XGS sync failed: %w", err)
+	}
+
+	slog.Info("[CROWDSEC_BL] XGS sync completed",
+		"group", XGSGroupName,
+		"added", added,
+		"removed", removed)
+
+	return added, removed, nil
 }
 
 // Initialize loads config and starts worker if enabled
@@ -370,6 +496,18 @@ func (s *BlocklistService) SyncAll(ctx context.Context) ([]*SyncResult, error) {
 
 	// Update stats
 	s.updateStats(ctx)
+
+	// Sync to XGS if client is configured
+	if s.xgs != nil {
+		xgsAdded, xgsRemoved, xgsErr := s.SyncToXGS(ctx)
+		if xgsErr != nil {
+			slog.Error("[CROWDSEC_BL] XGS sync failed", "error", xgsErr)
+		} else {
+			slog.Info("[CROWDSEC_BL] XGS sync completed",
+				"added", xgsAdded,
+				"removed", xgsRemoved)
+		}
+	}
 
 	return results, nil
 }
@@ -641,16 +779,30 @@ func (s *BlocklistService) GetStatus(ctx context.Context) map[string]interface{}
 	syncInProgress := s.syncInProgress
 	s.syncMu.Unlock()
 
+	// Get XGS group IP count if available
+	xgsIPCount := 0
+	xgsConfigured := s.xgs != nil
+	if xgsConfigured && s.xgsGroupReady {
+		if ips, err := s.xgs.GetGroupIPs(XGSGroupName); err == nil {
+			xgsIPCount = len(ips)
+		}
+	}
+
 	return map[string]interface{}{
 		"configured":       s.client.IsConfigured(),
 		"enabled":          s.config.Enabled,
 		"worker_running":   workerRunning,
 		"sync_in_progress": syncInProgress,
+		"sync_running":     syncInProgress, // Alias for frontend compatibility
 		"last_sync":        s.config.LastSync,
 		"total_ips":        s.config.TotalIPs,
 		"total_blocklists": s.config.TotalBlocklists,
 		"sync_interval":    fmt.Sprintf("%dm", s.config.SyncIntervalMinutes),
 		"data_dir":         BlocklistDataDir,
+		"group_name":       XGSGroupName,
+		"xgs_configured":   xgsConfigured,
+		"xgs_group_ready":  s.xgsGroupReady,
+		"xgs_ip_count":     xgsIPCount,
 	}
 }
 

@@ -414,6 +414,11 @@ func main() {
 	})
 	crowdsecBlocklistService := crowdsecuc.NewBlocklistService(crowdsecBlocklistClient, crowdsecBlocklistRepo)
 	crowdsecBlocklistService.SetGeoIPClient(geoIPClient) // v3.53: Country enrichment for sync
+	// v3.53.103: XGS sync - wire Sophos client for firewall integration
+	if sophosClient != nil {
+		crowdsecBlocklistService.SetXGSClient(sophosClient)
+		logger.Info("CrowdSec Blocklist: XGS sync enabled", "group", "grp_VGX-CrowdSBlockL")
+	}
 	// Initialize service (loads config and starts worker if enabled)
 	if err := crowdsecBlocklistService.Initialize(context.Background()); err != nil {
 		logger.Warn("CrowdSec Blocklist initialization failed", "error", err)

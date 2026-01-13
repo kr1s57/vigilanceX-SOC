@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.53.102 | **Derniere mise a jour**: 2026-01-13
+> **Version**: 3.53.103 | **Derniere mise a jour**: 2026-01-13
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -1481,6 +1481,22 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.53.103 (2026-01-13)
+- **Neural-Sync XGS Integration**: Synchronisation automatique vers Sophos XGS Firewall
+  - Groupe XGS `grp_VGX-CrowdSBlockL` cree automatiquement si absent
+  - Sync des IPs blocklist vers le groupe XGS apres chaque telechargement CrowdSec
+  - Prefix host: `CS_x.x.x.x` pour identifier les IPs CrowdSec
+  - Status endpoint retourne `xgs_configured`, `xgs_group_ready`, `xgs_ip_count`
+- **XGSClient Interface**: Nouvelle interface pour decouplage Sophos client
+  - `EnsureGroupExists(groupName, description)` - Creation groupe si absent
+  - `GetGroupIPs(groupName)` - Liste IPs dans le groupe
+  - `SyncGroupIPs(groupName, hostPrefix, targetIPs)` - Sync bidirectionnel
+- **Constantes XGS**:
+  - `XGSGroupName = "grp_VGX-CrowdSBlockL"`
+  - `XGSGroupDescription = "CrowdSec Blocklist IPs - Managed by VIGILANCE X Neural-Sync"`
+  - `XGSHostPrefix = "CS"` (format: CS_1.2.3.4)
+- **Wiring main.go**: `crowdsecBlocklistService.SetXGSClient(sophosClient)`
 
 ### v3.53.102 (2026-01-13)
 - **Neural-Sync UI Complete**: Interface utilisateur finalisee pour CrowdSec Blocklist
