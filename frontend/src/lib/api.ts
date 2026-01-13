@@ -945,6 +945,87 @@ export const geozoneApi = {
   },
 }
 
+// Retention API (v3.52 - Log retention and cleanup settings)
+export interface RetentionSettings {
+  events_retention_days: number
+  modsec_logs_retention_days: number
+  firewall_events_retention_days: number
+  vpn_events_retention_days: number
+  heartbeat_events_retention_days: number
+  atp_events_retention_days: number
+  antivirus_events_retention_days: number
+  ban_history_retention_days: number
+  audit_log_retention_days: number
+  retention_enabled: boolean
+  cleanup_interval_hours: number
+  last_cleanup: string
+  updated_at: string
+  updated_by: string
+}
+
+export interface RetentionStatus {
+  worker_running: boolean
+  enabled: boolean
+  last_cleanup: string
+  next_cleanup: string
+  interval_hours: number
+}
+
+export interface StorageStats {
+  total_bytes: number
+  used_bytes: number
+  available_bytes: number
+  used_percent: number
+  tables_size: Record<string, number>
+}
+
+export interface CleanupResult {
+  success: boolean
+  start_time: string
+  end_time: string
+  total_deleted: number
+  table_stats: Array<{
+    table_name: string
+    rows_deleted: number
+    rows_before: number
+    duration_ms: number
+    retention_days: number
+  }>
+  error?: string
+}
+
+export const retentionApi = {
+  // Get current retention settings
+  getSettings: async (): Promise<RetentionSettings> => {
+    const response = await api.get<RetentionSettings>('/retention/settings')
+    return response.data
+  },
+
+  // Update retention settings
+  updateSettings: async (settings: Partial<RetentionSettings>): Promise<{ success: boolean; message: string; settings: RetentionSettings }> => {
+    const response = await api.put<{ success: boolean; message: string; settings: RetentionSettings }>('/retention/settings', settings)
+    return response.data
+  },
+
+  // Get retention service status
+  getStatus: async (): Promise<RetentionStatus> => {
+    const response = await api.get<RetentionStatus>('/retention/status')
+    return response.data
+  },
+
+  // Get storage statistics
+  getStorageStats: async (): Promise<StorageStats> => {
+    const response = await api.get<StorageStats>('/retention/storage')
+    return response.data
+  },
+
+  // Trigger manual cleanup
+  runCleanup: async (): Promise<CleanupResult> => {
+    const response = await api.post<CleanupResult>('/retention/cleanup')
+    return response.data
+  },
+}
+
 // Soft Whitelist API (v2.0)
 export const softWhitelistApi = {
   // List all whitelisted IPs (optional filter by type)

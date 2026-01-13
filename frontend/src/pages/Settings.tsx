@@ -38,10 +38,13 @@ import {
   Send,
   MapPin,
   Plus,
+  HardDrive,
+  Trash2,
+  Database,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig } from '@/lib/api'
+import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, retentionApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig, type RetentionSettings, type StorageStats } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ThreatProvider {
@@ -194,6 +197,13 @@ export function Settings() {
   const [newAuthorizedCountry, setNewAuthorizedCountry] = useState('')
   const [newHostileCountry, setNewHostileCountry] = useState('')
 
+  // Retention settings state (v3.52)
+  const [retentionSettings, setRetentionSettings] = useState<RetentionSettings | null>(null)
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
+  const [loadingRetention, setLoadingRetention] = useState(true)
+  const [savingRetention, setSavingRetention] = useState(false)
+  const [runningCleanup, setRunningCleanup] = useState(false)
+
   // Collapsible sections state - all collapsed by default
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     display: true,
@@ -202,6 +212,7 @@ export function Settings() {
     email_notifications: true,
     security: true,
     geozone: true,
+    retention: true,
     license: true,
     integrations: true,
   })
@@ -341,6 +352,66 @@ export function Settings() {
 
     fetchGeozoneConfig()
   }, [])
+
+  // Fetch Retention settings (v3.52)
+  useEffect(() => {
+    async function fetchRetentionSettings() {
+      setLoadingRetention(true)
+      try {
+        const [settings, storage] = await Promise.all([
+          retentionApi.getSettings(),
+          retentionApi.getStorageStats()
+        ])
+        setRetentionSettings(settings)
+        setStorageStats(storage)
+      } catch (err) {
+        console.error('Failed to fetch retention settings:', err)
+      } finally {
+        setLoadingRetention(false)
+      }
+    }
+
+    fetchRetentionSettings()
+  }, [])
+
+  // Handle retention settings change
+  const handleRetentionChange = async <K extends keyof RetentionSettings>(key: K, value: RetentionSettings[K]) => {
+    if (!retentionSettings) return
+
+    const newSettings = { ...retentionSettings, [key]: value }
+    setRetentionSettings(newSettings)
+
+    setSavingRetention(true)
+    try {
+      await retentionApi.updateSettings({ [key]: value })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to update retention setting:', err)
+      setRetentionSettings(retentionSettings)
+    } finally {
+      setSavingRetention(false)
+    }
+  }
+
+  // Handle manual cleanup
+  const handleRunCleanup = async () => {
+    setRunningCleanup(true)
+    try {
+      const result = await retentionApi.runCleanup()
+      if (result.success) {
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+        // Refresh storage stats after cleanup
+        const storage = await retentionApi.getStorageStats()
+        setStorageStats(storage)
+      }
+    } catch (err) {
+      console.error('Failed to run cleanup:', err)
+    } finally {
+      setRunningCleanup(false)
+    }
+  }
 
   // Handle notification settings change
   const handleNotifSettingChange = async <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => {
@@ -1410,6 +1481,189 @@ export function Settings() {
                 >
                   <Plus className="w-3 h-3" />
                   Add
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </SettingsSection>
+
+      {/* Log Retention Settings (v3.52) */}
+      <SettingsSection
+        title="Log Retention"
+        description="Configure log retention periods and storage cleanup"
+        icon={<Database className="w-5 h-5" />}
+        isCollapsed={collapsedSections['retention']}
+        onToggle={() => toggleSection('retention')}
+      >
+        {loadingRetention ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            {/* Storage Usage */}
+            {storageStats && (
+              <div className="px-6 py-4 border-b border-border/50">
+                <div className="flex items-center gap-3 mb-3">
+                  <HardDrive className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">Storage Usage</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Database Size</span>
+                    <span>{(storageStats.used_bytes / (1024 * 1024)).toFixed(1)} MB</span>
+                  </div>
+                  {storageStats.total_bytes > 0 && (
+                    <>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500 rounded-full"
+                          style={{ width: `${Math.min(storageStats.used_percent, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{storageStats.used_percent.toFixed(1)}% used</span>
+                        <span>{(storageStats.available_bytes / (1024 * 1024 * 1024)).toFixed(1)} GB free</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Enable Retention */}
+            <SettingRow
+              label="Enable Auto-Cleanup"
+              description="Automatically delete old logs based on retention periods"
+              icon={<Trash2 className="w-4 h-4" />}
+            >
+              <ToggleSwitch
+                checked={retentionSettings?.retention_enabled || false}
+                onChange={(v) => handleRetentionChange('retention_enabled', v)}
+                disabled={savingRetention}
+              />
+            </SettingRow>
+
+            {/* Main Events Retention */}
+            <SettingRow
+              label="Events Retention"
+              description="Days to keep WAF/IPS/ATP events"
+              icon={<Calendar className="w-4 h-4" />}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={retentionSettings?.events_retention_days || 30}
+                  onChange={(e) => handleRetentionChange('events_retention_days', parseInt(e.target.value) || 30)}
+                  className="w-20 px-2 py-1 text-center rounded border border-border bg-background"
+                  disabled={savingRetention}
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
+            </SettingRow>
+
+            {/* ModSec Logs Retention */}
+            <SettingRow
+              label="ModSec Logs"
+              description="Days to keep ModSecurity detection logs"
+              icon={<Shield className="w-4 h-4" />}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={retentionSettings?.modsec_logs_retention_days || 30}
+                  onChange={(e) => handleRetentionChange('modsec_logs_retention_days', parseInt(e.target.value) || 30)}
+                  className="w-20 px-2 py-1 text-center rounded border border-border bg-background"
+                  disabled={savingRetention}
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
+            </SettingRow>
+
+            {/* VPN Events Retention */}
+            <SettingRow
+              label="VPN Events"
+              description="Days to keep VPN session logs"
+              icon={<Lock className="w-4 h-4" />}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={retentionSettings?.vpn_events_retention_days || 30}
+                  onChange={(e) => handleRetentionChange('vpn_events_retention_days', parseInt(e.target.value) || 30)}
+                  className="w-20 px-2 py-1 text-center rounded border border-border bg-background"
+                  disabled={savingRetention}
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
+            </SettingRow>
+
+            {/* Ban History Retention */}
+            <SettingRow
+              label="Ban History"
+              description="Days to keep ban/unban audit trail"
+              icon={<AlertTriangle className="w-4 h-4" />}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="30"
+                  max="3650"
+                  value={retentionSettings?.ban_history_retention_days || 365}
+                  onChange={(e) => handleRetentionChange('ban_history_retention_days', parseInt(e.target.value) || 365)}
+                  className="w-20 px-2 py-1 text-center rounded border border-border bg-background"
+                  disabled={savingRetention}
+                />
+                <span className="text-sm text-muted-foreground">days</span>
+              </div>
+            </SettingRow>
+
+            {/* Cleanup Interval */}
+            <SettingRow
+              label="Cleanup Interval"
+              description="How often to run automatic cleanup"
+              icon={<Clock className="w-4 h-4" />}
+            >
+              <ToggleGroup
+                value={String(retentionSettings?.cleanup_interval_hours || 6)}
+                onChange={(v) => handleRetentionChange('cleanup_interval_hours', Number(v))}
+                options={[
+                  { value: '1', label: '1h' },
+                  { value: '6', label: '6h' },
+                  { value: '12', label: '12h' },
+                  { value: '24', label: '24h' },
+                ]}
+                disabled={savingRetention}
+              />
+            </SettingRow>
+
+            {/* Manual Cleanup Button */}
+            <div className="px-6 py-4 border-t border-border/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Manual Cleanup</p>
+                  <p className="text-sm text-muted-foreground">
+                    Run cleanup now based on current retention settings
+                  </p>
+                </div>
+                <button
+                  onClick={handleRunCleanup}
+                  disabled={runningCleanup}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg font-medium hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {runningCleanup ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  {runningCleanup ? 'Cleaning...' : 'Run Cleanup'}
                 </button>
               </div>
             </div>
