@@ -36,10 +36,12 @@ import {
   ChevronsUpDown,
   Mail,
   Send,
+  MapPin,
+  Plus,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, type LicenseStatus, type NotificationSettings } from '@/lib/api'
+import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface ThreatProvider {
@@ -185,6 +187,13 @@ export function Settings() {
   const [sendingTestEmail, setSendingTestEmail] = useState(false)
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null)
 
+  // GeoZone settings state (D2B v2)
+  const [geozoneConfig, setGeozoneConfig] = useState<GeoZoneConfig | null>(null)
+  const [loadingGeozone, setLoadingGeozone] = useState(true)
+  const [savingGeozone, setSavingGeozone] = useState(false)
+  const [newAuthorizedCountry, setNewAuthorizedCountry] = useState('')
+  const [newHostileCountry, setNewHostileCountry] = useState('')
+
   // Collapsible sections state - all collapsed by default
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     display: true,
@@ -192,6 +201,7 @@ export function Settings() {
     notifications: true,
     email_notifications: true,
     security: true,
+    geozone: true,
     license: true,
     integrations: true,
   })
@@ -204,7 +214,7 @@ export function Settings() {
   }
 
   const toggleAllSections = (collapse: boolean) => {
-    const sections = ['display', 'dashboard', 'notifications', 'email_notifications', 'security', 'license', 'integrations']
+    const sections = ['display', 'dashboard', 'notifications', 'email_notifications', 'security', 'geozone', 'license', 'integrations']
     setCollapsedSections(
       sections.reduce((acc, section) => ({ ...acc, [section]: collapse }), {})
     )
@@ -315,6 +325,23 @@ export function Settings() {
     fetchNotificationSettings()
   }, [])
 
+  // Fetch GeoZone config (D2B v2)
+  useEffect(() => {
+    async function fetchGeozoneConfig() {
+      setLoadingGeozone(true)
+      try {
+        const config = await geozoneApi.getConfig()
+        setGeozoneConfig(config)
+      } catch (err) {
+        console.error('Failed to fetch GeoZone config:', err)
+      } finally {
+        setLoadingGeozone(false)
+      }
+    }
+
+    fetchGeozoneConfig()
+  }, [])
+
   // Handle notification settings change
   const handleNotifSettingChange = async <K extends keyof NotificationSettings>(key: K, value: NotificationSettings[K]) => {
     if (!notifSettings) return
@@ -360,6 +387,84 @@ export function Settings() {
     updateSettings({ [key]: value })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  // Handle GeoZone config update
+  const handleGeozoneChange = async <K extends keyof GeoZoneConfig>(key: K, value: GeoZoneConfig[K]) => {
+    if (!geozoneConfig) return
+
+    const newConfig = { ...geozoneConfig, [key]: value }
+    setGeozoneConfig(newConfig)
+
+    setSavingGeozone(true)
+    try {
+      await geozoneApi.updateConfig({ [key]: value })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to update GeoZone config:', err)
+      // Revert on error
+      setGeozoneConfig(geozoneConfig)
+    } finally {
+      setSavingGeozone(false)
+    }
+  }
+
+  // Handle adding authorized country
+  const handleAddAuthorizedCountry = async () => {
+    if (!newAuthorizedCountry || newAuthorizedCountry.length !== 2) return
+
+    setSavingGeozone(true)
+    try {
+      await geozoneApi.addAuthorizedCountry(newAuthorizedCountry.toUpperCase())
+      // Refresh config
+      const config = await geozoneApi.getConfig()
+      setGeozoneConfig(config)
+      setNewAuthorizedCountry('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to add authorized country:', err)
+    } finally {
+      setSavingGeozone(false)
+    }
+  }
+
+  // Handle removing authorized country
+  const handleRemoveAuthorizedCountry = async (country: string) => {
+    setSavingGeozone(true)
+    try {
+      await geozoneApi.removeAuthorizedCountry(country)
+      // Refresh config
+      const config = await geozoneApi.getConfig()
+      setGeozoneConfig(config)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to remove authorized country:', err)
+    } finally {
+      setSavingGeozone(false)
+    }
+  }
+
+  // Handle adding hostile country
+  const handleAddHostileCountry = async () => {
+    if (!newHostileCountry || newHostileCountry.length !== 2) return
+
+    setSavingGeozone(true)
+    try {
+      await geozoneApi.addHostileCountry(newHostileCountry.toUpperCase())
+      // Refresh config
+      const config = await geozoneApi.getConfig()
+      setGeozoneConfig(config)
+      setNewHostileCountry('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to add hostile country:', err)
+    } finally {
+      setSavingGeozone(false)
+    }
   }
 
   // Plugin editor functions
@@ -1102,6 +1207,216 @@ export function Settings() {
         </SettingRow>
       </SettingsSection>
 
+      {/* GeoZone Settings (D2B v2) */}
+      <SettingsSection
+        title="GeoZone (D2B v2)"
+        description="Geographic zone classification for automatic ban decisions"
+        icon={<MapPin className="w-5 h-5" />}
+        isCollapsed={collapsedSections['geozone']}
+        onToggle={() => toggleSection('geozone')}
+      >
+        {loadingGeozone ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            {/* Enable GeoZone */}
+            <SettingRow
+              label="Enable GeoZone"
+              description="Activate geographic zone-based ban decisions"
+              icon={<MapPin className="w-4 h-4" />}
+            >
+              <ToggleSwitch
+                checked={geozoneConfig?.enabled || false}
+                onChange={(v) => handleGeozoneChange('enabled', v)}
+                disabled={savingGeozone}
+              />
+            </SettingRow>
+
+            {/* Default Policy */}
+            <SettingRow
+              label="Default Policy"
+              description="How to treat countries not in authorized/hostile lists"
+              icon={<Globe className="w-4 h-4" />}
+            >
+              <ToggleGroup
+                value={geozoneConfig?.default_policy || 'neutral'}
+                onChange={(v) => handleGeozoneChange('default_policy', v as 'authorized' | 'hostile' | 'neutral')}
+                options={[
+                  { value: 'authorized', label: 'Trusted' },
+                  { value: 'neutral', label: 'Neutral' },
+                  { value: 'hostile', label: 'Hostile' },
+                ]}
+                disabled={savingGeozone}
+              />
+            </SettingRow>
+
+            {/* WAF Threshold - Hostile Zone */}
+            <SettingRow
+              label="WAF Threshold (Hostile)"
+              description="WAF events before auto-ban for hostile zone IPs"
+              icon={<Zap className="w-4 h-4" />}
+            >
+              <ToggleGroup
+                value={String(geozoneConfig?.waf_threshold_hzone || 1)}
+                onChange={(v) => handleGeozoneChange('waf_threshold_hzone', Number(v))}
+                options={[
+                  { value: '1', label: '1' },
+                  { value: '2', label: '2' },
+                  { value: '3', label: '3' },
+                  { value: '5', label: '5' },
+                ]}
+                disabled={savingGeozone}
+              />
+            </SettingRow>
+
+            {/* WAF Threshold - Authorized Zone */}
+            <SettingRow
+              label="WAF Threshold (Authorized)"
+              description="WAF events before TI check for authorized zone IPs"
+              icon={<Zap className="w-4 h-4" />}
+            >
+              <ToggleGroup
+                value={String(geozoneConfig?.waf_threshold_zone || 3)}
+                onChange={(v) => handleGeozoneChange('waf_threshold_zone', Number(v))}
+                options={[
+                  { value: '3', label: '3' },
+                  { value: '5', label: '5' },
+                  { value: '10', label: '10' },
+                  { value: '15', label: '15' },
+                ]}
+                disabled={savingGeozone}
+              />
+            </SettingRow>
+
+            {/* Threat Score Threshold */}
+            <SettingRow
+              label="Threat Score Threshold"
+              description="Minimum TI score to auto-ban (0-100)"
+              icon={<AlertTriangle className="w-4 h-4" />}
+            >
+              <ToggleGroup
+                value={String(geozoneConfig?.threat_score_threshold || 50)}
+                onChange={(v) => handleGeozoneChange('threat_score_threshold', Number(v))}
+                options={[
+                  { value: '30', label: '30' },
+                  { value: '50', label: '50' },
+                  { value: '70', label: '70' },
+                  { value: '90', label: '90' },
+                ]}
+                disabled={savingGeozone}
+              />
+            </SettingRow>
+
+            {/* Authorized Countries Section */}
+            <div className="px-6 py-3 bg-muted/30 border-t border-b">
+              <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                Authorized Countries (TI check before ban)
+              </p>
+            </div>
+
+            <div className="px-6 py-4">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {(geozoneConfig?.authorized_countries || []).map((country) => (
+                  <span
+                    key={country}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded text-sm font-medium"
+                  >
+                    {country}
+                    <button
+                      onClick={() => handleRemoveAuthorizedCountry(country)}
+                      disabled={savingGeozone}
+                      className="ml-1 p-0.5 hover:bg-green-500/20 rounded disabled:opacity-50"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                {(geozoneConfig?.authorized_countries || []).length === 0 && (
+                  <span className="text-sm text-muted-foreground">No authorized countries configured</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newAuthorizedCountry}
+                  onChange={(e) => setNewAuthorizedCountry(e.target.value.toUpperCase().slice(0, 2))}
+                  placeholder="CC"
+                  maxLength={2}
+                  disabled={savingGeozone}
+                  className="w-16 px-2 py-1 bg-background border rounded text-sm uppercase disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <button
+                  onClick={handleAddAuthorizedCountry}
+                  disabled={savingGeozone || newAuthorizedCountry.length !== 2}
+                  className="flex items-center gap-1 px-3 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded text-sm font-medium hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* Hostile Countries Section */}
+            <div className="px-6 py-3 bg-muted/30 border-t border-b">
+              <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-red-500" />
+                Hostile Countries (Immediate ban on first WAF event)
+              </p>
+            </div>
+
+            <div className="px-6 py-4">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {(geozoneConfig?.hostile_countries || []).map((country) => (
+                  <span
+                    key={country}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/10 text-red-600 dark:text-red-400 rounded text-sm font-medium"
+                  >
+                    {country}
+                    <button
+                      onClick={async () => {
+                        // Remove hostile country (use update config)
+                        if (!geozoneConfig) return
+                        const newHostile = geozoneConfig.hostile_countries.filter(c => c !== country)
+                        handleGeozoneChange('hostile_countries', newHostile)
+                      }}
+                      disabled={savingGeozone}
+                      className="ml-1 p-0.5 hover:bg-red-500/20 rounded disabled:opacity-50"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                {(geozoneConfig?.hostile_countries || []).length === 0 && (
+                  <span className="text-sm text-muted-foreground">No hostile countries configured</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newHostileCountry}
+                  onChange={(e) => setNewHostileCountry(e.target.value.toUpperCase().slice(0, 2))}
+                  placeholder="CC"
+                  maxLength={2}
+                  disabled={savingGeozone}
+                  className="w-16 px-2 py-1 bg-background border rounded text-sm uppercase disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <button
+                  onClick={handleAddHostileCountry}
+                  disabled={savingGeozone || newHostileCountry.length !== 2}
+                  className="flex items-center gap-1 px-3 py-1 bg-red-500/10 text-red-600 dark:text-red-400 rounded text-sm font-medium hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </SettingsSection>
+
       {/* License Status Section */}
       <SettingsSection
         title="License"
@@ -1437,7 +1752,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.51.102</p>
+        <p>VIGILANCE X v3.52.100</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

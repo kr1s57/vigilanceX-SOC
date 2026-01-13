@@ -1,6 +1,6 @@
 # VIGILANCE X - Live Active Response
 
-> **Version 3.51.100** | Security Operations Center pour Sophos XGS
+> **Version 3.52.100** | Security Operations Center pour Sophos XGS
 
 Solution de supervision de sécurité et de **réponse active centralisée** pour **Sophos XGS**.
 
@@ -101,11 +101,41 @@ Solution de supervision de sécurité et de **réponse active centralisée** pou
 |----------------|-------------|
 | **Scénarios YAML** | Règles de détection personnalisables |
 | **Validate Threat** | Vérification croisée avec APIs avant ban |
-| **Récidivisme** | Ban progressif (4 bans = permanent) |
+| **Tiers progressifs** | Ban progressif avec escalade automatique *(v3.52)* |
+| **GeoZone** | Classification géographique des IPs pour décisions adaptées *(v3.52)* |
+| **Surveillance** | Période de surveillance conditionnelle après unban *(v3.52)* |
 | **Immunité** | Protection temporaire contre auto-ban (Unban 24h) |
 | **Soft Whitelist** | Whitelist graduée (hard/soft/monitor) |
 | **Geoblocking** | Blocage par pays/ASN |
 | **XGS Sync** | Synchronisation bidirectionnelle avec firewall |
+
+### Configuration GeoZone (Settings > Detect2Ban v2)
+
+Le système GeoZone permet d'adapter les règles de ban selon l'origine géographique des IPs.
+
+| Paramètre | Description |
+|-----------|-------------|
+| **Enable GeoZone** | Active/désactive la classification géographique |
+| **Default Policy** | Politique pour les pays non listés (Trusted/Neutral/Hostile) |
+| **WAF Threshold (Hostile)** | Tolérance pour les pays hostiles (plus bas = plus strict) |
+| **WAF Threshold (Normal)** | Tolérance pour les pays autorisés/neutres |
+| **Threat Score Threshold** | Score minimum des providers TI pour déclencher un ban |
+
+**Zones disponibles:**
+
+| Zone | Usage |
+|------|-------|
+| **Authorized** | Pays de confiance - vérification TI avant ban |
+| **Neutral** | Comportement standard |
+| **Hostile** | Pays suspects - tolérance minimale |
+
+**Configuration recommandée:**
+1. Ajoutez vos pays de confiance dans "Authorized Countries" (ex: FR, BE, LU, DE, CH)
+2. Ajoutez les pays suspects dans "Hostile Countries" si nécessaire
+3. Choisissez "Default Policy" selon votre contexte:
+   - **Trusted**: Environnement fermé, tous les pays inconnus sont de confiance
+   - **Neutral**: Équilibre entre sécurité et accessibilité
+   - **Hostile**: Environnement sensible, tous les pays inconnus sont suspects
 
 ---
 

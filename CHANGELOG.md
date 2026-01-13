@@ -7,6 +7,75 @@ All notable changes to VIGILANCE X will be documented in this file.
 
 ---
 
+## [3.52.100] - 2026-01-12
+
+### D2B v2 - Jail System Phase 1
+
+Système avancé de gestion des bans avec tiers progressifs, classification géographique (GeoZone), et validation Threat Intelligence.
+
+#### Nouvelles Fonctionnalités
+
+| Feature | Description |
+|---------|-------------|
+| **Tiers Progressifs** | Tier 0 (4h) → Tier 1 (24h) → Tier 2 (7d) → Tier 3+ (Permanent) |
+| **Surveillance Conditionnelle** | 30 jours de surveillance après unban, escalade si récidive |
+| **GeoZone Classification** | Authorized / Hostile / Neutral avec comportements différenciés |
+| **Groupes XGS Séparés** | grp_VGX-BannedIP (temp) vs grp_VGX-BannedPerm (permanent) |
+| **API GeoZone** | Configuration des zones géographiques via API REST |
+| **UI GeoZone** | Nouvelle section dans Settings pour configurer les GeoZones |
+
+#### Nouvelles Entités
+
+| Entité | Description |
+|--------|-------------|
+| `GeoZoneConfig` | Configuration des zones (pays autorisés, hostiles, seuils) |
+| `PendingBan` | IPs en attente d'approbation admin |
+| `PendingBanStats` | Statistiques des pending bans |
+
+#### Nouveaux Champs BanStatus
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `current_tier` | uint8 | Tier actuel (0-3+) |
+| `conditional_until` | DateTime | Fin période surveillance |
+| `geo_zone` | string | Zone géographique (authorized/hostile/neutral) |
+| `threat_score_at_ban` | int | Score TI au moment du ban |
+| `xgs_group` | string | Groupe XGS Sophos |
+
+#### Endpoints API
+
+```
+GET    /api/v1/geozone/config              # Get configuration
+PUT    /api/v1/geozone/config              # Update configuration
+GET    /api/v1/geozone/classify?country=XX # Classify country
+GET    /api/v1/geozone/countries           # List countries
+POST   /api/v1/geozone/countries/authorized # Add to authorized
+DELETE /api/v1/geozone/countries/authorized # Remove from authorized
+POST   /api/v1/geozone/countries/hostile   # Add to hostile
+```
+
+#### Migration ClickHouse 007
+
+- Nouveaux champs `ip_ban_status`: current_tier, conditional_until, geo_zone, threat_score_at_ban, xgs_group
+- Nouveaux champs `ban_history`: tier, geo_zone, threat_score, xgs_group
+- Nouvelle table `pending_bans`
+- Nouvelle table `geozone_config`
+
+#### Fichiers Modifiés
+
+| Fichier | Description |
+|---------|-------------|
+| `backend/internal/entity/ban.go` | Entités D2B v2 |
+| `backend/internal/adapter/repository/clickhouse/geozone_repo.go` | Repositories GeoZone + PendingBans |
+| `backend/internal/adapter/controller/http/handlers/geozone.go` | Handler HTTP GeoZone |
+| `backend/cmd/api/main.go` | Wiring routes GeoZone |
+| `docker/clickhouse/migrations/007_d2b_v2_ban_system.sql` | Migration DB |
+| `frontend/src/lib/api.ts` | API client geozoneApi |
+| `frontend/src/pages/Settings.tsx` | UI Section GeoZone |
+| `frontend/src/types/index.ts` | Types TypeScript D2B v2 |
+
+---
+
 ## [3.51.102] - 2026-01-12
 
 ### Email Report Recipients & Country Flags in Active Bans

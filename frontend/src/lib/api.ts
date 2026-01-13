@@ -886,6 +886,65 @@ export const notificationsApi = {
   },
 }
 
+// GeoZone API (v3.52 - D2B v2 Geographic zone classification)
+export interface GeoZoneConfig {
+  enabled: boolean
+  authorized_countries: string[]
+  hostile_countries: string[]
+  default_policy: 'authorized' | 'hostile' | 'neutral'
+  waf_threshold_hzone: number
+  waf_threshold_zone: number
+  threat_score_threshold: number
+}
+
+export const geozoneApi = {
+  // Get current GeoZone configuration
+  getConfig: async (): Promise<GeoZoneConfig> => {
+    const response = await api.get<GeoZoneConfig>('/geozone/config')
+    return response.data
+  },
+
+  // Update GeoZone configuration
+  updateConfig: async (config: Partial<GeoZoneConfig>): Promise<{ success: boolean; message: string; config: GeoZoneConfig }> => {
+    const response = await api.put<{ success: boolean; message: string; config: GeoZoneConfig }>('/geozone/config', config)
+    return response.data
+  },
+
+  // Classify a country code into a zone
+  classifyCountry: async (country: string): Promise<{ country: string; zone: string; enabled: boolean }> => {
+    const response = await api.get<{ country: string; zone: string; enabled: boolean }>('/geozone/classify', {
+      params: { country }
+    })
+    return response.data
+  },
+
+  // Get list of authorized and hostile countries
+  getCountryList: async (): Promise<{ enabled: boolean; authorized_countries: string[]; hostile_countries: string[]; default_policy: string }> => {
+    const response = await api.get<{ enabled: boolean; authorized_countries: string[]; hostile_countries: string[]; default_policy: string }>('/geozone/countries')
+    return response.data
+  },
+
+  // Add country to authorized list
+  addAuthorizedCountry: async (country: string): Promise<{ success: boolean; message: string; country: string }> => {
+    const response = await api.post<{ success: boolean; message: string; country: string }>('/geozone/countries/authorized', { country })
+    return response.data
+  },
+
+  // Remove country from authorized list
+  removeAuthorizedCountry: async (country: string): Promise<{ success: boolean; message: string; country: string }> => {
+    const response = await api.delete<{ success: boolean; message: string; country: string }>('/geozone/countries/authorized', {
+      params: { country }
+    })
+    return response.data
+  },
+
+  // Add country to hostile list
+  addHostileCountry: async (country: string): Promise<{ success: boolean; message: string; country: string }> => {
+    const response = await api.post<{ success: boolean; message: string; country: string }>('/geozone/countries/hostile', { country })
+    return response.data
+  },
+}
+
 // Soft Whitelist API (v2.0)
 export const softWhitelistApi = {
   // List all whitelisted IPs (optional filter by type)

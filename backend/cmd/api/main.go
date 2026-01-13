@@ -75,6 +75,8 @@ func main() {
 	blocklistRepo := clickhouse.NewBlocklistRepository(chConn)
 	geoblockingRepo := clickhouse.NewGeoblockingRepository(chConn) // v2.0: Geoblocking
 	usersRepo := clickhouse.NewUsersRepository(chConn)             // v2.6: Authentication
+	geozoneRepo := clickhouse.NewGeoZoneRepository(chConn)         // v3.52: D2B v2 GeoZone config
+	pendingBansRepo := clickhouse.NewPendingBansRepository(chConn) // v3.52: D2B v2 Pending bans
 
 	// v3.0: Initialize License Client with Firewall Binding
 	var licenseClient *license.Client
@@ -377,6 +379,8 @@ func main() {
 	licenseHandler := handlers.NewLicenseHandler(licenseClient)                 // v2.9: License management
 	parserHandler := handlers.NewParserHandler(xgsParser)                       // v3.1: XGS Parser
 	notificationHandler := handlers.NewNotificationHandler(notificationService) // v3.3: Email notifications
+	geozoneHandler := handlers.NewGeoZoneHandler(geozoneRepo)                   // v3.52: D2B v2 GeoZone
+	_ = pendingBansRepo                                                         // v3.52: Will be used in Phase 2
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -593,6 +597,17 @@ func main() {
 				r.Get("/countries/high-risk", geoblockingHandler.GetHighRiskCountries)
 				// Cache management
 				r.Post("/cache/refresh", geoblockingHandler.RefreshRulesCache)
+			})
+
+			// GeoZone (v3.52 - D2B v2 Geographic zone classification for ban decisions)
+			r.Route("/geozone", func(r chi.Router) {
+				r.Get("/config", geozoneHandler.GetConfig)
+				r.Put("/config", geozoneHandler.UpdateConfig)
+				r.Get("/classify", geozoneHandler.ClassifyCountry)
+				r.Get("/countries", geozoneHandler.GetCountryList)
+				r.Post("/countries/authorized", geozoneHandler.AddAuthorizedCountry)
+				r.Delete("/countries/authorized", geozoneHandler.RemoveAuthorizedCountry)
+				r.Post("/countries/hostile", geozoneHandler.AddHostileCountry)
 			})
 
 			// Anomalies

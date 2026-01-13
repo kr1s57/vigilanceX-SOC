@@ -1,8 +1,50 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.51.102 | **Derniere mise a jour**: 2026-01-12
+> **Version**: 3.52.100 | **Derniere mise a jour**: 2026-01-12
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
+
+---
+
+## REGLES CRITIQUES - LIRE EN PREMIER (OBLIGATOIRE)
+
+### PROTECTION REPO PUBLIC - NE JAMAIS OUBLIER
+
+**AVANT CHAQUE PUSH VERS `public` (vigilanceX-SOC) ou `forgejo-soc`:**
+
+Le repo PUBLIC ne doit contenir **QUE**:
+- `README.md` - Documentation client uniquement
+- Code source (backend/, frontend/, docker/)
+
+**FICHIERS INTERDITS SUR REPO PUBLIC** (a supprimer systematiquement):
+
+| Fichier/Dossier | Raison |
+|-----------------|--------|
+| `CLAUDE.md` | Process internes, architecture, secrets |
+| `CHANGELOG.md` | Details implementation, vulnerabilites |
+| `RELEASE.md` | Process de release |
+| `DESCRIPTIFDET.md` | Descriptions techniques |
+| `project.md` | Notes de projet |
+| `docs/` | Documentation interne complete |
+| `BUGFIXSESSION/` | Sessions de debug |
+| `FEATURESPROMPT/` | Prompts de features |
+
+**INFORMATIONS A NE JAMAIS REVELER PUBLIQUEMENT:**
+- Seuils de detection (WAF thresholds, nombre d'events)
+- Durees de ban (4h, 24h, 7j, permanent)
+- Logique de decision D2B (flux, conditions)
+- Scores TI et leurs seuils
+- Noms des groupes XGS internes
+- Architecture de detection
+- Process de ban/unban detailles
+
+**POURQUOI?** Les attaquants pourraient adapter leurs techniques pour contourner nos seuils de detection s'ils connaissent nos parametres exacts.
+
+**WORKFLOW GITGO:**
+1. Push vers `origin` (private) - OK avec tous les fichiers
+2. Push vers `public` - UNIQUEMENT README.md + code source
+3. Push vers `forgejo` (private) - OK avec tous les fichiers
+4. Push vers `forgejo-soc` (public) - UNIQUEMENT README.md + code source
 
 ---
 
@@ -159,6 +201,239 @@ Servers/Apps (Syslog) ──► Vector.dev ──► ClickHouse
 - `backend/internal/usecase/bans/service.go` - Ban logic + immunity
 - `backend/scenarios/*.yaml` - Scenarios YAML
 - `backend/internal/entity/ban.go` - BanStatus avec immune_until
+
+### Detect2Ban v2 - Jail System (v3.52 - Phase 1)
+
+**Architecture D2B v2** - Systeme avance de gestion des bans avec:
+- **Tiers progressifs** (recidivisme)
+- **GeoZone** (classification geographique)
+- **Threat Intel validation** avant ban
+- **Pending Approval** pour zones autorisees
+- **Separation groupes XGS** (temp vs permanent)
+
+#### Tiers de Ban (Recidivisme)
+
+| Tier | Duree | Condition | Groupe XGS |
+|------|-------|-----------|------------|
+| 0 | 4 heures | Premier ban | grp_VGX-BannedIP |
+| 1 | 24 heures | 1ere recidive | grp_VGX-BannedIP |
+| 2 | 7 jours | 2eme recidive | grp_VGX-BannedIP |
+| 3+ | Permanent | 3+ recidives | grp_VGX-BannedPerm |
+
+**Surveillance conditionnelle**: Apres unban, IP surveillee 30 jours.
+Si nouvel incident pendant surveillance → Tier+1 automatique.
+
+#### GeoZone - Classification Geographique (v3.52)
+
+Systeme de classification des IPs par origine geographique pour ajuster les seuils de ban.
+
+| Zone | Description | Seuil WAF | Comportement |
+|------|-------------|-----------|--------------|
+| **Authorized** | Pays de confiance (FR, BE, LU, DE, CH...) | `waf_threshold_zone` (3) | TI check avant ban, tolerance plus elevee |
+| **Hostile** | Pays explicitement non fiables | `waf_threshold_hzone` (1) | Ban rapide, peu de tolerance |
+| **Neutral** | Autres pays (selon `default_policy`) | Variable | Depends de la politique par defaut |
+
+**Les 5 Settings GeoZone (Settings UI > Detect2Ban v2):**
+
+| Setting | Type | Defaut | Description |
+|---------|------|--------|-------------|
+| **Enable GeoZone** | Toggle | OFF | Active/desactive la classification geographique |
+| **Default Policy** | Choice | Neutral | Zone attribuee aux pays non listes |
+| **WAF Threshold HZone** | 1-5 | 1 | Nombre d'events WAF avant ban pour zone Hostile |
+| **WAF Threshold Zone** | 3-15 | 3 | Nombre d'events WAF avant ban pour zone Authorized/Neutral |
+| **Threat Score Threshold** | 30-90 | 50 | Score TI minimum pour auto-ban en zone Authorized |
+
+**Explication detaillee des policies:**
+
+1. **Authorized (Trusted)**: Pays de confiance
+   - Utilise `waf_threshold_zone` (plus eleve = plus tolerant)
+   - Verification Threat Intel obligatoire avant ban
+   - Si score TI < threshold → Pending Approval (Phase 2)
+
+2. **Neutral**: Comportement standard
+   - Utilise `waf_threshold_zone`
+   - Ban automatique apres seuil atteint
+   - Pas de validation manuelle requise
+
+3. **Hostile**: Pays suspects
+   - Utilise `waf_threshold_hzone` (plus bas = plus strict)
+   - Ban rapide des le 1er event WAF si threshold=1
+   - Pas d'exception possible
+
+**Fichiers cles:**
+- `backend/internal/adapter/controller/http/handlers/geozone.go` - API handlers
+- `backend/internal/adapter/repository/clickhouse/geozone_repo.go` - Persistence ClickHouse
+- `backend/internal/entity/ban.go` - GeoZoneConfig struct + ClassifyCountry()
+- `frontend/src/pages/Settings.tsx` - UI GeoZone section
+- `frontend/src/lib/api.ts` - geozoneApi client
+
+**Table ClickHouse:**
+```sql
+CREATE TABLE vigilance_x.geozone_config (
+    id UInt8 DEFAULT 1,
+    enabled UInt8 DEFAULT 0,
+    authorized_countries Array(String),
+    hostile_countries Array(String),
+    default_policy LowCardinality(String),
+    waf_threshold_hzone UInt8 DEFAULT 1,
+    waf_threshold_zone UInt8 DEFAULT 3,
+    threat_score_threshold UInt8 DEFAULT 50,
+    updated_at DateTime DEFAULT now(),
+    version UInt64
+) ENGINE = ReplacingMergeTree(version) ORDER BY id
+```
+
+#### Flux de Decision D2B v2
+
+```
+                            ┌─────────────────────┐
+                            │  WAF Event Detected │
+                            └──────────┬──────────┘
+                                       ▼
+                         ┌─────────────────────────┐
+                         │  Classify IP GeoZone    │
+                         │  (country → zone)       │
+                         └──────────┬──────────────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              ▼                     ▼                     ▼
+        ┌──────────┐          ┌──────────┐          ┌──────────┐
+        │ HOSTILE  │          │ NEUTRAL  │          │AUTHORIZED│
+        └────┬─────┘          └────┬─────┘          └────┬─────┘
+             │                     │                     │
+             ▼                     ▼                     ▼
+    ┌────────────────┐   ┌────────────────┐   ┌────────────────┐
+    │ 1 event WAF?   │   │ 3+ events WAF? │   │ 3+ events WAF? │
+    │ → BAN IMMEDIAT │   │ → BAN AUTO     │   │ → TI CHECK     │
+    └────────────────┘   └────────────────┘   └───────┬────────┘
+                                                      │
+                                         ┌────────────┴────────────┐
+                                         ▼                        ▼
+                                  ┌─────────────┐          ┌─────────────┐
+                                  │ Score ≥ 50% │          │ Score < 50% │
+                                  │ → BAN AUTO  │          │ → PENDING   │
+                                  └─────────────┘          │   APPROVAL  │
+                                                           └─────────────┘
+```
+
+#### Groupes XGS Sophos
+
+| Groupe | Usage | IPs |
+|--------|-------|-----|
+| `grp_VGX-BannedIP` | Bans temporaires (Tier 0-2) | Bans actifs non permanents |
+| `grp_VGX-BannedPerm` | Bans permanents (Tier 3+) | Recidivistes permanents |
+
+**Avantage**: Regles firewall differentes possibles (ex: log-only pour temp, drop strict pour perm).
+
+#### Entites D2B v2
+
+**BanStatus (champs ajoutes):**
+```go
+CurrentTier      uint8      // 0-3+ (tier actuel)
+ConditionalUntil *time.Time // Fin periode surveillance
+GeoZone          string     // authorized/hostile/neutral
+ThreatScoreAtBan int        // Score TI au moment du ban
+XGSGroup         string     // grp_VGX-BannedIP ou grp_VGX-BannedPerm
+```
+
+**GeoZoneConfig:**
+```go
+Enabled              bool     // Activer systeme GeoZone
+AuthorizedCountries  []string // ["FR", "BE", "LU", "DE", "CH", ...]
+HostileCountries     []string // Pays hostiles
+DefaultPolicy        string   // authorized/hostile/neutral
+WAFThresholdHzone    int      // Seuil WAF zone hostile (defaut: 1)
+WAFThresholdZone     int      // Seuil WAF zone autorisee (defaut: 3)
+ThreatScoreThreshold int      // Seuil TI pour auto-ban (defaut: 50)
+```
+
+**PendingBan (nouvelle entite):**
+```go
+ID           string    // UUID
+IP           string    // IP en attente
+Country      string    // Code pays
+GeoZone      string    // Zone classifiee
+ThreatScore  int       // Score TI
+ThreatSources []string // Sources TI
+EventCount   uint32    // Nombre events WAF
+FirstEvent   time.Time // Premier event
+LastEvent    time.Time // Dernier event
+TriggerRule  string    // Regle declencheur
+Reason       string    // Raison du pending
+Status       string    // pending/approved/rejected/expired
+ReviewedAt   *time.Time
+ReviewedBy   string
+ReviewNote   string
+```
+
+#### Endpoints API D2B v2
+
+```
+# GeoZone Configuration
+GET    /api/v1/geozone/config              # Get config
+PUT    /api/v1/geozone/config              # Update config
+GET    /api/v1/geozone/classify?country=XX # Classify country
+GET    /api/v1/geozone/countries           # List countries
+POST   /api/v1/geozone/countries/authorized # Add authorized
+DELETE /api/v1/geozone/countries/authorized?country=XX # Remove authorized
+POST   /api/v1/geozone/countries/hostile   # Add hostile
+```
+
+#### Migration ClickHouse (007)
+
+```sql
+-- Nouveaux champs ip_ban_status
+ALTER TABLE ip_ban_status ADD COLUMN current_tier UInt8 DEFAULT 0;
+ALTER TABLE ip_ban_status ADD COLUMN conditional_until Nullable(DateTime);
+ALTER TABLE ip_ban_status ADD COLUMN geo_zone LowCardinality(String) DEFAULT '';
+ALTER TABLE ip_ban_status ADD COLUMN threat_score_at_ban Int32 DEFAULT 0;
+ALTER TABLE ip_ban_status ADD COLUMN xgs_group LowCardinality(String) DEFAULT 'grp_VGX-BannedIP';
+
+-- Nouveaux champs ban_history
+ALTER TABLE ban_history ADD COLUMN tier UInt8 DEFAULT 0;
+ALTER TABLE ban_history ADD COLUMN geo_zone LowCardinality(String) DEFAULT '';
+ALTER TABLE ban_history ADD COLUMN threat_score Int32 DEFAULT 0;
+ALTER TABLE ban_history ADD COLUMN xgs_group LowCardinality(String) DEFAULT '';
+
+-- Table pending_bans
+CREATE TABLE pending_bans (
+    id UUID, ip IPv4, country String, geo_zone String,
+    threat_score Int32, threat_sources Array(String),
+    event_count UInt32, first_event DateTime, last_event DateTime,
+    trigger_rule String, reason String, status String,
+    created_at DateTime, reviewed_at Nullable(DateTime),
+    reviewed_by String, review_note String
+) ENGINE = ReplacingMergeTree() ORDER BY (ip, created_at);
+
+-- Table geozone_config
+CREATE TABLE geozone_config (
+    id UInt8, enabled UInt8, authorized_countries Array(String),
+    hostile_countries Array(String), default_policy String,
+    waf_threshold_hzone UInt8, waf_threshold_zone UInt8,
+    threat_score_threshold UInt8, updated_at DateTime, version UInt64
+) ENGINE = ReplacingMergeTree(version) ORDER BY id;
+```
+
+#### Fichiers D2B v2
+
+| Fichier | Description |
+|---------|-------------|
+| `backend/internal/entity/ban.go` | Entites BanStatus, GeoZoneConfig, PendingBan |
+| `backend/internal/adapter/repository/clickhouse/geozone_repo.go` | Repositories GeoZone et PendingBans |
+| `backend/internal/adapter/controller/http/handlers/geozone.go` | Handler HTTP GeoZone |
+| `docker/clickhouse/migrations/007_d2b_v2_ban_system.sql` | Migration DB |
+| `frontend/src/lib/api.ts` | API client geozoneApi |
+| `frontend/src/pages/Settings.tsx` | UI configuration GeoZone |
+| `frontend/src/types/index.ts` | Types TypeScript D2B v2 |
+
+#### Phases Implementation D2B v2
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| **Phase 1** | Entites, migration, API GeoZone, UI Settings | **Done** |
+| Phase 2 | Decision Engine avec logique zones | Pending |
+| Phase 3 | Surveillance et escalade automatique | Pending |
+| Phase 4 | Notifications et alarmes UI | Pending |
 
 ### Storage External (v3.51 - Wired)
 
@@ -996,6 +1271,23 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.52.100 (2026-01-12)
+- **D2B v2 - Jail System Phase 1**: Systeme avance de gestion des bans
+- **Tiers progressifs**: Tier 0 (4h) → Tier 1 (24h) → Tier 2 (7d) → Tier 3+ (Permanent)
+- **Surveillance conditionnelle**: 30 jours apres unban, escalade si recidive
+- **GeoZone Classification**: Authorized / Hostile / Neutral
+  - Authorized: TI check avant ban, pending approval si score < seuil
+  - Hostile: Ban immediat des le 1er event WAF
+  - Neutral: Seuil WAF standard avec ban auto
+- **Groupes XGS separes**: grp_VGX-BannedIP (temp) vs grp_VGX-BannedPerm (perm)
+- **Nouvelles entites**: GeoZoneConfig, PendingBan, PendingBanStats
+- **Nouveaux champs BanStatus**: current_tier, conditional_until, geo_zone, threat_score_at_ban, xgs_group
+- **API GeoZone**: GET/PUT /geozone/config, GET /geozone/classify, POST/DELETE /geozone/countries/*
+- **Migration 007**: Tables pending_bans, geozone_config + colonnes ip_ban_status/ban_history
+- **UI Settings**: Section "GeoZone (D2B v2)" avec configuration complete
+  - Enable/disable, default policy, WAF thresholds, threat score threshold
+  - Gestion liste pays autorises et hostiles
 
 ### v3.51.102 (2026-01-12)
 - **Report Recipients**: Configuration des emails destinataires pour scheduled reports
