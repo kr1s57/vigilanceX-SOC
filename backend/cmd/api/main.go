@@ -34,6 +34,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/modsec"
 	"github.com/kr1s57/vigilancex/internal/usecase/notifications"
 	"github.com/kr1s57/vigilancex/internal/usecase/reports"
+	"github.com/kr1s57/vigilancex/internal/usecase/retention"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
 	"github.com/kr1s57/vigilancex/internal/usecase/wafwatcher"
 
@@ -77,6 +78,7 @@ func main() {
 	usersRepo := clickhouse.NewUsersRepository(chConn)             // v2.6: Authentication
 	geozoneRepo := clickhouse.NewGeoZoneRepository(chConn)         // v3.52: D2B v2 GeoZone config
 	pendingBansRepo := clickhouse.NewPendingBansRepository(chConn) // v3.52: D2B v2 Pending bans
+	retentionRepo := clickhouse.NewRetentionRepository(chConn)     // v3.52: Log retention settings
 
 	// v3.0: Initialize License Client with Firewall Binding
 	var licenseClient *license.Client
@@ -380,6 +382,8 @@ func main() {
 	parserHandler := handlers.NewParserHandler(xgsParser)                       // v3.1: XGS Parser
 	notificationHandler := handlers.NewNotificationHandler(notificationService) // v3.3: Email notifications
 	geozoneHandler := handlers.NewGeoZoneHandler(geozoneRepo)                   // v3.52: D2B v2 GeoZone
+	retentionService := retention.NewService(retentionRepo, logger)             // v3.52: Log retention service
+	retentionHandler := handlers.NewRetentionHandler(retentionService)          // v3.52: Log retention API
 	_ = pendingBansRepo                                                         // v3.52: Will be used in Phase 2
 
 	// Initialize WebSocket hub
@@ -390,6 +394,10 @@ func main() {
 	// Start Feed Ingester for automatic blocklist synchronization
 	go blocklistsService.Start(context.Background())
 	logger.Info("Blocklist Feed Ingester started")
+
+	// Start retention cleanup worker
+	retentionService.Start()
+	logger.Info("Retention cleanup worker started")
 
 	// Create router
 	r := chi.NewRouter()
@@ -610,6 +618,15 @@ func main() {
 				r.Post("/countries/hostile", geozoneHandler.AddHostileCountry)
 			})
 
+			// Retention (v3.52 - Log retention and cleanup settings)
+			r.Route("/retention", func(r chi.Router) {
+				r.Get("/settings", retentionHandler.GetSettings)
+				r.Put("/settings", retentionHandler.UpdateSettings)
+				r.Get("/status", retentionHandler.GetStatus)
+				r.Get("/storage", retentionHandler.GetStorageStats)
+				r.Post("/cleanup", retentionHandler.RunCleanup)
+			})
+
 			// Anomalies
 			r.Route("/anomalies", func(r chi.Router) {
 				r.Get("/", handlers.StubAnomaliesList)
@@ -788,6 +805,10 @@ func main() {
 	// Stop Feed Ingester
 	blocklistsService.Stop()
 	logger.Info("Feed Ingester stopped")
+
+	// v3.52: Stop retention cleanup worker
+	retentionService.Stop()
+	logger.Info("Retention cleanup worker stopped")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
