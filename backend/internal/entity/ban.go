@@ -24,6 +24,13 @@ type BanStatus struct {
 	UpdatedAt    time.Time  `json:"updated_at" ch:"updated_at"`
 	Version      uint64     `json:"-" ch:"version"`
 	Country      string     `json:"country,omitempty"` // Country code (enriched via GeoIP, not stored in DB)
+
+	// D2B v2 Fields (v3.52)
+	CurrentTier      uint8      `json:"current_tier" ch:"current_tier"`               // 0=initial, 1=1st recidiv, 2=2nd recidiv, 3+=permanent
+	ConditionalUntil *time.Time `json:"conditional_until" ch:"conditional_until"`     // End of conditional survey period
+	GeoZone          string     `json:"geo_zone" ch:"geo_zone"`                       // authorized, hostile, neutral
+	ThreatScoreAtBan int        `json:"threat_score_at_ban" ch:"threat_score_at_ban"` // Threat score when banned
+	XGSGroup         string     `json:"xgs_group" ch:"xgs_group"`                     // grp_VGX-BannedIP or grp_VGX-BannedPerm
 }
 
 // BanHistory represents a ban/unban action in the audit trail
@@ -137,6 +144,13 @@ const (
 	BanStatusActive    = "active"
 	BanStatusExpired   = "expired"
 	BanStatusPermanent = "permanent"
+
+	// D2B v2 Status (v3.52)
+	BanStatusConditional   = "conditional"      // Under post-unban surveillance
+	BanStatusPending       = "pending_approval" // Awaiting admin review
+	BanStatusBanWAFHzone   = "ban_waf_hzone"    // WAF ban from hostile zone
+	BanStatusBanWAFZone    = "ban_waf_zone"     // WAF ban from authorized zone (threat confirmed)
+	BanStatusBanWAFPending = "ban_waf_pending"  // WAF detection from authorized zone, awaiting review
 )
 
 // Ban action constants (for history)
@@ -147,9 +161,42 @@ const (
 	BanActionExtend        = "extend"
 	BanActionPermanent     = "permanent"
 	BanActionExpire        = "expire"
+
+	// D2B v2 Actions (v3.52)
+	BanActionUnbanConditional = "unban_conditional" // Unban with conditional surveillance
+	BanActionEscalate         = "escalate"          // Tier escalation due to recidive
+	BanActionApprove          = "approve"           // Admin approved pending ban
+	BanActionReject           = "reject"            // Admin rejected pending ban
 )
 
-// Progressive ban durations
+// GeoZone constants (D2B v2)
+const (
+	GeoZoneAuthorized = "authorized" // Trusted countries
+	GeoZoneHostile    = "hostile"    // Untrusted countries - immediate ban
+	GeoZoneNeutral    = "neutral"    // Default - standard processing
+)
+
+// XGS Group constants (D2B v2)
+const (
+	XGSGroupTempBan = "grp_VGX-BannedIP"   // Temporary bans (Tier 0-2)
+	XGSGroupPermBan = "grp_VGX-BannedPerm" // Permanent bans (Tier 3+)
+)
+
+// Progressive ban durations by tier (D2B v2)
+var TierBanDurations = map[uint8]time.Duration{
+	0: 4 * time.Hour,      // Tier 0: Initial ban
+	1: 24 * time.Hour,     // Tier 1: 1st recidive
+	2: 7 * 24 * time.Hour, // Tier 2: 2nd recidive
+	// Tier 3+ = Permanent
+}
+
+// ConditionalSurveyDuration is the surveillance period after unban (D2B v2)
+const ConditionalSurveyDuration = 30 * 24 * time.Hour // 30 days
+
+// PermanentTierThreshold is the tier at which bans become permanent
+const PermanentTierThreshold uint8 = 3
+
+// Legacy progressive ban durations (kept for backward compatibility)
 var ProgressiveBanDurations = []time.Duration{
 	1 * time.Hour,  // 1st ban
 	4 * time.Hour,  // 2nd ban
@@ -266,4 +313,142 @@ func (w *WhitelistEntry) CheckWhitelist() *WhitelistCheckResult {
 	}
 
 	return result
+}
+
+// ============================================================================
+// D2B v2 - GeoZone Configuration (v3.52)
+// ============================================================================
+
+// GeoZoneConfig holds geographic zone configuration for ban decisions
+type GeoZoneConfig struct {
+	Enabled              bool     `json:"enabled"`
+	AuthorizedCountries  []string `json:"authorized_countries"`   // ISO 3166-1 alpha-2 codes (FR, BE, LU, DE, CH...)
+	HostileCountries     []string `json:"hostile_countries"`      // Explicit blocklist (optional)
+	DefaultPolicy        string   `json:"default_policy"`         // "hostile" or "neutral" for unlisted countries
+	WAFThresholdHzone    int      `json:"waf_threshold_hzone"`    // Events before ban for hostile zone (default: 1)
+	WAFThresholdZone     int      `json:"waf_threshold_zone"`     // Events before TI check for authorized zone (default: 3)
+	ThreatScoreThreshold int      `json:"threat_score_threshold"` // Min score to auto-ban in authorized zone (default: 50)
+}
+
+// DefaultGeoZoneConfig returns sensible defaults
+func DefaultGeoZoneConfig() *GeoZoneConfig {
+	return &GeoZoneConfig{
+		Enabled: false,
+		AuthorizedCountries: []string{
+			"FR", "BE", "LU", "DE", "CH", "NL", "GB", "ES", "IT", "PT", "AT",
+		},
+		HostileCountries:     []string{},
+		DefaultPolicy:        GeoZoneNeutral,
+		WAFThresholdHzone:    1,  // Immediate ban for hostile zone
+		WAFThresholdZone:     3,  // 3 events before TI check
+		ThreatScoreThreshold: 50, // 50% threat score to auto-ban
+	}
+}
+
+// ClassifyCountry determines the zone for a country code
+func (c *GeoZoneConfig) ClassifyCountry(countryCode string) string {
+	if !c.Enabled {
+		return GeoZoneNeutral
+	}
+
+	// Check hostile list first
+	for _, cc := range c.HostileCountries {
+		if cc == countryCode {
+			return GeoZoneHostile
+		}
+	}
+
+	// Check authorized list
+	for _, cc := range c.AuthorizedCountries {
+		if cc == countryCode {
+			return GeoZoneAuthorized
+		}
+	}
+
+	// Return default policy
+	return c.DefaultPolicy
+}
+
+// PendingBan represents a ban awaiting admin approval (D2B v2)
+type PendingBan struct {
+	ID            string     `json:"id" ch:"id"`
+	IP            string     `json:"ip" ch:"ip"`
+	Country       string     `json:"country" ch:"country"`
+	GeoZone       string     `json:"geo_zone" ch:"geo_zone"`
+	ThreatScore   int        `json:"threat_score" ch:"threat_score"`
+	ThreatSources []string   `json:"threat_sources" ch:"threat_sources"`
+	EventCount    int        `json:"event_count" ch:"event_count"`
+	FirstEvent    time.Time  `json:"first_event" ch:"first_event"`
+	LastEvent     time.Time  `json:"last_event" ch:"last_event"`
+	TriggerRule   string     `json:"trigger_rule" ch:"trigger_rule"`
+	Reason        string     `json:"reason" ch:"reason"`
+	Status        string     `json:"status" ch:"status"` // pending, approved, rejected, expired
+	CreatedAt     time.Time  `json:"created_at" ch:"created_at"`
+	ReviewedAt    *time.Time `json:"reviewed_at" ch:"reviewed_at"`
+	ReviewedBy    string     `json:"reviewed_by" ch:"reviewed_by"`
+	ReviewNote    string     `json:"review_note" ch:"review_note"`
+}
+
+// PendingBanStats for dashboard widgets
+type PendingBanStats struct {
+	TotalPending  int        `json:"total_pending"`
+	HighThreat    int        `json:"high_threat"`   // Score >= 70
+	MediumThreat  int        `json:"medium_threat"` // Score 30-69
+	LowThreat     int        `json:"low_threat"`    // Score < 30
+	OldestPending *time.Time `json:"oldest_pending"`
+}
+
+// ============================================================================
+// D2B v2 - Additional BanStatus Methods (v3.52)
+// ============================================================================
+
+// IsConditional returns true if the IP is under conditional surveillance
+func (b *BanStatus) IsConditional() bool {
+	if b.Status != BanStatusConditional {
+		return false
+	}
+	if b.ConditionalUntil == nil {
+		return false
+	}
+	return time.Now().Before(*b.ConditionalUntil)
+}
+
+// IsPendingApproval returns true if the ban is awaiting admin review
+func (b *BanStatus) IsPendingApproval() bool {
+	return b.Status == BanStatusPending || b.Status == BanStatusBanWAFPending
+}
+
+// GetTierDuration returns the ban duration for the current tier
+func (b *BanStatus) GetTierDuration() *time.Duration {
+	if b.CurrentTier >= PermanentTierThreshold {
+		return nil // Permanent
+	}
+	if duration, ok := TierBanDurations[b.CurrentTier]; ok {
+		return &duration
+	}
+	// Fallback to tier 0
+	duration := TierBanDurations[0]
+	return &duration
+}
+
+// ShouldEscalate returns true if recidive during conditional survey
+func (b *BanStatus) ShouldEscalate() bool {
+	return b.IsConditional()
+}
+
+// GetNextTier returns the next tier after escalation
+func (b *BanStatus) GetNextTier() uint8 {
+	next := b.CurrentTier + 1
+	if next > PermanentTierThreshold {
+		return PermanentTierThreshold
+	}
+	return next
+}
+
+// GetXGSGroup returns the appropriate XGS group based on tier
+func (b *BanStatus) GetXGSGroup() string {
+	if b.CurrentTier >= PermanentTierThreshold || b.Status == BanStatusPermanent {
+		return XGSGroupPermBan
+	}
+	return XGSGroupTempBan
 }

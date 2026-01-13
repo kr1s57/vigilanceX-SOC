@@ -72,7 +72,7 @@ export interface TopTarget {
 // Ban types
 export interface BanStatus {
   ip: string
-  status: 'active' | 'expired' | 'permanent'
+  status: 'active' | 'expired' | 'permanent' | 'conditional' | 'pending_approval' | 'ban_waf_hzone' | 'ban_waf_zone' | 'ban_waf_pending'
   ban_count: number
   first_ban: string
   last_ban: string
@@ -82,18 +82,29 @@ export interface BanStatus {
   synced_xgs: boolean
   created_by: string
   country?: string // Country code for flag display
+  // D2B v2 Fields
+  current_tier?: number // 0=initial, 1=1st recidiv, 2=2nd recidiv, 3+=permanent
+  conditional_until?: string | null // End of conditional survey period
+  geo_zone?: string // authorized, hostile, neutral
+  threat_score_at_ban?: number // Threat score when banned
+  xgs_group?: string // grp_VGX-BannedIP or grp_VGX-BannedPerm
 }
 
 export interface BanHistory {
   id: string
   timestamp: string
   ip: string
-  action: 'ban' | 'unban' | 'unban_immunity' | 'extend' | 'permanent' | 'expire'
+  action: 'ban' | 'unban' | 'unban_immunity' | 'unban_conditional' | 'extend' | 'permanent' | 'expire' | 'escalate' | 'approve' | 'reject'
   duration_hours: number | null
   reason: string
   source: string  // manual, detect2ban, threat_intel, policy
   performed_by: string
   synced_xgs: boolean
+  // D2B v2 Fields
+  tier?: number
+  geo_zone?: string
+  threat_score?: number
+  xgs_group?: string
 }
 
 export interface BanStats {
@@ -103,6 +114,48 @@ export interface BanStats {
   bans_last_24h: number
   unbans_last_24h: number
   recidivist_ips: number
+  // D2B v2 Stats
+  pending_approval?: number
+  conditional_survey?: number
+}
+
+// D2B v2 - GeoZone Configuration
+export interface GeoZoneConfig {
+  enabled: boolean
+  authorized_countries: string[]
+  hostile_countries: string[]
+  default_policy: 'authorized' | 'hostile' | 'neutral'
+  waf_threshold_hzone: number  // Events before ban for hostile zone
+  waf_threshold_zone: number   // Events before TI check for authorized zone
+  threat_score_threshold: number // Min score to auto-ban in authorized zone
+}
+
+// D2B v2 - Pending Ban
+export interface PendingBan {
+  id: string
+  ip: string
+  country: string
+  geo_zone: string
+  threat_score: number
+  threat_sources: string[]
+  event_count: number
+  first_event: string
+  last_event: string
+  trigger_rule: string
+  reason: string
+  status: 'pending' | 'approved' | 'rejected' | 'expired'
+  created_at: string
+  reviewed_at?: string | null
+  reviewed_by?: string
+  review_note?: string
+}
+
+export interface PendingBanStats {
+  total_pending: number
+  high_threat: number    // Score >= 70
+  medium_threat: number  // Score 30-69
+  low_threat: number     // Score < 30
+  oldest_pending?: string | null
 }
 
 // Threat types
