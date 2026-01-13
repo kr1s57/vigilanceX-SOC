@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.52.100 | **Derniere mise a jour**: 2026-01-12
+> **Version**: 3.52.101 | **Derniere mise a jour**: 2026-01-13
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -107,6 +107,7 @@ Ces mesures seraient requises uniquement si exposition Internet:
 - Authentication & User Management
 - Systeme de licence VX3
 - XGS Parser (104 champs, 74 regles, 23 techniques MITRE)
+- Log Retention (cleanup automatique configurable)
 
 ### En Developpement (Coquille)
 - **Policies de bans**: Logique de decision non finalisee
@@ -470,6 +471,75 @@ POST   /api/v1/storage/disable  # Disable archiving
 2. Wirer les routes dans main.go
 3. Tester connexion SMB
 4. Valider archivage logs
+
+### Log Retention (v3.52.101 - Active)
+
+Gestion configurable de la retention des logs avec cleanup automatique.
+
+#### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Retention Service                         │
+│  ┌─────────────────┐    ┌─────────────────────────────────┐ │
+│  │ Background      │    │ retention_settings (ClickHouse) │ │
+│  │ Cleanup Worker  │◄───┤ - Per-table retention days      │ │
+│  │ (every N hours) │    │ - Cleanup interval              │ │
+│  └────────┬────────┘    │ - Last cleanup timestamp        │ │
+│           │             └─────────────────────────────────┘ │
+│           ▼                                                  │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ ALTER TABLE DELETE WHERE timestamp < now() - INTERVAL   ││
+│  │ - events, modsec_logs, firewall_events                  ││
+│  │ - vpn_events, heartbeat_events, atp_events              ││
+│  │ - antivirus_events, ban_history, audit_log              ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Composants
+
+| Composant | Fichier | Status |
+|-----------|---------|--------|
+| Entity | `internal/entity/retention.go` | Active |
+| Repository | `internal/adapter/repository/clickhouse/retention_repo.go` | Active |
+| Service | `internal/usecase/retention/service.go` | Active |
+| HTTP Handlers | `internal/adapter/controller/http/handlers/retention.go` | Active |
+| Migration | `docker/clickhouse/migrations/008_retention_settings.sql` | Active |
+| Settings UI | `frontend/src/pages/Settings.tsx` | Active |
+| API Client | `frontend/src/lib/api.ts` | Active |
+
+#### Configuration par defaut
+
+| Table | Retention | Description |
+|-------|-----------|-------------|
+| `events` | 30 jours | WAF, IPS, ATP events |
+| `modsec_logs` | 30 jours | ModSecurity detections |
+| `firewall_events` | 30 jours | Network events |
+| `vpn_events` | 30 jours | VPN sessions |
+| `heartbeat_events` | 30 jours | Endpoint health |
+| `atp_events` | 90 jours | Advanced threats |
+| `antivirus_events` | 90 jours | Malware detections |
+| `ban_history` | 365 jours | Audit trail bans |
+| `audit_log` | 365 jours | User actions |
+
+#### Endpoints API
+
+```
+GET    /api/v1/retention/settings   # Get current settings
+PUT    /api/v1/retention/settings   # Update retention periods
+GET    /api/v1/retention/status     # Worker status + next cleanup
+GET    /api/v1/retention/storage    # Disk usage per table
+POST   /api/v1/retention/cleanup    # Manual cleanup trigger
+```
+
+#### Fonctionnalites UI
+
+- **Storage Usage**: Barre de progression avec taille DB et espace libre
+- **Enable Auto-Cleanup**: Toggle on/off
+- **Retention Periods**: Input numerique par type de log
+- **Cleanup Interval**: Selecteur 1h/6h/12h/24h
+- **Manual Cleanup**: Bouton pour purge immediate
 
 ---
 
@@ -1271,6 +1341,16 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.52.101 (2026-01-13)
+- **Log Retention**: Configuration retention des logs avec cleanup automatique
+- Nouvelle table `retention_settings` avec periodes configurables par table
+- Background cleanup worker (intervalle configurable 1h/6h/12h/24h)
+- Retention par defaut: 30 jours events, 90 jours ATP/AV, 365 jours audit
+- Storage stats avec affichage taille DB et espace disque libre
+- Bouton cleanup manuel pour purge immediate
+- API: GET/PUT /retention/settings, GET /status, GET /storage, POST /cleanup
+- UI: Nouvelle section "Log Retention" dans Settings
 
 ### v3.52.100 (2026-01-12)
 - **D2B v2 - Jail System Phase 1**: Systeme avance de gestion des bans
