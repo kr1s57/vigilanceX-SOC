@@ -63,7 +63,6 @@ CREATE TABLE IF NOT EXISTS events (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (log_type, severity, src_ip, timestamp)
-TTL timestamp + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
 
 -- Index secondaires pour recherches frequentes
@@ -116,7 +115,6 @@ CREATE TABLE IF NOT EXISTS modsec_logs (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (timestamp, unique_id, rule_id)
-TTL toDateTime(timestamp) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
 
 -- Index for fast lookups
@@ -203,8 +201,7 @@ CREATE TABLE IF NOT EXISTS ip_threat_scores (
     version UInt64 DEFAULT 1                  -- Pour ReplacingMergeTree
 )
 ENGINE = ReplacingMergeTree(version)
-ORDER BY ip
-TTL last_checked + INTERVAL 7 DAY;
+ORDER BY ip;
 
 -- ============================================
 -- TABLE: ip_ban_status
@@ -245,8 +242,7 @@ CREATE TABLE IF NOT EXISTS ban_history (
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
-ORDER BY (ip, timestamp)
-TTL timestamp + INTERVAL 365 DAY;
+ORDER BY (ip, timestamp);
 
 -- ============================================
 -- TABLE: ip_whitelist
@@ -412,8 +408,7 @@ CREATE TABLE IF NOT EXISTS vpn_events (
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
-ORDER BY (vpn_type, user_name, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 90 DAY;
+ORDER BY (vpn_type, user_name, timestamp);
 
 -- ============================================
 -- TABLE: firewall_events (Network Detection)
@@ -442,8 +437,7 @@ CREATE TABLE IF NOT EXISTS firewall_events (
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
-ORDER BY (action, protocol, dst_port, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 30 DAY;
+ORDER BY (action, protocol, dst_port, timestamp);
 
 -- ============================================
 -- TABLE: atp_events (Advanced Threat Protection)
@@ -466,8 +460,7 @@ CREATE TABLE IF NOT EXISTS atp_events (
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
-ORDER BY (threat_type, severity, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 180 DAY;
+ORDER BY (threat_type, severity, timestamp);
 
 -- ============================================
 -- TABLE: antivirus_events
@@ -489,8 +482,7 @@ CREATE TABLE IF NOT EXISTS antivirus_events (
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
-ORDER BY (malware_type, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 180 DAY;
+ORDER BY (malware_type, timestamp);
 
 -- ============================================
 -- TABLE: heartbeat_events (Endpoint Health)
@@ -510,8 +502,7 @@ CREATE TABLE IF NOT EXISTS heartbeat_events (
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
-ORDER BY (endpoint_id, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 30 DAY;
+ORDER BY (endpoint_id, timestamp);
 
 -- ============================================
 -- TABLE: detect2ban_scenarios (config)
@@ -567,8 +558,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
-ORDER BY (timestamp, user_id)
-TTL timestamp + INTERVAL 365 DAY;
+ORDER BY (timestamp, user_id);
 
 -- ============================================
 -- Views utiles pour le dashboard

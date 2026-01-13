@@ -27,7 +27,8 @@ type RetentionSettings struct {
 	UpdatedBy string    `json:"updated_by" ch:"updated_by"`
 }
 
-// DefaultRetentionSettings returns sensible defaults (30 days for most tables)
+// DefaultRetentionSettings returns sensible defaults
+// NOTE: RetentionEnabled is FALSE by default - VGX never deletes data unless explicitly enabled
 func DefaultRetentionSettings() *RetentionSettings {
 	return &RetentionSettings{
 		EventsRetentionDays:          30,
@@ -39,7 +40,7 @@ func DefaultRetentionSettings() *RetentionSettings {
 		AntivirusEventsRetentionDays: 90,
 		BanHistoryRetentionDays:      365,
 		AuditLogRetentionDays:        365,
-		RetentionEnabled:             true,
+		RetentionEnabled:             false, // DISABLED by default - no auto-deletion
 		CleanupIntervalHours:         6,
 		UpdatedAt:                    time.Now(),
 		UpdatedBy:                    "system",

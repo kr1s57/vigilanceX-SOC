@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.52.101 | **Derniere mise a jour**: 2026-01-13
+> **Version**: 3.52.102 | **Derniere mise a jour**: 2026-01-13
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -472,9 +472,29 @@ POST   /api/v1/storage/disable  # Disable archiving
 3. Tester connexion SMB
 4. Valider archivage logs
 
-### Log Retention (v3.52.101 - Active)
+### Log Retention (v3.52.102 - Active)
 
-Gestion configurable de la retention des logs avec cleanup automatique.
+Gestion configurable de la retention des logs avec cleanup configurable.
+
+#### IMPORTANT - Comportement par Defaut
+
+> **VGX NE SUPPRIME JAMAIS DE DONNEES AUTOMATIQUEMENT PAR DEFAUT**
+
+| Parametre | Valeur par defaut | Signification |
+|-----------|-------------------|---------------|
+| `retention_enabled` | **false** | Auto-cleanup desactive |
+| Periodes de retention | Pre-configurees | N'ont AUCUN effet tant que cleanup inactif |
+
+**Quand les donnees sont-elles supprimees?**
+- **JAMAIS** si `retention_enabled = false` (par defaut)
+- **Automatiquement** toutes les N heures si `retention_enabled = true`
+- **Manuellement** via bouton "Run Manual Cleanup" (meme si auto-cleanup desactive)
+
+**Exemple:**
+- Si ModSec Logs = 365 jours et Ban History = 2000 jours
+- Ces valeurs sont **ignorees** tant que l'auto-cleanup n'est pas active
+- VGX conserve toutes les donnees indefiniment par defaut
+- L'admin peut a tout moment lancer un cleanup manuel pour appliquer les periodes
 
 #### Architecture
 
@@ -483,11 +503,11 @@ Gestion configurable de la retention des logs avec cleanup automatique.
 │                    Retention Service                         │
 │  ┌─────────────────┐    ┌─────────────────────────────────┐ │
 │  │ Background      │    │ retention_settings (ClickHouse) │ │
-│  │ Cleanup Worker  │◄───┤ - Per-table retention days      │ │
-│  │ (every N hours) │    │ - Cleanup interval              │ │
-│  └────────┬────────┘    │ - Last cleanup timestamp        │ │
+│  │ Cleanup Worker  │◄───┤ - retention_enabled (OFF)       │ │
+│  │ (every N hours) │    │ - Per-table retention days      │ │
+│  └────────┬────────┘    │ - Cleanup interval              │ │
 │           │             └─────────────────────────────────┘ │
-│           ▼                                                  │
+│           ▼ (si enabled)                                    │
 │  ┌─────────────────────────────────────────────────────────┐│
 │  │ ALTER TABLE DELETE WHERE timestamp < now() - INTERVAL   ││
 │  │ - events, modsec_logs, firewall_events                  ││
@@ -496,6 +516,14 @@ Gestion configurable de la retention des logs avec cleanup automatique.
 │  └─────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────┘
 ```
+
+#### Pas de TTL ClickHouse
+
+Les tables ClickHouse n'ont **PAS de TTL hardcode**. La suppression est geree uniquement par:
+1. Le cleanup automatique (si active)
+2. Le cleanup manuel (bouton UI)
+
+Cela garantit que l'admin a le controle total sur la retention des donnees.
 
 #### Composants
 
@@ -509,7 +537,7 @@ Gestion configurable de la retention des logs avec cleanup automatique.
 | Settings UI | `frontend/src/pages/Settings.tsx` | Active |
 | API Client | `frontend/src/lib/api.ts` | Active |
 
-#### Configuration par defaut
+#### Configuration par defaut (periodes suggerees)
 
 | Table | Retention | Description |
 |-------|-----------|-------------|
@@ -522,6 +550,8 @@ Gestion configurable de la retention des logs avec cleanup automatique.
 | `antivirus_events` | 90 jours | Malware detections |
 | `ban_history` | 365 jours | Audit trail bans |
 | `audit_log` | 365 jours | User actions |
+
+> **Rappel**: Ces valeurs ne s'appliquent que lorsqu'un cleanup est execute (auto ou manuel).
 
 #### Endpoints API
 
@@ -1341,6 +1371,14 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.52.102 (2026-01-13)
+- **Log Retention - Safe by Default**: Auto-cleanup desactive par defaut
+- VGX ne supprime JAMAIS de donnees automatiquement sauf activation explicite
+- Suppression de tous les TTL hardcodes des tables ClickHouse
+- Les periodes de retention ne s'appliquent que lors d'un cleanup (auto ou manuel)
+- Documentation etoffee dans CLAUDE.md et tooltips UI
+- Migration: `retention_enabled = 0` par defaut
 
 ### v3.52.101 (2026-01-13)
 - **Log Retention**: Configuration retention des logs avec cleanup automatique

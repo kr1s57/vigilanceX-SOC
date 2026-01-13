@@ -43,10 +43,52 @@ func (h *RetentionHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 // UpdateSettings updates the retention settings
 // PUT /api/v1/retention/settings
 func (h *RetentionHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
-	var settings entity.RetentionSettings
-	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+	// First get existing settings to merge with
+	existingSettings, err := h.service.GetSettings(r.Context())
+	if err != nil {
+		existingSettings = entity.DefaultRetentionSettings()
+	}
+
+	// Decode partial update into a map to know which fields were sent
+	var updates map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err)
 		return
+	}
+
+	// Apply updates to existing settings
+	if v, ok := updates["retention_enabled"]; ok {
+		existingSettings.RetentionEnabled = v.(bool)
+	}
+	if v, ok := updates["events_retention_days"]; ok {
+		existingSettings.EventsRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["modsec_logs_retention_days"]; ok {
+		existingSettings.ModsecLogsRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["firewall_events_retention_days"]; ok {
+		existingSettings.FirewallEventsRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["vpn_events_retention_days"]; ok {
+		existingSettings.VpnEventsRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["heartbeat_events_retention_days"]; ok {
+		existingSettings.HeartbeatEventsRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["atp_events_retention_days"]; ok {
+		existingSettings.AtpEventsRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["antivirus_events_retention_days"]; ok {
+		existingSettings.AntivirusEventsRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["ban_history_retention_days"]; ok {
+		existingSettings.BanHistoryRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["audit_log_retention_days"]; ok {
+		existingSettings.AuditLogRetentionDays = int(v.(float64))
+	}
+	if v, ok := updates["cleanup_interval_hours"]; ok {
+		existingSettings.CleanupIntervalHours = int(v.(float64))
 	}
 
 	// Get username from context (set by auth middleware)
@@ -56,11 +98,11 @@ func (h *RetentionHandler) UpdateSettings(w http.ResponseWriter, r *http.Request
 	}
 
 	slog.Info("[RETENTION] Updating settings",
-		"events_days", settings.EventsRetentionDays,
-		"enabled", settings.RetentionEnabled,
+		"events_days", existingSettings.EventsRetentionDays,
+		"enabled", existingSettings.RetentionEnabled,
 		"updated_by", username)
 
-	if err := h.service.UpdateSettings(r.Context(), &settings, username); err != nil {
+	if err := h.service.UpdateSettings(r.Context(), existingSettings, username); err != nil {
 		slog.Error("[RETENTION] Failed to save settings", "error", err)
 		ErrorResponse(w, http.StatusInternalServerError, "Failed to save settings", err)
 		return
@@ -71,7 +113,7 @@ func (h *RetentionHandler) UpdateSettings(w http.ResponseWriter, r *http.Request
 	JSONResponse(w, http.StatusOK, map[string]interface{}{
 		"success":  true,
 		"message":  "Retention settings updated",
-		"settings": settings,
+		"settings": existingSettings,
 	})
 }
 

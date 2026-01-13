@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS retention_settings (
     audit_log_retention_days UInt16 DEFAULT 365,
 
     -- Global toggle
-    retention_enabled UInt8 DEFAULT 1,           -- 0 or 1
+    retention_enabled UInt8 DEFAULT 0,           -- 0 = disabled (default), 1 = enabled
 
     -- Cleanup schedule
     last_cleanup DateTime DEFAULT now(),
