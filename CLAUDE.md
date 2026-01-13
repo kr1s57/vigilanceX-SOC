@@ -966,17 +966,37 @@ docker compose restart api     # Restart service
 
 Quand l'utilisateur dit "gitgo":
 
-**Etape 1 - Repo Private (origin):**
-1. `git status` - Verifier les changements
-2. `git add .` - Ajouter les fichiers
-3. `git commit` - Commit avec message descriptif
-4. `git push origin main` - Pousser vers origin (private)
-5. Mettre a jour CHANGELOG.md si nouvelle version
-6. Mettre a jour CLAUDE.md si nouvelles fonctionnalites
+> **CRITIQUE**: Toujours verifier et mettre a jour la version AVANT le commit!
+
+**Etape 0 - Version (OBLIGATOIRE):**
+1. Verifier version dans `frontend/src/pages/Settings.tsx` (ligne ~2129)
+2. Si nouvelle feature/fix, incrementer selon regles versioning X.YY.Z
+3. Mettre a jour header CLAUDE.md avec nouvelle version et date
+
+**Etape 1 - Commit et Push Private (origin):**
+4. `git status` - Verifier les changements
+5. `git add .` - Ajouter les fichiers
+6. `git commit -m "feat(vX.YY.Z): description"` - Commit avec version
+7. `git push origin main` - Pousser vers origin (private)
 
 **Etape 2 - Repo Public (vigilanceX-SOC):**
-7. Synchroniser vers public avec protection IP (voir regles ci-dessous)
-8. `git push public main` - Pousser vers public
+8. Creer branche temporaire: `git checkout -b public-sync`
+9. Supprimer fichiers internes: `git rm --cached CLAUDE.md`
+10. Commit: `git commit -m "chore: Remove internal docs"`
+11. Push: `git push public public-sync:main --force`
+12. Retour main: `mv CLAUDE.md /tmp/bak && git checkout main && mv /tmp/bak CLAUDE.md`
+13. Cleanup: `git branch -D public-sync`
+
+**Etape 3 - Forgejo (backup):**
+14. `git push forgejo main` - Private Forgejo (avec CLAUDE.md)
+15. Repeter etapes 8-13 pour `forgejo-soc` (sans CLAUDE.md)
+
+**Etape 4 - GitHub Releases (OBLIGATOIRE):**
+16. Creer tag: `git tag vX.YY.Z && git push origin vX.YY.Z && git push public vX.YY.Z`
+17. Release private: `gh release create vX.YY.Z --repo kr1s57/vigilanceX --title "VIGILANCE X vX.YY.Z" --notes "..."`
+18. Release public: `gh release create vX.YY.Z --repo kr1s57/vigilanceX-SOC --title "VIGILANCE X vX.YY.Z" --notes "..."`
+
+> **RAPPEL**: Sans les releases GitHub, la page "Releases" affiche l'ancienne version comme "Latest"!
 
 ---
 
