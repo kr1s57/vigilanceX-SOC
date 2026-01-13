@@ -1131,6 +1131,73 @@ export const crowdsecBlocklistApi = {
     const response = await api.post<{ success: boolean; result: CrowdSecSyncResult }>(`/crowdsec/blocklist/sync/${blocklistId}${params}`)
     return response.data
   },
+
+  // v3.53: Neural-Sync - Get paginated IP list
+  getIPsPaginated: async (params: {
+    page?: number
+    page_size?: number
+    search?: string
+    blocklist_id?: string
+    country?: string
+  }): Promise<{
+    IPs: Array<{
+      ip: string
+      blocklist_id: string
+      blocklist_label: string
+      first_seen: string
+      last_seen: string
+      country_code: string
+      country_name: string
+    }>
+    Total: number
+    Page: number
+    PageSize: number
+    TotalPages: number
+  }> => {
+    const queryParams = new URLSearchParams()
+    if (params.page) queryParams.append('page', String(params.page))
+    if (params.page_size) queryParams.append('page_size', String(params.page_size))
+    if (params.search) queryParams.append('search', params.search)
+    if (params.blocklist_id) queryParams.append('blocklist_id', params.blocklist_id)
+    if (params.country) queryParams.append('country', params.country)
+    const response = await api.get(`/crowdsec/blocklist/ips/list?${queryParams}`)
+    return response.data
+  },
+
+  // v3.53: Neural-Sync - Get blocklist summary
+  getBlocklistsSummary: async (): Promise<{
+    blocklists: Array<{
+      id: string
+      label: string
+      ip_count: number
+    }>
+  }> => {
+    const response = await api.get('/crowdsec/blocklist/summary')
+    return response.data
+  },
+
+  // v3.53: Neural-Sync - Get unique countries from IPs
+  getUniqueCountries: async (): Promise<{
+    countries: Array<{
+      code: string
+      name?: string
+    }>
+    needs_enrichment: boolean
+  }> => {
+    const response = await api.get('/crowdsec/blocklist/countries')
+    return response.data
+  },
+
+  // v3.53: Enrich existing IPs with country codes
+  enrichCountries: async (): Promise<{
+    success: boolean
+    enriched: number
+    remaining: number
+    message: string
+  }> => {
+    const response = await api.post('/crowdsec/blocklist/enrich')
+    return response.data
+  },
 }
 
 // Soft Whitelist API (v2.0)

@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.53.101 | **Derniere mise a jour**: 2026-01-13
+> **Version**: 3.53.102 | **Derniere mise a jour**: 2026-01-13
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -110,7 +110,7 @@ Ces mesures seraient requises uniquement si exposition Internet:
 - Log Retention (cleanup automatique configurable)
 
 ### En Developpement (Coquille)
-- **CrowdSec Blocklist**: Integration 90% complete, tests sync XGS en cours
+- **CrowdSec Blocklist XGS Sync**: Phase 2 - Synchronisation vers groupe XGS en cours
 - **Policies de bans**: Logique de decision non finalisee
 - **Recidivisme automatique**: A configurer selon besoins
 
@@ -571,6 +571,95 @@ POST   /api/v1/retention/cleanup    # Manual cleanup trigger
 - **Retention Periods**: Input numerique par type de log
 - **Cleanup Interval**: Selecteur 1h/6h/12h/24h
 - **Manual Cleanup**: Bouton pour purge immediate
+
+### CrowdSec Blocklist - Neural-Sync (v3.53.102 - Active)
+
+Integration des blocklists premium CrowdSec dans VigilanceX. Permet de synchroniser les IPs malveillantes identifiees par la communaute CrowdSec directement dans la base locale.
+
+#### Comment ca fonctionne
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Neural-Sync Flow                                 │
+│                                                                      │
+│   CrowdSec API                    VigilanceX                        │
+│   ┌──────────┐                    ┌─────────────────────────────┐   │
+│   │ Premium  │  ──Download IPs──► │ crowdsec_blocklist_ips (DB) │   │
+│   │Blocklists│                    │ + country_code enrichment    │   │
+│   └──────────┘                    └──────────────┬──────────────┘   │
+│                                                  │                   │
+│                                                  ▼                   │
+│                                    ┌─────────────────────────────┐   │
+│                                    │   Neural-Sync UI Page       │   │
+│                                    │   - IP listing + flags      │   │
+│                                    │   - Country filtering       │   │
+│                                    │   - Blocklist filtering     │   │
+│                                    └─────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Configuration API Key**: Une Service API Key CrowdSec (scope "Blocklist") est requise
+2. **Sync des blocklists**: Le bouton "Sync Now" telecharge les IPs depuis CrowdSec
+3. **Stockage local**: Les IPs sont stockees dans `crowdsec_blocklist_ips` avec versioning
+4. **Enrichissement pays**: Chaque IP est enrichie avec son code pays via GeoIP (ip-api.com)
+5. **Filtrage**: Une fois enrichi, filtrage possible par pays ou par blocklist
+
+#### Enrichissement des pays
+
+- **Rate limit**: ip-api.com limite a 45 requetes/minute (gratuit)
+- **Enrichissement automatique**: Bouton "Start Enrichment" traite 40 IPs/batch
+- **Progression visible**: Compteur d'IPs enrichies affiche en temps reel
+- **Filtre desactive**: Le filtre pays est grise tant que l'enrichissement n'est pas termine
+
+#### Composants
+
+| Composant | Fichier | Description |
+|-----------|---------|-------------|
+| API Client | `internal/adapter/external/crowdsec/blocklist_client.go` | Client API CrowdSec |
+| Service | `internal/usecase/crowdsec/blocklist_service.go` | Logique sync + enrichissement |
+| Repository | `internal/adapter/repository/clickhouse/crowdsec_blocklist_repo.go` | Persistence ClickHouse |
+| Handlers | `internal/adapter/controller/http/handlers/crowdsec_blocklist.go` | Endpoints HTTP |
+| Migration | `docker/clickhouse/migrations/011_crowdsec_country.sql` | Colonne country_code |
+| Frontend | `frontend/src/pages/NeuralSync.tsx` | Page UI Neural-Sync |
+| API Client | `frontend/src/lib/api.ts` | crowdsecBlocklistApi |
+
+#### Endpoints API
+
+```
+GET    /api/v1/crowdsec/blocklist/config      # Configuration (api_key masked)
+PUT    /api/v1/crowdsec/blocklist/config      # Update config
+POST   /api/v1/crowdsec/blocklist/test        # Test connexion API
+GET    /api/v1/crowdsec/blocklist/lists       # Liste blocklists disponibles
+GET    /api/v1/crowdsec/blocklist/status      # Status du service
+GET    /api/v1/crowdsec/blocklist/history     # Historique des syncs
+GET    /api/v1/crowdsec/blocklist/ips/list    # Liste paginee des IPs
+GET    /api/v1/crowdsec/blocklist/summary     # Resume par blocklist
+GET    /api/v1/crowdsec/blocklist/countries   # Liste pays uniques
+POST   /api/v1/crowdsec/blocklist/enrich      # Enrichir 40 IPs avec pays
+POST   /api/v1/crowdsec/blocklist/sync        # Sync toutes les blocklists
+POST   /api/v1/crowdsec/blocklist/sync/{id}   # Sync blocklist specifique
+```
+
+#### Table ClickHouse
+
+```sql
+CREATE TABLE vigilance_x.crowdsec_blocklist_ips (
+    ip String,
+    blocklist_id String,
+    blocklist_label String,
+    first_seen DateTime DEFAULT now(),
+    last_seen DateTime DEFAULT now(),
+    country_code LowCardinality(String) DEFAULT '',
+    version UInt64 DEFAULT 1
+) ENGINE = ReplacingMergeTree(version)
+ORDER BY (blocklist_id, ip)
+```
+
+#### Phase 2 (a venir)
+
+- Synchronisation vers groupe XGS `grp_VGX-CrowdSec`
+- Blocage automatique au niveau firewall Sophos
+- Integration avec Detect2Ban pour alerting
 
 ---
 
@@ -1392,6 +1481,22 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.53.102 (2026-01-13)
+- **Neural-Sync UI Complete**: Interface utilisateur finalisee pour CrowdSec Blocklist
+  - Boutons clairement labelises: "Sync Blocklists" (mauve), "Refresh" (gris)
+  - Carte verte "Country Enrichment Required" prominente avec bouton "Start Country Enrichment"
+  - Filtre pays avec drapeaux + noms complets (50+ pays mappes)
+  - Auto-enrichment en background avec progression et bouton Stop
+  - Filtre pays desactive tant que l'enrichissement n'est pas complete
+- **Country Name Mapping**: Dictionnaire COUNTRY_NAMES avec 50+ pays
+  - Affiche "🇫🇷 France" au lieu de "🇫🇷 FR"
+  - Fallback sur le code si pays non mappe
+- **Backend Enrichment**:
+  - Endpoint `POST /api/v1/crowdsec/blocklist/enrich` (40 IPs/batch)
+  - `GetIPsWithoutCountry()` et `UpdateIPCountry()` dans repository
+  - Rate limit respecte (45 req/min ip-api.com)
+- **GeoIP Fallback**: Si aucun pays en DB, sampling GeoIP pour afficher les pays disponibles
 
 ### v3.53.101 (2026-01-13)
 - **abuse.ch Auth-Key Support**: ThreatFox et URLhaus necessitent maintenant un Auth-Key

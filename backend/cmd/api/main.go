@@ -406,19 +406,22 @@ func main() {
 	retentionHandler := handlers.NewRetentionHandler(retentionService)          // v3.52: Log retention API
 	_ = pendingBansRepo                                                         // v3.52: Will be used in Phase 2
 
-	// v3.53: CrowdSec Blocklist integration
+	// v3.53: CrowdSec Blocklist integration (Phase 1 - download and store only, no XGS)
 	// Load API key from env var first, then fall back to persisted config
 	crowdsecAPIKey := os.Getenv("CROWDSEC_BLOCKLIST_API_KEY")
 	crowdsecBlocklistClient := crowdsecext.NewBlocklistClient(crowdsecext.BlocklistConfig{
 		APIKey: crowdsecAPIKey,
 	})
-	crowdsecBlocklistService := crowdsecuc.NewBlocklistService(crowdsecBlocklistClient, sophosClient, crowdsecBlocklistRepo)
-	// Load persisted config and set API key if not from env
-	if crowdsecConfig, err := crowdsecBlocklistRepo.GetConfig(context.Background()); err == nil && crowdsecConfig.APIKey != "" && crowdsecAPIKey == "" {
-		crowdsecBlocklistClient.SetAPIKey(crowdsecConfig.APIKey)
-		logger.Info("CrowdSec Blocklist API key loaded from persisted config")
+	crowdsecBlocklistService := crowdsecuc.NewBlocklistService(crowdsecBlocklistClient, crowdsecBlocklistRepo)
+	crowdsecBlocklistService.SetGeoIPClient(geoIPClient) // v3.53: Country enrichment for sync
+	// Initialize service (loads config and starts worker if enabled)
+	if err := crowdsecBlocklistService.Initialize(context.Background()); err != nil {
+		logger.Warn("CrowdSec Blocklist initialization failed", "error", err)
+	} else {
+		logger.Info("CrowdSec Blocklist service initialized")
 	}
-	crowdsecBlocklistHandler := handlers.NewCrowdSecBlocklistHandler(crowdsecBlocklistService)
+	crowdsecBlocklistHandler := handlers.NewCrowdSecBlocklistHandler(crowdsecBlocklistService, crowdsecBlocklistRepo)
+	crowdsecBlocklistHandler.SetGeoIPClient(geoIPClient) // v3.53: Country enrichment for Neural-Sync
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -661,7 +664,7 @@ func main() {
 				r.Post("/cleanup", retentionHandler.RunCleanup)
 			})
 
-			// CrowdSec Blocklist (v3.53 - Premium blocklist sync)
+			// CrowdSec Blocklist (v3.53 - Phase 1: Download and store only)
 			r.Route("/crowdsec/blocklist", func(r chi.Router) {
 				r.Get("/config", crowdsecBlocklistHandler.GetConfig)
 				r.Put("/config", crowdsecBlocklistHandler.UpdateConfig)
@@ -669,6 +672,11 @@ func main() {
 				r.Get("/lists", crowdsecBlocklistHandler.ListBlocklists)
 				r.Get("/status", crowdsecBlocklistHandler.GetStatus)
 				r.Get("/history", crowdsecBlocklistHandler.GetHistory)
+				r.Get("/ips", crowdsecBlocklistHandler.GetIPs)                   // Phase 1: Get all stored IPs
+				r.Get("/ips/list", crowdsecBlocklistHandler.GetIPsPaginated)     // v3.53: Neural-Sync paginated list
+				r.Get("/summary", crowdsecBlocklistHandler.GetBlocklistsSummary) // v3.53: Neural-Sync blocklist summary
+				r.Get("/countries", crowdsecBlocklistHandler.GetUniqueCountries) // v3.53: Neural-Sync country filter
+				r.Post("/enrich", crowdsecBlocklistHandler.EnrichCountries)      // v3.53: Enrich existing IPs with country
 				r.Post("/sync", crowdsecBlocklistHandler.SyncAll)
 				r.Post("/sync/*", crowdsecBlocklistHandler.SyncBlocklist)
 			})

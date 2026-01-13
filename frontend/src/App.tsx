@@ -14,6 +14,7 @@ import { ActiveBans } from '@/pages/ActiveBans'
 import { Geoblocking } from '@/pages/Geoblocking'
 import { SoftWhitelist } from '@/pages/SoftWhitelist'
 import { RiskScoring } from '@/pages/RiskScoring'
+import { NeuralSync } from '@/pages/NeuralSync'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 import UserManagement from '@/pages/UserManagement'
@@ -43,6 +44,7 @@ function App() {
                   <Route path="/geoblocking" element={<Geoblocking />} />
                   <Route path="/whitelist" element={<SoftWhitelist />} />
                   <Route path="/scoring" element={<RiskScoring />} />
+                  <Route path="/neural-sync" element={<NeuralSync />} />
                   {/* Admin-only routes */}
                   <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                   <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />

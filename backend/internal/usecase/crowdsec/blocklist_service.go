@@ -1,85 +1,166 @@
 package crowdsec
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/kr1s57/vigilancex/internal/adapter/external/crowdsec"
-	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
 )
 
-// BlocklistService manages CrowdSec blocklist synchronization
+const (
+	// BlocklistDataDir is the directory where blocklist files are stored
+	BlocklistDataDir = "/app/data/crowdsec_blocklists"
+	// DefaultSyncInterval is the default sync interval (2 hours)
+	DefaultSyncInterval = 2 * time.Hour
+)
+
+// BlocklistService manages CrowdSec blocklist download and storage (Phase 1)
+// Phase 1: Download blocklists, store in files and DB - NO XGS sync
 type BlocklistService struct {
-	client       *crowdsec.BlocklistClient
-	sophosClient *sophos.Client
-	repo         BlocklistRepository
-	mu           sync.RWMutex
-	lastSync     time.Time
-	syncRunning  bool
-	config       *BlocklistConfig
+	client         *crowdsec.BlocklistClient
+	repo           BlocklistRepository
+	geoIP          GeoIPLookup
+	mu             sync.RWMutex
+	config         *BlocklistConfig
+	worker         *syncWorker
+	stopChan       chan struct{}
+	syncInProgress bool
+	syncMu         sync.Mutex
 }
 
 // BlocklistConfig holds the service configuration
 type BlocklistConfig struct {
-	Enabled           bool      `json:"enabled"`
-	APIKey            string    `json:"api_key"`
-	SyncIntervalHours int       `json:"sync_interval_hours"`
-	XGSGroupName      string    `json:"xgs_group_name"`
-	EnabledLists      []string  `json:"enabled_lists"` // List of blocklist IDs to sync
-	LastSync          time.Time `json:"last_sync"`
-	TotalIPs          int       `json:"total_ips"`
+	Enabled             bool      `json:"enabled"`
+	APIKey              string    `json:"api_key"`
+	SyncIntervalMinutes int       `json:"sync_interval_minutes"`
+	LastSync            time.Time `json:"last_sync"`
+	TotalIPs            int       `json:"total_ips"`
+	TotalBlocklists     int       `json:"total_blocklists"`
 }
 
 // BlocklistRepository interface for persistence
 type BlocklistRepository interface {
 	GetConfig(ctx context.Context) (*BlocklistConfig, error)
 	SaveConfig(ctx context.Context, config *BlocklistConfig) error
-	GetSyncedIPs(ctx context.Context) ([]string, error)
-	SaveSyncedIPs(ctx context.Context, ips []string, blocklistID string) error
+	GetIPsForBlocklist(ctx context.Context, blocklistID string) ([]string, error)
+	GetAllIPs(ctx context.Context) ([]BlocklistIP, error)
+	AddIPs(ctx context.Context, ips []BlocklistIP) error
+	RemoveIPs(ctx context.Context, blocklistID string, ips []string) error
+	ClearBlocklist(ctx context.Context, blocklistID string) error
+	ClearAllIPs(ctx context.Context) error
 	GetSyncHistory(ctx context.Context, limit int) ([]SyncHistoryEntry, error)
 	SaveSyncHistory(ctx context.Context, entry *SyncHistoryEntry) error
+	GetStats(ctx context.Context) (totalIPs int, totalBlocklists int, err error)
+	GetExistingBlocklistIDs(ctx context.Context) ([]struct{ ID, Label string }, error)
+}
+
+// GeoIPLookup interface for country enrichment
+type GeoIPLookup interface {
+	LookupCountry(ctx context.Context, ip string) (string, error)
+}
+
+// BlocklistIP represents an IP entry in the database
+type BlocklistIP struct {
+	IP             string    `json:"ip"`
+	BlocklistID    string    `json:"blocklist_id"`
+	BlocklistLabel string    `json:"blocklist_label"`
+	FirstSeen      time.Time `json:"first_seen"`
+	LastSeen       time.Time `json:"last_seen"`
+	CountryCode    string    `json:"country_code"`
 }
 
 // SyncHistoryEntry represents a sync operation record
 type SyncHistoryEntry struct {
-	ID            string    `json:"id"`
-	Timestamp     time.Time `json:"timestamp"`
-	BlocklistID   string    `json:"blocklist_id"`
-	BlocklistName string    `json:"blocklist_name"`
-	IPsDownloaded int       `json:"ips_downloaded"`
-	IPsAdded      int       `json:"ips_added"`
-	IPsRemoved    int       `json:"ips_removed"`
-	DurationMs    int64     `json:"duration_ms"`
-	Success       bool      `json:"success"`
-	Error         string    `json:"error,omitempty"`
+	ID             string    `json:"id"`
+	Timestamp      time.Time `json:"timestamp"`
+	BlocklistID    string    `json:"blocklist_id"`
+	BlocklistLabel string    `json:"blocklist_label"`
+	IPsInFile      int       `json:"ips_in_file"`
+	IPsAdded       int       `json:"ips_added"`
+	IPsRemoved     int       `json:"ips_removed"`
+	DurationMs     int64     `json:"duration_ms"`
+	Success        bool      `json:"success"`
+	Error          string    `json:"error,omitempty"`
+}
+
+// SyncResult represents the result of syncing a blocklist
+type SyncResult struct {
+	BlocklistID    string    `json:"blocklist_id"`
+	BlocklistLabel string    `json:"blocklist_label"`
+	IPsInFile      int       `json:"ips_in_file"`
+	IPsAdded       int       `json:"ips_added"`
+	IPsRemoved     int       `json:"ips_removed"`
+	DurationMs     int64     `json:"duration_ms"`
+	SyncedAt       time.Time `json:"synced_at"`
+	Error          string    `json:"error,omitempty"`
+}
+
+// syncWorker handles periodic sync
+type syncWorker struct {
+	service  *BlocklistService
+	interval time.Duration
+	stopChan chan struct{}
+	running  bool
+	mu       sync.Mutex
 }
 
 // NewBlocklistService creates a new blocklist service
-func NewBlocklistService(client *crowdsec.BlocklistClient, sophosClient *sophos.Client, repo BlocklistRepository) *BlocklistService {
-	return &BlocklistService{
-		client:       client,
-		sophosClient: sophosClient,
-		repo:         repo,
+func NewBlocklistService(client *crowdsec.BlocklistClient, repo BlocklistRepository) *BlocklistService {
+	s := &BlocklistService{
+		client:   client,
+		repo:     repo,
+		stopChan: make(chan struct{}),
 		config: &BlocklistConfig{
-			Enabled:           false,
-			SyncIntervalHours: 6,
-			XGSGroupName:      "grp_VGX-CrowdSec",
-			EnabledLists:      []string{},
+			Enabled:             false,
+			SyncIntervalMinutes: 120, // 2 hours
 		},
 	}
+
+	// Ensure data directory exists
+	if err := os.MkdirAll(BlocklistDataDir, 0755); err != nil {
+		slog.Error("[CROWDSEC_BL] Failed to create data directory", "error", err)
+	}
+
+	return s
 }
 
-// SetSophosClient updates the Sophos client (for hot-reload)
-func (s *BlocklistService) SetSophosClient(client *sophos.Client) {
+// SetGeoIPClient sets the GeoIP client for country enrichment
+func (s *BlocklistService) SetGeoIPClient(geoIP GeoIPLookup) {
+	s.geoIP = geoIP
+}
+
+// Initialize loads config and starts worker if enabled
+func (s *BlocklistService) Initialize(ctx context.Context) error {
+	config, err := s.repo.GetConfig(ctx)
+	if err != nil {
+		slog.Warn("[CROWDSEC_BL] Failed to load config, using defaults", "error", err)
+		config = s.config
+	}
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sophosClient = client
+	s.config = config
+	s.mu.Unlock()
+
+	// Update client API key
+	if config.APIKey != "" {
+		s.client.SetAPIKey(config.APIKey)
+	}
+
+	// Start worker if enabled
+	if config.Enabled && config.APIKey != "" {
+		s.StartWorker()
+	}
+
+	return nil
 }
 
-// GetConfig returns the current configuration
+// GetConfig returns the current configuration (returns a copy to avoid mutation)
 func (s *BlocklistService) GetConfig(ctx context.Context) (*BlocklistConfig, error) {
 	if s.repo != nil {
 		config, err := s.repo.GetConfig(ctx)
@@ -87,18 +168,23 @@ func (s *BlocklistService) GetConfig(ctx context.Context) (*BlocklistConfig, err
 			s.mu.Lock()
 			s.config = config
 			s.mu.Unlock()
-			return config, nil
+			// Return a copy to prevent callers from modifying our internal state
+			configCopy := *config
+			return &configCopy, nil
 		}
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.config, nil
+	// Return a copy
+	configCopy := *s.config
+	return &configCopy, nil
 }
 
 // UpdateConfig updates the configuration
 func (s *BlocklistService) UpdateConfig(ctx context.Context, config *BlocklistConfig) error {
 	s.mu.Lock()
+	wasEnabled := s.config.Enabled
 	s.config = config
 	s.mu.Unlock()
 
@@ -107,10 +193,99 @@ func (s *BlocklistService) UpdateConfig(ctx context.Context, config *BlocklistCo
 		s.client.SetAPIKey(config.APIKey)
 	}
 
+	// Handle enable/disable transitions
+	if config.Enabled && !wasEnabled {
+		// Just enabled - start worker and trigger initial sync
+		slog.Info("[CROWDSEC_BL] Service enabled, starting worker")
+		s.StartWorker()
+		go func() {
+			if _, err := s.SyncAll(context.Background()); err != nil {
+				slog.Error("[CROWDSEC_BL] Initial sync failed", "error", err)
+			}
+		}()
+	} else if !config.Enabled && wasEnabled {
+		// Just disabled - stop worker and cleanup
+		slog.Info("[CROWDSEC_BL] Service disabled, cleaning up")
+		s.StopWorker()
+		if err := s.Cleanup(ctx); err != nil {
+			slog.Error("[CROWDSEC_BL] Cleanup failed", "error", err)
+		}
+	}
+
 	if s.repo != nil {
 		return s.repo.SaveConfig(ctx, config)
 	}
 	return nil
+}
+
+// StartWorker starts the periodic sync worker
+func (s *BlocklistService) StartWorker() {
+	if s.worker != nil {
+		s.worker.mu.Lock()
+		if s.worker.running {
+			s.worker.mu.Unlock()
+			return
+		}
+		s.worker.mu.Unlock()
+	}
+
+	s.mu.RLock()
+	interval := time.Duration(s.config.SyncIntervalMinutes) * time.Minute
+	if interval < time.Minute {
+		interval = DefaultSyncInterval
+	}
+	s.mu.RUnlock()
+
+	s.worker = &syncWorker{
+		service:  s,
+		interval: interval,
+		stopChan: make(chan struct{}),
+	}
+
+	go s.worker.run()
+	slog.Info("[CROWDSEC_BL] Sync worker started", "interval", interval)
+}
+
+// StopWorker stops the periodic sync worker
+func (s *BlocklistService) StopWorker() {
+	if s.worker != nil {
+		s.worker.stop()
+		s.worker = nil
+	}
+}
+
+func (w *syncWorker) run() {
+	w.mu.Lock()
+	w.running = true
+	w.mu.Unlock()
+
+	ticker := time.NewTicker(w.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			ctx := context.Background()
+			slog.Info("[CROWDSEC_BL] Worker triggered sync")
+			if _, err := w.service.SyncAll(ctx); err != nil {
+				slog.Error("[CROWDSEC_BL] Worker sync failed", "error", err)
+			}
+		case <-w.stopChan:
+			w.mu.Lock()
+			w.running = false
+			w.mu.Unlock()
+			slog.Info("[CROWDSEC_BL] Worker stopped")
+			return
+		}
+	}
+}
+
+func (w *syncWorker) stop() {
+	w.mu.Lock()
+	if w.running {
+		close(w.stopChan)
+	}
+	w.mu.Unlock()
 }
 
 // TestConnection tests the CrowdSec API connection
@@ -118,228 +293,335 @@ func (s *BlocklistService) TestConnection(ctx context.Context) error {
 	return s.client.TestConnection(ctx)
 }
 
-// ListAvailableBlocklists returns all blocklists available to the account
-func (s *BlocklistService) ListAvailableBlocklists(ctx context.Context) ([]crowdsec.BlocklistInfo, error) {
-	return s.client.ListBlocklists(ctx)
+// ListBlocklists returns available and subscribed blocklists
+func (s *BlocklistService) ListBlocklists(ctx context.Context) (available []crowdsec.BlocklistInfo, subscribed []crowdsec.BlocklistInfo, err error) {
+	available, err = s.client.ListBlocklists(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	subscribed, _ = s.client.GetSubscribedBlocklists(ctx)
+	return available, subscribed, nil
 }
 
-// ListSubscribedBlocklists returns blocklists the user is subscribed to
-func (s *BlocklistService) ListSubscribedBlocklists(ctx context.Context) ([]crowdsec.BlocklistInfo, error) {
-	return s.client.GetSubscribedBlocklists(ctx)
-}
-
-// SyncBlocklist downloads a blocklist and syncs to Sophos XGS
-func (s *BlocklistService) SyncBlocklist(ctx context.Context, blocklistID, blocklistName string) (*crowdsec.BlocklistSyncResult, error) {
-	s.mu.Lock()
-	if s.syncRunning {
-		s.mu.Unlock()
+// SyncAll syncs all subscribed blocklists
+// Uses existing blocklist IDs from DB (instead of querying CrowdSec API which may return 403)
+func (s *BlocklistService) SyncAll(ctx context.Context) ([]*SyncResult, error) {
+	// Check if sync already in progress
+	s.syncMu.Lock()
+	if s.syncInProgress {
+		s.syncMu.Unlock()
 		return nil, fmt.Errorf("sync already in progress")
 	}
-	s.syncRunning = true
-	s.mu.Unlock()
-
+	s.syncInProgress = true
+	s.syncMu.Unlock()
 	defer func() {
-		s.mu.Lock()
-		s.syncRunning = false
-		s.mu.Unlock()
+		s.syncMu.Lock()
+		s.syncInProgress = false
+		s.syncMu.Unlock()
 	}()
 
-	startTime := time.Now()
-	result := &crowdsec.BlocklistSyncResult{
-		BlocklistID:   blocklistID,
-		BlocklistName: blocklistName,
-		SyncedAt:      startTime,
-	}
-
-	slog.Info("[CROWDSEC_BLOCKLIST] Starting sync",
-		"blocklist_id", blocklistID,
-		"blocklist_name", blocklistName)
-
-	// Download blocklist from CrowdSec
-	ips, err := s.client.DownloadBlocklist(ctx, blocklistID)
-	if err != nil {
-		result.Error = err.Error()
-		s.saveSyncHistory(ctx, result, false)
-		return result, fmt.Errorf("download failed: %w", err)
-	}
-
-	result.IPsDownloaded = len(ips)
-
-	// Get current IPs in XGS group for comparison
 	s.mu.RLock()
-	sophosClient := s.sophosClient
-	groupName := s.config.XGSGroupName
+	if !s.config.Enabled {
+		s.mu.RUnlock()
+		return nil, fmt.Errorf("service is disabled")
+	}
 	s.mu.RUnlock()
 
-	if sophosClient == nil {
-		result.Error = "Sophos XGS client not configured"
-		s.saveSyncHistory(ctx, result, false)
-		return result, fmt.Errorf("sophos client not configured")
-	}
-
-	// Ensure the CrowdSec group exists in XGS
-	if err := s.ensureXGSGroup(ctx, groupName); err != nil {
-		result.Error = fmt.Sprintf("failed to ensure XGS group: %v", err)
-		s.saveSyncHistory(ctx, result, false)
-		return result, err
-	}
-
-	// Sync IPs to XGS (batch operation)
-	synced, added, removed, err := s.syncIPsToXGS(ctx, ips, groupName)
+	// Get existing blocklist IDs from DB (instead of CrowdSec API)
+	blocklists, err := s.repo.GetExistingBlocklistIDs(ctx)
 	if err != nil {
-		result.Error = err.Error()
-		s.saveSyncHistory(ctx, result, false)
-		return result, err
-	}
-
-	result.IPsSynced = synced
-	result.IPsNew = added
-	result.IPsRemoved = removed
-	result.Duration = float64(time.Since(startTime).Milliseconds())
-
-	// Update last sync time
-	s.mu.Lock()
-	s.lastSync = time.Now()
-	if s.config != nil {
-		s.config.LastSync = s.lastSync
-		s.config.TotalIPs = synced
-	}
-	s.mu.Unlock()
-
-	// Save sync history
-	s.saveSyncHistory(ctx, result, true)
-
-	// Persist synced IPs for tracking
-	if s.repo != nil {
-		s.repo.SaveSyncedIPs(ctx, ips, blocklistID)
-	}
-
-	slog.Info("[CROWDSEC_BLOCKLIST] Sync completed",
-		"blocklist_id", blocklistID,
-		"downloaded", result.IPsDownloaded,
-		"synced", result.IPsSynced,
-		"added", result.IPsNew,
-		"removed", result.IPsRemoved,
-		"duration_ms", result.Duration)
-
-	return result, nil
-}
-
-// SyncAllEnabled syncs all enabled blocklists
-func (s *BlocklistService) SyncAllEnabled(ctx context.Context) ([]*crowdsec.BlocklistSyncResult, error) {
-	s.mu.RLock()
-	enabledLists := s.config.EnabledLists
-	s.mu.RUnlock()
-
-	if len(enabledLists) == 0 {
-		return nil, fmt.Errorf("no blocklists enabled for sync")
-	}
-
-	// Get blocklist info for names
-	available, err := s.client.ListBlocklists(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list blocklists: %w", err)
-	}
-
-	// Map ID to name
-	nameMap := make(map[string]string)
-	for _, bl := range available {
-		nameMap[bl.ID] = bl.Name
-	}
-
-	var results []*crowdsec.BlocklistSyncResult
-	for _, listID := range enabledLists {
-		name := nameMap[listID]
-		if name == "" {
-			name = listID
+		slog.Warn("[CROWDSEC_BL] Failed to get blocklist IDs from DB, trying API", "error", err)
+		// Fallback to API
+		apiBlocklists, apiErr := s.client.GetSubscribedBlocklists(ctx)
+		if apiErr != nil {
+			return nil, fmt.Errorf("failed to get blocklists from DB or API: %w", apiErr)
 		}
+		for _, bl := range apiBlocklists {
+			blocklists = append(blocklists, struct{ ID, Label string }{ID: bl.ID, Label: bl.Label})
+		}
+	}
 
-		result, err := s.SyncBlocklist(ctx, listID, name)
+	if len(blocklists) == 0 {
+		slog.Info("[CROWDSEC_BL] No blocklists found to sync")
+		return []*SyncResult{}, nil
+	}
+
+	slog.Info("[CROWDSEC_BL] Starting sync for blocklists", "count", len(blocklists))
+
+	var results []*SyncResult
+	for _, bl := range blocklists {
+		result, err := s.SyncBlocklist(ctx, bl.ID, bl.Label)
 		if err != nil {
-			slog.Error("[CROWDSEC_BLOCKLIST] Failed to sync blocklist",
-				"blocklist_id", listID,
+			slog.Error("[CROWDSEC_BL] Failed to sync blocklist",
+				"blocklist_id", bl.ID,
+				"label", bl.Label,
 				"error", err)
+			results = append(results, &SyncResult{
+				BlocklistID:    bl.ID,
+				BlocklistLabel: bl.Label,
+				Error:          err.Error(),
+				SyncedAt:       time.Now(),
+			})
+		} else {
+			results = append(results, result)
 		}
-		results = append(results, result)
 	}
+
+	// Update stats
+	s.updateStats(ctx)
 
 	return results, nil
 }
 
-// ensureXGSGroup creates the CrowdSec group in XGS if it doesn't exist
-func (s *BlocklistService) ensureXGSGroup(ctx context.Context, groupName string) error {
-	s.mu.RLock()
-	sophosClient := s.sophosClient
-	s.mu.RUnlock()
-
-	if sophosClient == nil {
-		return fmt.Errorf("sophos client not configured")
+// SyncBlocklist downloads a blocklist and syncs with DB
+func (s *BlocklistService) SyncBlocklist(ctx context.Context, blocklistID, blocklistLabel string) (*SyncResult, error) {
+	startTime := time.Now()
+	result := &SyncResult{
+		BlocklistID:    blocklistID,
+		BlocklistLabel: blocklistLabel,
+		SyncedAt:       startTime,
 	}
 
-	slog.Info("[CROWDSEC_BLOCKLIST] Ensuring XGS group exists", "group", groupName)
+	slog.Info("[CROWDSEC_BL] Syncing blocklist",
+		"blocklist_id", blocklistID,
+		"label", blocklistLabel)
 
-	err := sophosClient.EnsureGroupExists(groupName, "CrowdSec Premium Blocklist - Managed by VIGILANCE X")
+	// Step 1: Download blocklist from CrowdSec
+	ips, err := s.client.DownloadBlocklist(ctx, blocklistID)
 	if err != nil {
-		slog.Error("[CROWDSEC_BLOCKLIST] Failed to create XGS group", "group", groupName, "error", err)
-		return err
+		result.Error = err.Error()
+		s.saveHistory(ctx, result, false)
+		return result, fmt.Errorf("download failed: %w", err)
 	}
 
-	slog.Info("[CROWDSEC_BLOCKLIST] XGS group ensured", "group", groupName)
+	result.IPsInFile = len(ips)
+
+	// Step 2: Save to file (overwrite existing)
+	filePath := filepath.Join(BlocklistDataDir, blocklistID+".txt")
+	if err := s.saveToFile(filePath, ips); err != nil {
+		result.Error = fmt.Sprintf("failed to save file: %v", err)
+		s.saveHistory(ctx, result, false)
+		return result, err
+	}
+
+	slog.Info("[CROWDSEC_BL] Saved blocklist to file",
+		"path", filePath,
+		"ip_count", len(ips))
+
+	// Step 3: Compare with DB and sync
+	added, removed, err := s.syncWithDB(ctx, blocklistID, blocklistLabel, ips)
+	if err != nil {
+		result.Error = fmt.Sprintf("failed to sync with DB: %v", err)
+		s.saveHistory(ctx, result, false)
+		return result, err
+	}
+
+	result.IPsAdded = added
+	result.IPsRemoved = removed
+	result.DurationMs = time.Since(startTime).Milliseconds()
+
+	// Save history
+	s.saveHistory(ctx, result, true)
+
+	slog.Info("[CROWDSEC_BL] Sync completed",
+		"blocklist_id", blocklistID,
+		"ips_in_file", result.IPsInFile,
+		"added", result.IPsAdded,
+		"removed", result.IPsRemoved,
+		"duration_ms", result.DurationMs)
+
+	return result, nil
+}
+
+// saveToFile saves IPs to a file (one per line)
+func (s *BlocklistService) saveToFile(filePath string, ips []string) error {
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("create file: %w", err)
+	}
+	defer file.Close()
+
+	for _, ip := range ips {
+		if _, err := file.WriteString(ip + "\n"); err != nil {
+			return fmt.Errorf("write to file: %w", err)
+		}
+	}
+
 	return nil
 }
 
-// syncIPsToXGS syncs the IP list to Sophos XGS
-func (s *BlocklistService) syncIPsToXGS(ctx context.Context, newIPs []string, groupName string) (synced, added, removed int, err error) {
-	s.mu.RLock()
-	sophosClient := s.sophosClient
-	s.mu.RUnlock()
-
-	if sophosClient == nil {
-		return 0, 0, 0, fmt.Errorf("sophos client not configured")
+// syncWithDB compares downloaded IPs with DB and syncs
+// Enriches new IPs with country code using GeoIP lookup
+func (s *BlocklistService) syncWithDB(ctx context.Context, blocklistID, blocklistLabel string, downloadedIPs []string) (added, removed int, err error) {
+	if s.repo == nil {
+		return 0, 0, nil
 	}
 
-	slog.Info("[CROWDSEC_BLOCKLIST] Syncing IPs to XGS",
-		"group", groupName,
-		"ip_count", len(newIPs))
-
-	// Use the Sophos client to sync IPs with "crowdsec" host prefix
-	added, removed, err = sophosClient.SyncGroupIPs(groupName, "crowdsec", newIPs)
+	// Get current IPs from DB for this blocklist
+	currentIPs, err := s.repo.GetIPsForBlocklist(ctx, blocklistID)
 	if err != nil {
-		slog.Error("[CROWDSEC_BLOCKLIST] XGS sync failed", "error", err)
-		return 0, 0, 0, err
+		return 0, 0, fmt.Errorf("get current IPs: %w", err)
 	}
 
-	synced = len(newIPs)
+	// Build sets for comparison
+	currentSet := make(map[string]bool)
+	for _, ip := range currentIPs {
+		currentSet[ip] = true
+	}
 
-	slog.Info("[CROWDSEC_BLOCKLIST] XGS sync completed",
-		"group", groupName,
-		"synced", synced,
+	downloadedSet := make(map[string]bool)
+	for _, ip := range downloadedIPs {
+		downloadedSet[ip] = true
+	}
+
+	// Find IPs to add (in downloaded but not in current)
+	var toAdd []BlocklistIP
+	now := time.Now()
+	for _, ip := range downloadedIPs {
+		if !currentSet[ip] {
+			blIP := BlocklistIP{
+				IP:             ip,
+				BlocklistID:    blocklistID,
+				BlocklistLabel: blocklistLabel,
+				FirstSeen:      now,
+				LastSeen:       now,
+			}
+
+			// Enrich with country code if GeoIP client is available
+			if s.geoIP != nil {
+				country, geoErr := s.geoIP.LookupCountry(ctx, ip)
+				if geoErr == nil && country != "" {
+					blIP.CountryCode = country
+				}
+			}
+
+			toAdd = append(toAdd, blIP)
+		}
+	}
+
+	// Find IPs to remove (in current but not in downloaded)
+	var toRemove []string
+	for _, ip := range currentIPs {
+		if !downloadedSet[ip] {
+			toRemove = append(toRemove, ip)
+		}
+	}
+
+	// Add new IPs
+	if len(toAdd) > 0 {
+		if err := s.repo.AddIPs(ctx, toAdd); err != nil {
+			return 0, 0, fmt.Errorf("add IPs: %w", err)
+		}
+		added = len(toAdd)
+		slog.Info("[CROWDSEC_BL] Added IPs with GeoIP enrichment", "count", added)
+	}
+
+	// Remove old IPs
+	if len(toRemove) > 0 {
+		if err := s.repo.RemoveIPs(ctx, blocklistID, toRemove); err != nil {
+			return added, 0, fmt.Errorf("remove IPs: %w", err)
+		}
+		removed = len(toRemove)
+	}
+
+	slog.Debug("[CROWDSEC_BL] DB sync completed",
+		"blocklist_id", blocklistID,
+		"current", len(currentIPs),
+		"downloaded", len(downloadedIPs),
 		"added", added,
 		"removed", removed)
 
-	return synced, added, removed, nil
+	return added, removed, nil
 }
 
-// saveSyncHistory saves sync operation to history
-func (s *BlocklistService) saveSyncHistory(ctx context.Context, result *crowdsec.BlocklistSyncResult, success bool) {
+// Cleanup removes all blocklist files and clears DB
+// Called when API is disconnected
+func (s *BlocklistService) Cleanup(ctx context.Context) error {
+	slog.Info("[CROWDSEC_BL] Starting cleanup")
+
+	// Step 1: Delete all blocklist files
+	files, err := filepath.Glob(filepath.Join(BlocklistDataDir, "*.txt"))
+	if err != nil {
+		slog.Error("[CROWDSEC_BL] Failed to list blocklist files", "error", err)
+	} else {
+		for _, f := range files {
+			if err := os.Remove(f); err != nil {
+				slog.Error("[CROWDSEC_BL] Failed to delete file", "path", f, "error", err)
+			} else {
+				slog.Info("[CROWDSEC_BL] Deleted blocklist file", "path", f)
+			}
+		}
+	}
+
+	// Step 2: Clear all IPs from DB
+	if s.repo != nil {
+		if err := s.repo.ClearAllIPs(ctx); err != nil {
+			slog.Error("[CROWDSEC_BL] Failed to clear DB", "error", err)
+			return err
+		}
+		slog.Info("[CROWDSEC_BL] Cleared all IPs from DB")
+	}
+
+	// Reset stats
+	s.mu.Lock()
+	s.config.TotalIPs = 0
+	s.config.TotalBlocklists = 0
+	s.mu.Unlock()
+
+	slog.Info("[CROWDSEC_BL] Cleanup completed")
+	return nil
+}
+
+// updateStats updates the total IPs and blocklists count and persists to DB
+func (s *BlocklistService) updateStats(ctx context.Context) {
+	if s.repo == nil {
+		return
+	}
+
+	totalIPs, totalBlocklists, err := s.repo.GetStats(ctx)
+	if err != nil {
+		slog.Error("[CROWDSEC_BL] Failed to get stats", "error", err)
+		return
+	}
+
+	s.mu.Lock()
+	s.config.TotalIPs = totalIPs
+	s.config.TotalBlocklists = totalBlocklists
+	s.config.LastSync = time.Now()
+	configCopy := *s.config
+	s.mu.Unlock()
+
+	// Persist to database
+	if err := s.repo.SaveConfig(ctx, &configCopy); err != nil {
+		slog.Error("[CROWDSEC_BL] Failed to save config after stats update", "error", err)
+	}
+
+	slog.Info("[CROWDSEC_BL] Stats updated",
+		"total_ips", totalIPs,
+		"total_blocklists", totalBlocklists)
+}
+
+// saveHistory saves sync operation to history
+func (s *BlocklistService) saveHistory(ctx context.Context, result *SyncResult, success bool) {
 	if s.repo == nil {
 		return
 	}
 
 	entry := &SyncHistoryEntry{
-		Timestamp:     result.SyncedAt,
-		BlocklistID:   result.BlocklistID,
-		BlocklistName: result.BlocklistName,
-		IPsDownloaded: result.IPsDownloaded,
-		IPsAdded:      result.IPsNew,
-		IPsRemoved:    result.IPsRemoved,
-		DurationMs:    int64(result.Duration),
-		Success:       success,
-		Error:         result.Error,
+		Timestamp:      result.SyncedAt,
+		BlocklistID:    result.BlocklistID,
+		BlocklistLabel: result.BlocklistLabel,
+		IPsInFile:      result.IPsInFile,
+		IPsAdded:       result.IPsAdded,
+		IPsRemoved:     result.IPsRemoved,
+		DurationMs:     result.DurationMs,
+		Success:        success,
+		Error:          result.Error,
 	}
 
 	if err := s.repo.SaveSyncHistory(ctx, entry); err != nil {
-		slog.Error("[CROWDSEC_BLOCKLIST] Failed to save sync history", "error", err)
+		slog.Error("[CROWDSEC_BL] Failed to save sync history", "error", err)
 	}
 }
 
@@ -348,20 +630,28 @@ func (s *BlocklistService) GetStatus(ctx context.Context) map[string]interface{}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	status := map[string]interface{}{
-		"configured":   s.client.IsConfigured(),
-		"enabled":      s.config.Enabled,
-		"sync_running": s.syncRunning,
-		"last_sync":    s.lastSync,
-		"total_ips":    s.config.TotalIPs,
-		"group_name":   s.config.XGSGroupName,
+	workerRunning := false
+	if s.worker != nil {
+		s.worker.mu.Lock()
+		workerRunning = s.worker.running
+		s.worker.mu.Unlock()
 	}
 
-	if len(s.config.EnabledLists) > 0 {
-		status["enabled_lists"] = s.config.EnabledLists
-	}
+	s.syncMu.Lock()
+	syncInProgress := s.syncInProgress
+	s.syncMu.Unlock()
 
-	return status
+	return map[string]interface{}{
+		"configured":       s.client.IsConfigured(),
+		"enabled":          s.config.Enabled,
+		"worker_running":   workerRunning,
+		"sync_in_progress": syncInProgress,
+		"last_sync":        s.config.LastSync,
+		"total_ips":        s.config.TotalIPs,
+		"total_blocklists": s.config.TotalBlocklists,
+		"sync_interval":    fmt.Sprintf("%dm", s.config.SyncIntervalMinutes),
+		"data_dir":         BlocklistDataDir,
+	}
 }
 
 // GetSyncHistory returns recent sync history
@@ -372,9 +662,56 @@ func (s *BlocklistService) GetSyncHistory(ctx context.Context, limit int) ([]Syn
 	return s.repo.GetSyncHistory(ctx, limit)
 }
 
-// IsRunning returns true if a sync is in progress
+// GetAllIPs returns all IPs from the database
+func (s *BlocklistService) GetAllIPs(ctx context.Context) ([]BlocklistIP, error) {
+	if s.repo == nil {
+		return nil, nil
+	}
+	return s.repo.GetAllIPs(ctx)
+}
+
+// ReadBlocklistFile reads IPs from a downloaded blocklist file
+func (s *BlocklistService) ReadBlocklistFile(blocklistID string) ([]string, error) {
+	filePath := filepath.Join(BlocklistDataDir, blocklistID+".txt")
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var ips []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			ips = append(ips, line)
+		}
+	}
+
+	return ips, scanner.Err()
+}
+
+// ListBlocklistFiles returns all downloaded blocklist files
+func (s *BlocklistService) ListBlocklistFiles() ([]string, error) {
+	files, err := filepath.Glob(filepath.Join(BlocklistDataDir, "*.txt"))
+	if err != nil {
+		return nil, err
+	}
+
+	var ids []string
+	for _, f := range files {
+		base := filepath.Base(f)
+		id := base[:len(base)-4] // Remove .txt
+		ids = append(ids, id)
+	}
+
+	return ids, nil
+}
+
+// IsRunning returns true if a sync operation is in progress
 func (s *BlocklistService) IsRunning() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.syncRunning
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+	return s.syncInProgress
 }

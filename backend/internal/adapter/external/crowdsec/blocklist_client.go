@@ -27,18 +27,24 @@ type BlocklistConfig struct {
 	APIKey string
 }
 
+// BlocklistStats represents blocklist statistics from the API
+type BlocklistStats struct {
+	Count int64 `json:"count"`
+}
+
 // BlocklistInfo represents a blocklist metadata
 type BlocklistInfo struct {
-	ID          string      `json:"id"`
-	Name        string      `json:"name"`
-	Label       string      `json:"label"`
-	Description string      `json:"description"`
-	References  []string    `json:"references,omitempty"`
-	IsPrivate   bool        `json:"is_private"`
-	Subscribers interface{} `json:"subscribers"` // Can be array or int depending on API version
-	IPCount     int64       `json:"ip_count"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Label       string         `json:"label"`
+	Description string         `json:"description"`
+	References  []string       `json:"references,omitempty"`
+	IsPrivate   bool           `json:"is_private"`
+	Subscribers interface{}    `json:"subscribers"` // Can be array or int depending on API version
+	Stats       BlocklistStats `json:"stats"`       // Contains count (IP count)
+	IPCount     int64          `json:"ip_count"`    // Computed field for convenience
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // BlocklistsResponse represents the API response for listing blocklists
@@ -147,43 +153,30 @@ func (c *BlocklistClient) ListBlocklists(ctx context.Context) ([]BlocklistInfo, 
 	return result.Items, nil
 }
 
-// GetSubscribedBlocklists returns blocklists the user is subscribed to
+// GetSubscribedBlocklists returns premium/subscribed blocklists accessible to the API key
+// Uses the standard /blocklists endpoint and filters for premium blocklists with IP count > 0
 func (c *BlocklistClient) GetSubscribedBlocklists(ctx context.Context) ([]BlocklistInfo, error) {
-	if !c.IsConfigured() {
-		return nil, fmt.Errorf("blocklist API key not configured")
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/blocklists?subscribed=true", nil)
+	// First, get all accessible blocklists using the standard endpoint
+	allBlocklists, err := c.ListBlocklists(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("list blocklists: %w", err)
 	}
 
-	c.mu.RLock()
-	req.Header.Set("x-api-key", c.apiKey)
-	c.mu.RUnlock()
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("invalid API key")
+	// Filter for blocklists with IPs (premium/subscribed blocklists typically have IPs)
+	// and populate IPCount from Stats.Count for convenience
+	var filtered []BlocklistInfo
+	for _, bl := range allBlocklists {
+		bl.IPCount = bl.Stats.Count // Copy stats.count to IPCount for convenience
+		if bl.Stats.Count > 0 {
+			filtered = append(filtered, bl)
+		}
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
-	}
+	slog.Info("[CROWDSEC_BLOCKLIST] Found premium blocklists",
+		"total", len(allBlocklists),
+		"with_ips", len(filtered))
 
-	var result BlocklistsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-
-	return result.Items, nil
+	return filtered, nil
 }
 
 // DownloadBlocklist downloads the IP list from a blocklist
@@ -218,6 +211,12 @@ func (c *BlocklistClient) DownloadBlocklist(ctx context.Context, blocklistID str
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("blocklist not found or not subscribed: %s", blocklistID)
+	}
+
+	// 204 No Content = blocklist is empty (valid response)
+	if resp.StatusCode == http.StatusNoContent {
+		slog.Info("[CROWDSEC_BLOCKLIST] Blocklist is empty (204 No Content)", "blocklist_id", blocklistID)
+		return []string{}, nil
 	}
 
 	if resp.StatusCode != http.StatusOK {

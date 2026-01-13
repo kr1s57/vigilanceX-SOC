@@ -239,3 +239,16 @@ func (c *Client) IsConfigured() bool {
 func (c *Client) GetProviderName() string {
 	return "ip-api.com"
 }
+
+// LookupCountry returns just the country code for an IP address
+// Implements the crowdsec.GeoIPLookup interface
+func (c *Client) LookupCountry(ctx context.Context, ip string) (string, error) {
+	geo, err := c.Lookup(ctx, ip)
+	if err != nil {
+		return "", err
+	}
+	if geo == nil {
+		return "", nil
+	}
+	return geo.CountryCode, nil
+}
