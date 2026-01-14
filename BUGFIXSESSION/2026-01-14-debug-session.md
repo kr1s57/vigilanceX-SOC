@@ -191,4 +191,45 @@ modsec_logs: Attaques WAF detectees par ModSecurity (src_ip externe)
 
 ---
 
-*Session documentee par Claude Code - 2026-01-14 14:45*
+### 7. Detect2Ban - Ban apres expiration immunité 24h [FIXED]
+**Symptome**: Une IP avec immunité 24h est re-bannée immédiatement après l'expiration de l'immunité, car Detect2Ban compte les events qui ont eu lieu PENDANT la période d'immunité.
+
+**Cause Racine**: La query Detect2Ban cherche les events des dernières N minutes (ex: 5min pour WAF). Quand l'immunité expire, les events de la période d'immunité sont comptés, ce qui déclenche un ban incorrect.
+
+**Solution**: Ajouter une vérification post-immunité dans `handleMatch()`:
+```go
+// v3.53.106: Check if immunity just expired - only count events AFTER immunity ended
+if existingBan.ImmuneUntil != nil && !existingBan.IsImmune() {
+    immuneEnded := *existingBan.ImmuneUntil
+    window, _ := time.ParseDuration(scenario.Aggregation.Window)
+
+    // Si immunité a expiré dans la fenêtre du scenario, recompter
+    if time.Since(immuneEnded) < window {
+        eventsAfterImmunity, err := e.countEventsAfter(ctx, scenario, match.IP, immuneEnded)
+        if eventsAfterImmunity < uint64(scenario.Aggregation.Threshold) {
+            log.Printf("[DETECT2BAN] IP %s: only %d events after immunity, skipping", ...)
+            return
+        }
+    }
+}
+```
+
+**Nouvelle fonction** `countEventsAfter()`: Query ClickHouse pour compter uniquement les events APRÈS une date donnée.
+
+**Fichiers modifies**:
+- `backend/internal/usecase/detect2ban/engine.go`
+
+**Status**: OK - Build passe, deploy effectué
+
+---
+
+## Resume des Changements v3.53.106
+
+| Composant | Fichier | Description |
+|-----------|---------|-------------|
+| Backend | engine.go | D2B: Ne compte que les events APRES expiration immunité |
+| Backend | engine.go | Nouvelle fonction `countEventsAfter()` |
+
+---
+
+*Session documentee par Claude Code - 2026-01-14 15:35*

@@ -7,6 +7,20 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.53.106] - 2026-01-14
+
+### Fixed
+- **Detect2Ban Immunity Bug**: Correction du ban automatique après expiration de l'immunité 24h
+  - Avant: IP re-bannie car events PENDANT l'immunité étaient comptés
+  - Après: Seuls les events APRÈS l'expiration de l'immunité sont comptés
+  - Nouvelle fonction `countEventsAfter()` pour recompter les events post-immunité
+
+### Technical
+- `handleMatch()` vérifie maintenant si `ImmuneUntil` a expiré récemment
+- Si l'immunité a expiré dans la fenêtre du scenario, recompte uniquement les events après
+
+---
+
 ## [3.53.105] - 2026-01-14
 
 ### Fixed

@@ -420,6 +420,35 @@ func (e *Engine) handleMatch(ctx context.Context, scenario *Scenario, match Scen
 				match.IP, existingBan.ImmuneUntil.Format("2006-01-02 15:04:05"))
 			return
 		}
+
+		// v3.53.106: Check if immunity just expired - only count events AFTER immunity ended
+		// This prevents banning based on events that occurred during the immunity period
+		if existingBan.ImmuneUntil != nil && !existingBan.IsImmune() {
+			immuneEnded := *existingBan.ImmuneUntil
+			// Parse scenario window
+			window, _ := time.ParseDuration(scenario.Aggregation.Window)
+			if window == 0 {
+				window = 5 * time.Minute
+			}
+
+			// If immunity ended within the scenario window, recount events after immunity
+			if time.Since(immuneEnded) < window {
+				eventsAfterImmunity, err := e.countEventsAfter(ctx, scenario, match.IP, immuneEnded)
+				if err != nil {
+					log.Printf("[DETECT2BAN] Error counting events after immunity for %s: %v", match.IP, err)
+					return
+				}
+
+				if eventsAfterImmunity < uint64(scenario.Aggregation.Threshold) {
+					log.Printf("[DETECT2BAN] IP %s: only %d events after immunity ended at %v (threshold: %d), skipping ban",
+						match.IP, eventsAfterImmunity, immuneEnded.Format("15:04:05"), scenario.Aggregation.Threshold)
+					return
+				}
+
+				log.Printf("[DETECT2BAN] IP %s: %d events after immunity ended, proceeding with ban",
+					match.IP, eventsAfterImmunity)
+			}
+		}
 	}
 
 	// Validate with threat intelligence if configured
@@ -528,4 +557,43 @@ func (e *Engine) getScenarioNames() []string {
 		names[i] = s.Name
 	}
 	return names
+}
+
+// countEventsAfter counts events for a specific IP after a given timestamp
+// Used to verify if there are enough events AFTER immunity period ended
+func (e *Engine) countEventsAfter(ctx context.Context, scenario *Scenario, ip string, after time.Time) (uint64, error) {
+	// Build WHERE clause starting with timestamp > immunity end
+	whereClause := fmt.Sprintf("timestamp > toDateTime('%s')", after.UTC().Format("2006-01-02 15:04:05"))
+
+	// Add IP filter
+	groupBy := scenario.Aggregation.GroupBy
+	if groupBy == "" {
+		groupBy = "src_ip"
+	}
+	whereClause += fmt.Sprintf(" AND %s = '%s'", groupBy, ip)
+
+	// Add scenario conditions
+	for _, cond := range scenario.Conditions {
+		clause := e.conditionToSQL(cond)
+		if clause != "" {
+			whereClause += " AND " + clause
+		}
+	}
+
+	query := fmt.Sprintf("SELECT count() FROM vigilance_x.events WHERE %s", whereClause)
+
+	rows, err := e.eventsRepo.RawQuery(ctx, query)
+	if err != nil {
+		return 0, fmt.Errorf("count events after: %w", err)
+	}
+	defer rows.Close()
+
+	var count uint64
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return 0, fmt.Errorf("scan count: %w", err)
+		}
+	}
+
+	return count, nil
 }
