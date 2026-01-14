@@ -746,3 +746,63 @@ func (r *VigimailRepository) SaveCheckHistory(ctx context.Context, history *enti
 		history.LeaksFound, history.DNSIssuesFound, history.DurationMS, success, history.Error,
 	)
 }
+
+// ============================================
+// Cleanup
+// ============================================
+
+// CleanupOrphanLeaks removes leaks for emails that no longer exist
+func (r *VigimailRepository) CleanupOrphanLeaks(ctx context.Context) (int, error) {
+	// Count orphan leaks first
+	var cnt uint64
+	row := r.conn.QueryRow(ctx, `
+		SELECT count() FROM vigilance_x.vigimail_leaks l
+		WHERE l.email NOT IN (SELECT email FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0)
+	`)
+	if err := row.Scan(&cnt); err != nil {
+		return 0, fmt.Errorf("count orphan leaks: %w", err)
+	}
+
+	if cnt == 0 {
+		return 0, nil
+	}
+
+	// Delete orphan leaks
+	err := r.conn.Exec(ctx, `
+		ALTER TABLE vigilance_x.vigimail_leaks DELETE
+		WHERE email NOT IN (SELECT email FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0)
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("delete orphan leaks: %w", err)
+	}
+
+	return int(cnt), nil
+}
+
+// CleanupOrphanDomainChecks removes DNS checks for domains that no longer exist
+func (r *VigimailRepository) CleanupOrphanDomainChecks(ctx context.Context) (int, error) {
+	// Count orphan checks first
+	var cnt uint64
+	row := r.conn.QueryRow(ctx, `
+		SELECT count() FROM vigilance_x.vigimail_domain_checks c
+		WHERE c.domain NOT IN (SELECT domain FROM vigilance_x.vigimail_domains FINAL WHERE deleted = 0)
+	`)
+	if err := row.Scan(&cnt); err != nil {
+		return 0, fmt.Errorf("count orphan domain checks: %w", err)
+	}
+
+	if cnt == 0 {
+		return 0, nil
+	}
+
+	// Delete orphan domain checks
+	err := r.conn.Exec(ctx, `
+		ALTER TABLE vigilance_x.vigimail_domain_checks DELETE
+		WHERE domain NOT IN (SELECT domain FROM vigilance_x.vigimail_domains FINAL WHERE deleted = 0)
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("delete orphan domain checks: %w", err)
+	}
+
+	return int(cnt), nil
+}

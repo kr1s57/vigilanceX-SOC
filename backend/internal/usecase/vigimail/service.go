@@ -38,6 +38,10 @@ type Repository interface {
 
 	GetStats(ctx context.Context) (*entity.VigimailStats, error)
 	SaveCheckHistory(ctx context.Context, history *entity.VigimailCheckHistory) error
+
+	// Cleanup
+	CleanupOrphanLeaks(ctx context.Context) (int, error)
+	CleanupOrphanDomainChecks(ctx context.Context) (int, error)
 }
 
 // LeakChecker interface for checking email leaks
@@ -186,6 +190,33 @@ func (s *Service) GetStatus(ctx context.Context) *entity.VigimailStatus {
 	}
 
 	return status
+}
+
+// CleanupOrphanData removes leaks and DNS checks for deleted emails/domains
+func (s *Service) CleanupOrphanData(ctx context.Context) (int, error) {
+	totalDeleted := 0
+
+	// Cleanup orphan leaks (for deleted emails)
+	leaksDeleted, err := s.repo.CleanupOrphanLeaks(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup orphan leaks: %w", err)
+	}
+	totalDeleted += leaksDeleted
+
+	// Cleanup orphan DNS checks (for deleted domains)
+	checksDeleted, err := s.repo.CleanupOrphanDomainChecks(ctx)
+	if err != nil {
+		return totalDeleted, fmt.Errorf("cleanup orphan domain checks: %w", err)
+	}
+	totalDeleted += checksDeleted
+
+	if totalDeleted > 0 {
+		slog.Info("[VIGIMAIL] Orphan data cleanup completed",
+			"leaks_deleted", leaksDeleted,
+			"checks_deleted", checksDeleted)
+	}
+
+	return totalDeleted, nil
 }
 
 // ============================================
@@ -508,6 +539,15 @@ func (w *checkWorker) run() {
 		case <-ticker.C:
 			slog.Info("[VIGIMAIL] Worker triggered check")
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+
+			// Cleanup orphan data first
+			if leaksDeleted, err := w.service.CleanupOrphanData(ctx); err != nil {
+				slog.Error("[VIGIMAIL] Cleanup failed", "error", err)
+			} else if leaksDeleted > 0 {
+				slog.Info("[VIGIMAIL] Cleaned up orphan data", "leaks_deleted", leaksDeleted)
+			}
+
+			// Run checks
 			if _, err := w.service.CheckAll(ctx); err != nil {
 				slog.Error("[VIGIMAIL] Worker check failed", "error", err)
 			}
