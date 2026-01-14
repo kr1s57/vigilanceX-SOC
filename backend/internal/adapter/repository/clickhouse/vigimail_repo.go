@@ -645,14 +645,21 @@ func (r *VigimailRepository) GetStats(ctx context.Context) (*entity.VigimailStat
 		stats.EmailsPending = int(cnt)
 	}
 
-	// Count total leaks
-	row = r.conn.QueryRow(ctx, `SELECT count() FROM vigilance_x.vigimail_leaks`)
+	// Count total leaks (only for active emails)
+	row = r.conn.QueryRow(ctx, `
+		SELECT count() FROM vigilance_x.vigimail_leaks l
+		WHERE l.email IN (SELECT email FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0)
+	`)
 	if row.Scan(&cnt) == nil {
 		stats.TotalLeaks = int(cnt)
 	}
 
-	// Leaks by source
-	rows, err := r.conn.Query(ctx, `SELECT source, count() as cnt FROM vigilance_x.vigimail_leaks GROUP BY source`)
+	// Leaks by source (only for active emails)
+	rows, err := r.conn.Query(ctx, `
+		SELECT source, count() as cnt FROM vigilance_x.vigimail_leaks l
+		WHERE l.email IN (SELECT email FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0)
+		GROUP BY source
+	`)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -664,10 +671,11 @@ func (r *VigimailRepository) GetStats(ctx context.Context) (*entity.VigimailStat
 		}
 	}
 
-	// Top breaches
+	// Top breaches (only for active emails)
 	rows, err = r.conn.Query(ctx, `
 		SELECT breach_name, count() as cnt, min(breach_date) as first_date
-		FROM vigilance_x.vigimail_leaks
+		FROM vigilance_x.vigimail_leaks l
+		WHERE l.email IN (SELECT email FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0)
 		GROUP BY breach_name
 		ORDER BY cnt DESC
 		LIMIT 10
