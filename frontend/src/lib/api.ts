@@ -1386,3 +1386,91 @@ export const integrationsApi = {
   },
 }
 
+// ==============================================
+// Vigimail Checker API (v3.54)
+// ==============================================
+
+import type { VigimailConfig, VigimailDomain, VigimailEmail, VigimailLeak, DomainDNSCheck, VigimailStatus, VigimailStats, VigimailCheckHistory } from '../types'
+
+export const vigimailApi = {
+  // Configuration
+  getConfig: async (): Promise<VigimailConfig> => {
+    const response = await api.get<VigimailConfig>('/vigimail/config')
+    return response.data
+  },
+
+  updateConfig: async (config: Partial<VigimailConfig>): Promise<{ success: boolean; message: string }> => {
+    const response = await api.put<{ success: boolean; message: string }>('/vigimail/config', config)
+    return response.data
+  },
+
+  getStatus: async (): Promise<VigimailStatus> => {
+    const response = await api.get<VigimailStatus>('/vigimail/status')
+    return response.data
+  },
+
+  getStats: async (): Promise<VigimailStats> => {
+    const response = await api.get<VigimailStats>('/vigimail/stats')
+    return response.data
+  },
+
+  // Domains
+  listDomains: async (): Promise<{ domains: VigimailDomain[]; count: number }> => {
+    const response = await api.get<{ domains: VigimailDomain[]; count: number }>('/vigimail/domains')
+    return response.data
+  },
+
+  addDomain: async (domain: string): Promise<VigimailDomain> => {
+    const response = await api.post<VigimailDomain>('/vigimail/domains', { domain })
+    return response.data
+  },
+
+  deleteDomain: async (domain: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete<{ success: boolean; message: string }>(`/vigimail/domains/${encodeURIComponent(domain)}`)
+    return response.data
+  },
+
+  getDomainDNS: async (domain: string): Promise<DomainDNSCheck> => {
+    const response = await api.get<DomainDNSCheck>(`/vigimail/domains/${encodeURIComponent(domain)}/dns`)
+    return response.data
+  },
+
+  checkDomain: async (domain: string): Promise<DomainDNSCheck> => {
+    const response = await api.post<DomainDNSCheck>(`/vigimail/domains/${encodeURIComponent(domain)}/check`)
+    return response.data
+  },
+
+  // Emails
+  listEmails: async (domain?: string): Promise<{ emails?: VigimailEmail[]; emails_by_domain?: Record<string, VigimailEmail[]>; count?: number; total_count?: number }> => {
+    const params = domain ? `?domain=${encodeURIComponent(domain)}` : ''
+    const response = await api.get<{ emails?: VigimailEmail[]; emails_by_domain?: Record<string, VigimailEmail[]>; count?: number; total_count?: number }>(`/vigimail/emails${params}`)
+    return response.data
+  },
+
+  addEmail: async (email: string): Promise<VigimailEmail> => {
+    const response = await api.post<VigimailEmail>('/vigimail/emails', { email })
+    return response.data
+  },
+
+  deleteEmail: async (email: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete<{ success: boolean; message: string }>(`/vigimail/emails/${encodeURIComponent(email)}`)
+    return response.data
+  },
+
+  getEmailLeaks: async (email: string): Promise<{ email: string; leaks: VigimailLeak[]; count: number }> => {
+    const response = await api.get<{ email: string; leaks: VigimailLeak[]; count: number }>(`/vigimail/emails/${encodeURIComponent(email)}/leaks`)
+    return response.data
+  },
+
+  checkEmail: async (email: string): Promise<{ email: string; leaks: VigimailLeak[]; count: number; status: string }> => {
+    const response = await api.post<{ email: string; leaks: VigimailLeak[]; count: number; status: string }>(`/vigimail/emails/${encodeURIComponent(email)}/check`)
+    return response.data
+  },
+
+  // Bulk operations
+  checkAll: async (): Promise<VigimailCheckHistory> => {
+    const response = await api.post<VigimailCheckHistory>('/vigimail/check-all')
+    return response.data
+  },
+}
+

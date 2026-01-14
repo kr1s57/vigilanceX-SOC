@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.53.106 | **Derniere mise a jour**: 2026-01-14
+> **Version**: 3.54.100 | **Derniere mise a jour**: 2026-01-14
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -1628,6 +1628,31 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.54.100 (2026-01-14)
+- **Vigimail Checker Module**: Nouveau module complet de verification emails et securite DNS
+  - **Backend Go**:
+    - Migration ClickHouse `013_vigimail_checker.sql` (5 tables)
+    - Entity `vigimail.go` avec 8 structures (Config, Domain, Email, Leak, DNSCheck, etc.)
+    - Repository ClickHouse avec CRUD complet
+    - Clients externes: HIBP v3, LeakCheck.io, DNS checker natif
+    - Service metier avec background worker configurable (6h/12h/24h/48h/7d)
+    - 14 endpoints HTTP sous `/api/v1/vigimail/*`
+  - **Frontend React**:
+    - Types TypeScript complets
+    - API client `vigimailApi` dans api.ts
+    - Page `VigimailChecker.tsx` avec UI complete
+    - Navigation dans Sidebar (categorie Detection)
+  - **Fonctionnalites**:
+    - Gestion multi-domaines avec emails associes
+    - Detection de leaks via HIBP + LeakCheck
+    - Verification DNS: SPF, DKIM, DMARC, MX, DNSSEC
+    - Score global securite domaine (0-100)
+    - Worker background pour checks automatiques
+- **Settings Reorganisation**: Integrations reorganisees par categories
+  - Nouveau composant `IntegrationCategory` avec accordeon collapsible
+  - 5 categories: Sophos Firewall, CrowdSec, Threat Intelligence, Email & Notifications, Premium
+  - UX amelioree avec navigation plus claire
 
 ### v3.53.105 (2026-01-14)
 - **Attack Map Date Picker Fix**: Backend supporte maintenant `start_time` et `end_time` params

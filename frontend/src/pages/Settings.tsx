@@ -41,6 +41,8 @@ import {
   HardDrive,
   Trash2,
   Database,
+  Brain,
+  Sparkles,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -2078,110 +2080,155 @@ export function Settings() {
           </div>
         ) : (
           <>
-            {/* Sophos XGS Syslog */}
-            <IntegrationRow
-              name="Sophos XGS - Syslog"
-              description={
-                integrations?.sophosSyslog.connected
-                  ? `Receiving logs (~${integrations.sophosSyslog.eventsPerMinute}/min)`
-                  : 'Not receiving logs'
-              }
-              connected={integrations?.sophosSyslog.connected || false}
+            {/* Sophos Firewall Category */}
+            <IntegrationCategory
+              name="Sophos Firewall"
               icon={<Server className="w-4 h-4" />}
-              onEdit={isAdmin ? () => handleEditPlugin('sophos_syslog') : undefined}
-            />
+              colorClass="text-blue-500"
+              defaultOpen={true}
+            >
+              <IntegrationRow
+                name="Syslog Receiver"
+                description={
+                  integrations?.sophosSyslog.connected
+                    ? `Receiving logs (~${integrations.sophosSyslog.eventsPerMinute}/min)`
+                    : 'Not receiving logs'
+                }
+                connected={integrations?.sophosSyslog.connected || false}
+                icon={<Server className="w-4 h-4" />}
+                onEdit={isAdmin ? () => handleEditPlugin('sophos_syslog') : undefined}
+              />
+              <IntegrationRow
+                name="SSH (ModSec Sync)"
+                description={
+                  integrations?.sophosSsh.connected
+                    ? integrations.sophosSsh.lastSync
+                      ? `ModSec sync: ${new Date(integrations.sophosSsh.lastSync).toLocaleString()}`
+                      : 'SSH connected - Never synced'
+                    : integrations?.sophosSsh.message || 'SSH not configured'
+                }
+                connected={integrations?.sophosSsh.connected || false}
+                icon={<RefreshCw className="w-4 h-4" />}
+                onEdit={isAdmin ? () => handleEditPlugin('sophos_ssh') : undefined}
+              />
+              <IntegrationRow
+                name="API (Ban/Unban)"
+                description={
+                  integrations?.sophosApi.connected
+                    ? `${integrations.sophosApi.host} (${integrations.sophosApi.groupCount} bans in group)`
+                    : 'API not configured'
+                }
+                connected={integrations?.sophosApi.connected || false}
+                icon={<Plug className="w-4 h-4" />}
+                onEdit={isAdmin ? () => handleEditPlugin('sophos_api') : undefined}
+              />
+            </IntegrationCategory>
 
-            {/* Sophos XGS SSH */}
-            <IntegrationRow
-              name="Sophos XGS - SSH"
-              description={
-                integrations?.sophosSsh.connected
-                  ? integrations.sophosSsh.lastSync
-                    ? `ModSec sync: ${new Date(integrations.sophosSsh.lastSync).toLocaleString()}`
-                    : 'SSH connected - Never synced'
-                  : integrations?.sophosSsh.message || 'SSH not configured'
-              }
-              connected={integrations?.sophosSsh.connected || false}
-              icon={<RefreshCw className="w-4 h-4" />}
-              onEdit={isAdmin ? () => handleEditPlugin('sophos_ssh') : undefined}
-            />
-
-            {/* Sophos XGS API */}
-            <IntegrationRow
-              name="Sophos XGS - API"
-              description={
-                integrations?.sophosApi.connected
-                  ? `${integrations.sophosApi.host} (${integrations.sophosApi.groupCount} bans in group)`
-                  : 'API not configured'
-              }
-              connected={integrations?.sophosApi.connected || false}
-              icon={<Plug className="w-4 h-4" />}
-              onEdit={isAdmin ? () => handleEditPlugin('sophos_api') : undefined}
-            />
-
-            {/* Threat Intel Providers (excluding CrowdSec - shown separately below) */}
-            {integrations?.threatProviders
-              .filter(p => p.name !== 'CrowdSec') // CrowdSec CTI shown with Blocklist
-              .map((provider) => {
-              const pluginId = findPluginByName(provider.name)
-              const apiStatus = getApiProviderStatus(provider.name)
-              return (
-                <IntegrationRow
-                  key={provider.name}
-                  name={provider.name}
-                  description={provider.description}
-                  connected={provider.configured}
-                  icon={<Shield className="w-4 h-4" />}
-                  onEdit={isAdmin && pluginId ? () => handleEditPlugin(pluginId) : undefined}
-                  quotaUsed={apiStatus?.quota_used}
-                  quotaMax={apiStatus?.quota_max}
-                  hasError={apiStatus?.has_error}
-                  lastSuccess={apiStatus?.config.last_success}
-                  lastError={apiStatus?.config.last_error_message}
-                />
-              )
-            })}
-
-            {/* CrowdSec APIs (CTI + Blocklist together) */}
-            {(() => {
-              const crowdsecCTI = integrations?.threatProviders.find(p => p.name === 'CrowdSec')
-              const ctiStatus = getApiProviderStatus('CrowdSec')
-              return (
-                <>
-                  {crowdsecCTI && (
+            {/* CrowdSec Category */}
+            <IntegrationCategory
+              name="CrowdSec"
+              icon={<Shield className="w-4 h-4" />}
+              colorClass="text-purple-500"
+            >
+              {(() => {
+                const crowdsecCTI = integrations?.threatProviders.find(p => p.name === 'CrowdSec')
+                const ctiStatus = getApiProviderStatus('CrowdSec')
+                return (
+                  <>
+                    {crowdsecCTI && (
+                      <IntegrationRow
+                        name="CrowdSec CTI"
+                        description={crowdsecCTI.description}
+                        connected={crowdsecCTI.configured}
+                        icon={<Shield className="w-4 h-4" />}
+                        onEdit={isAdmin ? () => handleEditPlugin('crowdsec') : undefined}
+                        quotaUsed={ctiStatus?.quota_used}
+                        quotaMax={ctiStatus?.quota_max}
+                        hasError={ctiStatus?.has_error}
+                        lastSuccess={ctiStatus?.config.last_success}
+                        lastError={ctiStatus?.config.last_error_message}
+                      />
+                    )}
                     <IntegrationRow
-                      name="CrowdSec CTI"
-                      description={crowdsecCTI.description}
-                      connected={crowdsecCTI.configured}
-                      icon={<Shield className="w-4 h-4" />}
-                      onEdit={isAdmin ? () => handleEditPlugin('crowdsec') : undefined}
-                      quotaUsed={ctiStatus?.quota_used}
-                      quotaMax={ctiStatus?.quota_max}
-                      hasError={ctiStatus?.has_error}
-                      lastSuccess={ctiStatus?.config.last_success}
-                      lastError={ctiStatus?.config.last_error_message}
+                      name="CrowdSec Blocklist"
+                      description={
+                        crowdsecBlocklistConfig?.api_key
+                          ? crowdsecBlocklistConfig.enabled
+                            ? `Syncing to ${crowdsecBlocklistConfig.xgs_group_name}`
+                            : 'Configured but disabled'
+                          : 'Premium blocklist sync to XGS'
+                      }
+                      connected={!!crowdsecBlocklistConfig?.api_key}
+                      icon={<Globe className="w-4 h-4" />}
+                      onEdit={isAdmin ? () => handleEditPlugin('crowdsec_blocklist') : undefined}
+                      syncInfo={crowdsecBlocklistConfig ? {
+                        lastSync: crowdsecBlocklistConfig.last_sync,
+                        totalIPs: crowdsecBlocklistConfig.total_ips
+                      } : undefined}
                     />
-                  )}
-                  <IntegrationRow
-                    name="CrowdSec Blocklist"
-                    description={
-                      crowdsecBlocklistConfig?.api_key
-                        ? crowdsecBlocklistConfig.enabled
-                          ? `Syncing to ${crowdsecBlocklistConfig.xgs_group_name}`
-                          : 'Configured but disabled'
-                        : 'Premium blocklist sync to XGS'
-                    }
-                    connected={!!crowdsecBlocklistConfig?.api_key}
-                    icon={<Globe className="w-4 h-4" />}
-                    onEdit={isAdmin ? () => handleEditPlugin('crowdsec_blocklist') : undefined}
-                    syncInfo={crowdsecBlocklistConfig ? {
-                      lastSync: crowdsecBlocklistConfig.last_sync,
-                      totalIPs: crowdsecBlocklistConfig.total_ips
-                    } : undefined}
-                  />
-                </>
-              )
-            })()}
+                  </>
+                )
+              })()}
+            </IntegrationCategory>
+
+            {/* Threat Intelligence Category */}
+            <IntegrationCategory
+              name="Threat Intelligence"
+              icon={<AlertTriangle className="w-4 h-4" />}
+              colorClass="text-orange-500"
+            >
+              {integrations?.threatProviders
+                .filter(p => p.name !== 'CrowdSec') // CrowdSec shown in its own category
+                .map((provider) => {
+                  const pluginId = findPluginByName(provider.name)
+                  const apiStatus = getApiProviderStatus(provider.name)
+                  return (
+                    <IntegrationRow
+                      key={provider.name}
+                      name={provider.name}
+                      description={provider.description}
+                      connected={provider.configured}
+                      icon={<Shield className="w-4 h-4" />}
+                      onEdit={isAdmin && pluginId ? () => handleEditPlugin(pluginId) : undefined}
+                      quotaUsed={apiStatus?.quota_used}
+                      quotaMax={apiStatus?.quota_max}
+                      hasError={apiStatus?.has_error}
+                      lastSuccess={apiStatus?.config.last_success}
+                      lastError={apiStatus?.config.last_error_message}
+                    />
+                  )
+                })}
+            </IntegrationCategory>
+
+            {/* Email & Notifications Category */}
+            <IntegrationCategory
+              name="Email & Notifications"
+              icon={<Mail className="w-4 h-4" />}
+              colorClass="text-teal-500"
+            >
+              <IntegrationRow
+                name="SMTP Email"
+                description="Email notifications and scheduled reports"
+                connected={notifSettings?.smtp_configured || false}
+                icon={<Send className="w-4 h-4" />}
+                onEdit={isAdmin ? () => handleEditPlugin('smtp') : undefined}
+              />
+            </IntegrationCategory>
+
+            {/* Premium Features Category */}
+            <IntegrationCategory
+              name="Premium Features"
+              icon={<Sparkles className="w-4 h-4" />}
+              colorClass="text-yellow-500"
+            >
+              <IntegrationRow
+                name="VGX Neural-Sync"
+                description="Centralized blocklist sync via VigilanceKey"
+                connected={false}
+                icon={<Brain className="w-4 h-4" />}
+                onEdit={isAdmin ? () => handleEditPlugin('neural_sync') : undefined}
+              />
+            </IntegrationCategory>
           </>
         )}
       </SettingsSection>
@@ -2309,7 +2356,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.53.106</p>
+        <p>VIGILANCE X v3.54.100</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
@@ -2585,6 +2632,48 @@ function IntegrationRow({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// Collapsible integration category component
+function IntegrationCategory({
+  name,
+  icon,
+  colorClass,
+  children,
+  defaultOpen = false,
+}: {
+  name: string
+  icon: React.ReactNode
+  colorClass: string
+  children: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  return (
+    <div className="border-b border-border last:border-b-0">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-6 py-4 hover:bg-muted/30 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className={cn("p-1.5 rounded-lg bg-muted/50", colorClass)}>
+            {icon}
+          </div>
+          <span className="font-semibold">{name}</span>
+        </div>
+        <ChevronDown className={cn(
+          "w-5 h-5 text-muted-foreground transition-transform duration-200",
+          isOpen && "rotate-180"
+        )} />
+      </button>
+      {isOpen && (
+        <div className="bg-muted/20">
+          {children}
+        </div>
+      )}
     </div>
   )
 }

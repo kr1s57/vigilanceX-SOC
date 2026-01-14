@@ -20,6 +20,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/adapter/external/smtp"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/external/threatintel"
+	vigimailext "github.com/kr1s57/vigilancex/internal/adapter/external/vigimail"
 	sophosparser "github.com/kr1s57/vigilancex/internal/adapter/parser/sophos"
 	"github.com/kr1s57/vigilancex/internal/adapter/repository/clickhouse"
 	"github.com/kr1s57/vigilancex/internal/config"
@@ -39,6 +40,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/reports"
 	"github.com/kr1s57/vigilancex/internal/usecase/retention"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
+	vigimailuc "github.com/kr1s57/vigilancex/internal/usecase/vigimail"
 	"github.com/kr1s57/vigilancex/internal/usecase/wafwatcher"
 
 	"github.com/go-chi/chi/v5"
@@ -84,6 +86,7 @@ func main() {
 	retentionRepo := clickhouse.NewRetentionRepository(chConn)                 // v3.52: Log retention settings
 	crowdsecBlocklistRepo := clickhouse.NewCrowdSecBlocklistRepository(chConn) // v3.53: CrowdSec Blocklist
 	apiUsageRepo := clickhouse.NewAPIUsageRepository(chConn)                   // v3.53: API Usage Tracking
+	vigimailRepo := clickhouse.NewVigimailRepository(chConn)                   // v3.54: Vigimail Checker
 
 	// v3.53: API Usage Tracking Service
 	apiUsageService := apiusage.NewService(apiUsageRepo)
@@ -454,6 +457,18 @@ func main() {
 		logger.Info("Neural-Sync: VigilanceKey client configured", "server", cfg.License.ServerURL)
 	}
 
+	// v3.54: Vigimail Checker - Email leak detection and DNS security checks
+	hibpClient := vigimailext.NewHIBPClient("") // API key loaded from config
+	leakCheckClient := vigimailext.NewLeakCheckClient("")
+	dnsChecker := vigimailext.NewDNSChecker()
+	vigimailService := vigimailuc.NewService(vigimailRepo, hibpClient, leakCheckClient, dnsChecker)
+	if err := vigimailService.Initialize(context.Background()); err != nil {
+		logger.Warn("Vigimail service initialization failed", "error", err)
+	} else {
+		logger.Info("Vigimail Checker service initialized")
+	}
+	vigimailHandler := handlers.NewVigimailHandler(vigimailService)
+
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
 	go wsHub.Run()
@@ -720,6 +735,29 @@ func main() {
 				r.Get("/status", neuralSyncHandler.GetStatus)
 				r.Get("/blocklists", neuralSyncHandler.ListBlocklists)
 				r.Get("/ips", neuralSyncHandler.ListIPs)
+			})
+
+			// Vigimail Checker (v3.54 - Email leak detection + DNS security checks)
+			r.Route("/vigimail", func(r chi.Router) {
+				// Configuration
+				r.Get("/config", vigimailHandler.GetConfig)
+				r.Put("/config", vigimailHandler.UpdateConfig)
+				r.Get("/status", vigimailHandler.GetStatus)
+				r.Get("/stats", vigimailHandler.GetStats)
+				// Domains
+				r.Get("/domains", vigimailHandler.ListDomains)
+				r.Post("/domains", vigimailHandler.AddDomain)
+				r.Delete("/domains/{domain}", vigimailHandler.DeleteDomain)
+				r.Get("/domains/{domain}/dns", vigimailHandler.GetDomainDNS)
+				r.Post("/domains/{domain}/check", vigimailHandler.CheckDomain)
+				// Emails
+				r.Get("/emails", vigimailHandler.ListEmails)
+				r.Post("/emails", vigimailHandler.AddEmail)
+				r.Delete("/emails/{email}", vigimailHandler.DeleteEmail)
+				r.Get("/emails/{email}/leaks", vigimailHandler.GetEmailLeaks)
+				r.Post("/emails/{email}/check", vigimailHandler.CheckEmail)
+				// Bulk operations
+				r.Post("/check-all", vigimailHandler.CheckAll)
 			})
 
 			// API Integrations (v3.53 - Provider status and quota tracking)

@@ -749,3 +749,107 @@ export interface FreshnessConfig {
   recent_activity_boost: number
   stale_threshold_days: number
 }
+
+// ==============================================
+// Vigimail Checker Types (v3.54)
+// ==============================================
+
+export interface VigimailConfig {
+  enabled: boolean
+  check_interval_hours: number
+  hibp_api_key: string
+  leakcheck_api_key: string
+  last_check: string
+}
+
+export interface VigimailDomain {
+  id: string
+  domain: string
+  created_at: string
+  updated_at: string
+}
+
+export interface VigimailEmail {
+  id: string
+  email: string
+  domain: string
+  last_check: string
+  leak_count: number
+  status: 'pending' | 'clean' | 'leaked'
+  created_at: string
+}
+
+export interface VigimailLeak {
+  id: string
+  email: string
+  source: 'hibp' | 'leakcheck'
+  breach_name: string
+  breach_date: string | null
+  data_classes: string[]
+  is_verified: boolean
+  is_sensitive: boolean
+  description?: string
+  first_seen: string
+  last_seen: string
+}
+
+export interface DomainDNSCheck {
+  id: string
+  domain: string
+  check_time: string
+  // SPF
+  spf_exists: boolean
+  spf_record: string
+  spf_valid: boolean
+  spf_issues: string[]
+  // DKIM
+  dkim_exists: boolean
+  dkim_selectors: string[]
+  dkim_valid: boolean
+  dkim_issues: string[]
+  // DMARC
+  dmarc_exists: boolean
+  dmarc_record: string
+  dmarc_policy: 'none' | 'quarantine' | 'reject' | ''
+  dmarc_valid: boolean
+  dmarc_issues: string[]
+  // MX
+  mx_exists: boolean
+  mx_records: string[]
+  // Overall
+  overall_score: number
+  overall_status: 'good' | 'warning' | 'critical' | 'unknown'
+}
+
+export interface VigimailStatus {
+  is_running: boolean
+  worker_active: boolean
+  last_check: string
+  next_check: string
+  domains_count: number
+  emails_count: number
+  leaks_count: number
+  hibp_configured: boolean
+  leakcheck_configured: boolean
+}
+
+export interface VigimailStats {
+  total_domains: number
+  total_emails: number
+  total_leaks: number
+  emails_clean: number
+  emails_leaked: number
+  emails_pending: number
+  leaks_by_source: Record<string, number>
+  domains_by_status: Record<string, number>
+}
+
+export interface VigimailCheckHistory {
+  id: string
+  check_type: 'email' | 'domain' | 'all'
+  check_time: string
+  domains_checked: number
+  emails_checked: number
+  leaks_found: number
+  duration_ms: number
+}
