@@ -142,6 +142,14 @@ func (s *Service) GetSettings() *entity.NotificationSettings {
 	settings := *s.settings
 	settings.SMTPConfigured = s.smtpClient != nil && s.smtpClient.IsConfigured()
 
+	// v3.55.101: Ensure arrays are never nil (JSON serializes nil as null)
+	if settings.ReportRecipients == nil {
+		settings.ReportRecipients = []string{}
+	}
+	if settings.SpecificEventIDs == nil {
+		settings.SpecificEventIDs = []string{}
+	}
+
 	return &settings
 }
 
@@ -219,6 +227,16 @@ func (s *Service) MergeAndUpdateSettings(updates map[string]interface{}) error {
 	if v, ok := updates["min_severity_level"].(string); ok {
 		s.settings.MinSeverityLevel = v
 	}
+	// v3.55.100: Handle report_recipients
+	if v, ok := updates["report_recipients"].([]interface{}); ok {
+		recipients := make([]string, 0, len(v))
+		for _, email := range v {
+			if s, ok := email.(string); ok && s != "" {
+				recipients = append(recipients, s)
+			}
+		}
+		s.settings.ReportRecipients = recipients
+	}
 
 	// Preserve SMTP configured status
 	s.settings.SMTPConfigured = s.smtpClient != nil && s.smtpClient.IsConfigured()
@@ -241,6 +259,7 @@ func (s *Service) MergeAndUpdateSettings(updates map[string]interface{}) error {
 		"waf_blocked", s.settings.WAFBlockedEnabled,
 		"new_ban", s.settings.NewBanEnabled,
 		"critical", s.settings.CriticalAlertEnabled,
+		"report_recipients", len(s.settings.ReportRecipients),
 	)
 
 	return nil

@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.54.102 | **Derniere mise a jour**: 2026-01-14
+> **Version**: 3.55.101 | **Derniere mise a jour**: 2026-01-14
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -433,7 +433,7 @@ CREATE TABLE geozone_config (
 | Phase | Description | Status |
 |-------|-------------|--------|
 | **Phase 1** | Entites, migration, API GeoZone, UI Settings | **Done** |
-| Phase 2 | Decision Engine avec logique zones | Pending |
+| **Phase 2** | Decision Engine avec logique zones | **Done** |
 | Phase 3 | Surveillance et escalade automatique | Pending |
 | Phase 4 | Notifications et alarmes UI | Pending |
 
@@ -1628,6 +1628,52 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.55.101 (2026-01-14)
+- **Fix Report Recipients Persistence**: Correction du bug ou les emails Report Recipients ne persistaient pas
+  - Ajout du champ `report_recipients` dans `MergeAndUpdateSettings()` (notifications/service.go)
+  - Les adresses emails sont maintenant correctement sauvegardees dans notification_settings.json
+- **Unified Attack History**: Section Attack History unifiee dans IPThreatModal
+  - Fusion des sections "Attack History" (events) et "WAF Attack History" (modsec_logs)
+  - Une seule section "Attack History" affiche maintenant tous les types d'attaques
+  - Events tries par timestamp (plus recent en premier)
+  - Affiche: type (WAF/IPS/IDS/ATP), categorie, timestamp, target (URI ou URL)
+  - Section visible des qu'il y a des events ou des WAF logs pour l'IP
+- **Fix Attack History API 500 Error**: Correction critique du filtrage par IP dans les APIs events et modsec
+  - **Probleme**: ClickHouse retournait `There is no supertype for types String, IPv4`
+  - **Cause racine**: Collision d'alias de colonne dans ClickHouse. Quand le SELECT utilise `IPv4NumToString(src_ip) as src_ip`, ClickHouse resolvait `src_ip` dans le WHERE vers l'alias String au lieu de la colonne IPv4 native
+  - **Solution**: Ajout de prefixes de table explicites (`e.` pour events, `m.` pour modsec_logs) pour forcer la reference aux colonnes originales
+  - **Fichiers modifies**:
+    - `events_repo.go`: `FROM events e` + `e.src_ip = toIPv4(?)` pour toutes les conditions
+    - `modsec_repo.go`: `FROM modsec_logs m` + `m.src_ip = toIPv4(?)` dans GetLogs()
+
+### v3.55.100 (2026-01-14)
+- **D2B v2 Phase 2 - Decision Engine avec logique zones**: Implementation complete
+  - **Engine D2B v2** (`backend/internal/usecase/detect2ban/engine.go`):
+    - Nouvelles interfaces: `GeoIPClient`, `GeoZoneRepository`, `PendingBansRepository`
+    - Injection de dependances via setters pour GeoIP, GeoZone, PendingBans
+    - Cache config GeoZone avec refresh automatique (5 min)
+    - Logique de decision par zone geographique:
+      - **Hostile**: Ban immediat au 1er event WAF (threshold configurable)
+      - **Authorized**: Verification TI obligatoire, pending ban si score < seuil
+      - **Neutral**: Comportement standard avec ban auto
+    - Fallback v1 si GeoZone desactive
+  - **Service Bans** (`backend/internal/usecase/bans/service.go`):
+    - `BanIPWithTier()`: Ban avec tier progressif et groupe XGS specifique
+    - `UnbanIPWithConditional()`: Unban avec surveillance 30 jours
+    - `syncBanToXGSGroup()` / `syncUnbanFromXGSGroup()`: Sync vers groupes XGS separes
+  - **Handler Pending Bans** (`backend/internal/adapter/controller/http/handlers/pending_bans.go`):
+    - Nouveau handler pour gestion file d'attente admin
+    - Endpoints: List, GetStats, Approve, Reject, GetByIP
+  - **Wiring main.go**:
+    - D2B engine connecte a GeoIPClient, GeoZoneRepo, PendingBansRepo
+    - Routes `/api/v1/pending-bans/*` ajoutees
+  - **API Endpoints Pending Bans**:
+    - `GET /api/v1/pending-bans` - Liste bans en attente
+    - `GET /api/v1/pending-bans/stats` - Statistiques
+    - `GET /api/v1/pending-bans/ip/{ip}` - Par IP
+    - `POST /api/v1/pending-bans/{id}/approve` - Approuver
+    - `POST /api/v1/pending-bans/{id}/reject` - Rejeter
 
 ### v3.54.100 (2026-01-14)
 - **Vigimail Checker Module**: Nouveau module complet de verification emails et securite DNS

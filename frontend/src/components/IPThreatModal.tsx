@@ -106,12 +106,16 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
           setWhitelistStatus(whitelistData)
         }
 
-        if (eventsData && eventsData.data && eventsData.data.length > 0) {
+        // v3.55.101: Always set attack history (even if empty) for debugging
+        console.log('[IPThreatModal] Events data for IP', ip, ':', eventsData)
+        console.log('[IPThreatModal] WAF data for IP', ip, ':', wafData)
+
+        if (eventsData?.data) {
           setAttackHistory(eventsData.data)
         }
 
         // v3.53.105: Set WAF history from modsec_logs
-        if (wafData && wafData.data && wafData.data.length > 0) {
+        if (wafData?.data) {
           setWafHistory(wafData.data)
         }
       }).finally(() => setLoading(false))
@@ -621,151 +625,162 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                 </div>
               )}
 
-              {/* Attack History Section (v3.53.105) */}
-              {attackHistory.length > 0 && (
-                <div className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="w-4 h-4 text-orange-500" />
-                    <span className="font-medium">Attack History</span>
-                    <span className="text-xs text-muted-foreground">({attackHistory.length} events)</span>
-                  </div>
+              {/* Attack History Section (v3.55.101) - Unified: IPS/IDS + WAF - Always visible */}
+              <div className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-orange-500" />
+                  <span className="font-medium">Attack History</span>
+                  <span className="text-xs text-muted-foreground">({attackHistory.length + wafHistory.length} events)</span>
+                </div>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {attackHistory.map((event) => {
-                      // Determine icon and color based on log_type and action
-                      const getEventConfig = () => {
-                        const isBlocked = event.action === 'drop' || event.action === 'block' || event.action === 'blocked'
-                        if (event.log_type === 'WAF') {
-                          return {
-                            icon: Shield,
-                            color: isBlocked ? 'text-red-500 bg-red-500/10' : 'text-orange-500 bg-orange-500/10',
-                            label: 'WAF'
+                    {/* Combine and sort by timestamp - WAF first then IPS/IDS */}
+                    {[
+                      ...wafHistory.map(log => ({
+                        type: 'waf' as const,
+                        id: log.id,
+                        timestamp: log.timestamp,
+                        data: log
+                      })),
+                      ...attackHistory.map(event => ({
+                        type: 'event' as const,
+                        id: event.event_id,
+                        timestamp: event.timestamp,
+                        data: event
+                      }))
+                    ]
+                      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                      .slice(0, 50)
+                      .map((item) => {
+                        if (item.type === 'waf') {
+                          const log = item.data as ModSecLog
+                          const isBlocking = log.is_blocking
+                          const severityColors: Record<string, string> = {
+                            CRITICAL: 'text-red-500 bg-red-500/10',
+                            WARNING: 'text-orange-500 bg-orange-500/10',
+                            NOTICE: 'text-yellow-500 bg-yellow-500/10',
+                            INFO: 'text-blue-500 bg-blue-500/10',
                           }
-                        }
-                        if (event.log_type === 'IPS' || event.log_type === 'IDS') {
-                          return {
-                            icon: ShieldAlert,
-                            color: isBlocked ? 'text-red-500 bg-red-500/10' : 'text-orange-500 bg-orange-500/10',
-                            label: event.log_type
-                          }
-                        }
-                        if (event.log_type === 'ATP') {
-                          return {
-                            icon: ShieldX,
-                            color: 'text-purple-500 bg-purple-500/10',
-                            label: 'ATP'
-                          }
-                        }
-                        return {
-                          icon: Activity,
-                          color: 'text-gray-500 bg-gray-500/10',
-                          label: event.log_type || 'Event'
-                        }
-                      }
-                      const config = getEventConfig()
-                      const Icon = config.icon
-                      const isBlocked = event.action === 'drop' || event.action === 'block' || event.action === 'blocked'
+                          const severityColor = severityColors[log.rule_severity] || 'text-orange-500 bg-orange-500/10'
 
-                      return (
-                        <div key={event.event_id} className="flex items-start gap-3 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
-                          <div className={cn('p-1.5 rounded', config.color.split(' ')[1])}>
-                            <Icon className={cn('w-3.5 h-3.5', config.color.split(' ')[0])} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={cn('font-medium text-xs px-1.5 py-0.5 rounded', config.color)}>{config.label}</span>
-                              {isBlocked && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">Blocked</span>
-                              )}
-                              {event.category && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{event.category}</span>
-                              )}
+                          return (
+                            <div key={`waf-${log.id}`} className="flex items-start gap-3 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                              <div className={cn('p-1.5 rounded', severityColor.split(' ')[1])}>
+                                <Shield className={cn('w-3.5 h-3.5', severityColor.split(' ')[0])} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={cn('font-medium text-xs px-1.5 py-0.5 rounded', severityColor)}>
+                                    {log.attack_type || 'WAF'}
+                                  </span>
+                                  {isBlocking && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">Blocked</span>
+                                  )}
+                                  {log.rule_severity && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{log.rule_severity}</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1 truncate" title={log.rule_msg}>
+                                  {log.rule_msg || 'No message'}
+                                </p>
+                                <p className="text-xs text-muted-foreground font-mono">Rule: {log.rule_id}</p>
+                                {log.uri && (
+                                  <p className="text-xs text-muted-foreground truncate" title={log.uri}>
+                                    Target: {log.uri}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  <span>{formatDateTime(log.timestamp)}</span>
+                                </div>
+                              </div>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1 truncate" title={event.rule_name || event.message || event.reason}>
-                              {event.rule_name || event.message || event.reason || 'No details'}
-                            </p>
-                            {event.rule_id && (
-                              <p className="text-xs text-muted-foreground font-mono">Rule: {event.rule_id}</p>
-                            )}
-                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              <span>{formatDateTime(event.timestamp)}</span>
-                              {event.dst_port > 0 && (
-                                <>
-                                  <span>•</span>
-                                  <span>→ :{event.dst_port}</span>
-                                </>
-                              )}
+                          )
+                        } else {
+                          const event = item.data as Event
+                          const getEventConfig = () => {
+                            const isBlocked = event.action === 'drop' || event.action === 'block' || event.action === 'blocked'
+                            if (event.log_type === 'WAF') {
+                              return {
+                                icon: Shield,
+                                color: isBlocked ? 'text-red-500 bg-red-500/10' : 'text-orange-500 bg-orange-500/10',
+                                label: 'WAF'
+                              }
+                            }
+                            if (event.log_type === 'IPS' || event.log_type === 'IDS') {
+                              return {
+                                icon: ShieldAlert,
+                                color: isBlocked ? 'text-red-500 bg-red-500/10' : 'text-orange-500 bg-orange-500/10',
+                                label: event.log_type
+                              }
+                            }
+                            if (event.log_type === 'ATP') {
+                              return {
+                                icon: ShieldX,
+                                color: 'text-purple-500 bg-purple-500/10',
+                                label: 'ATP'
+                              }
+                            }
+                            return {
+                              icon: Activity,
+                              color: 'text-gray-500 bg-gray-500/10',
+                              label: event.log_type || 'Event'
+                            }
+                          }
+                          const config = getEventConfig()
+                          const Icon = config.icon
+                          const isBlocked = event.action === 'drop' || event.action === 'block' || event.action === 'blocked'
+
+                          return (
+                            <div key={`event-${event.event_id}`} className="flex items-start gap-3 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                              <div className={cn('p-1.5 rounded', config.color.split(' ')[1])}>
+                                <Icon className={cn('w-3.5 h-3.5', config.color.split(' ')[0])} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={cn('font-medium text-xs px-1.5 py-0.5 rounded', config.color)}>{config.label}</span>
+                                  {isBlocked && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">Blocked</span>
+                                  )}
+                                  {event.category && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{event.category}</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1 truncate" title={event.rule_name || event.message || event.reason}>
+                                  {event.rule_name || event.message || event.reason || 'No details'}
+                                </p>
+                                {event.rule_id && (
+                                  <p className="text-xs text-muted-foreground font-mono">Rule: {event.rule_id}</p>
+                                )}
+                                {event.url && (
+                                  <p className="text-xs text-muted-foreground truncate" title={event.url}>
+                                    Target: {event.url}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  <span>{formatDateTime(event.timestamp)}</span>
+                                  {event.dst_port > 0 && (
+                                    <>
+                                      <span>•</span>
+                                      <span>→ :{event.dst_port}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      )
-                    })}
+                          )
+                        }
+                      })}
+                  {/* Empty state message */}
+                  {attackHistory.length === 0 && wafHistory.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <AlertTriangle className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No attack events found for this IP</p>
+                      <p className="text-xs mt-1">Events from WAF, IPS, IDS will appear here</p>
+                    </div>
+                  ) : null}
                   </div>
                 </div>
-              )}
-
-              {/* WAF Attack History Section (v3.53.105) - from modsec_logs */}
-              {wafHistory.length > 0 && (
-                <div className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Shield className="w-4 h-4 text-orange-500" />
-                    <span className="font-medium">WAF Attack History</span>
-                    <span className="text-xs text-muted-foreground">({wafHistory.length} detections)</span>
-                  </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {wafHistory.map((log) => {
-                      const isBlocking = log.is_blocking
-                      const severityColors: Record<string, string> = {
-                        CRITICAL: 'text-red-500 bg-red-500/10',
-                        WARNING: 'text-orange-500 bg-orange-500/10',
-                        NOTICE: 'text-yellow-500 bg-yellow-500/10',
-                        INFO: 'text-blue-500 bg-blue-500/10',
-                      }
-                      const severityColor = severityColors[log.rule_severity] || 'text-gray-500 bg-gray-500/10'
-
-                      return (
-                        <div key={log.id} className="flex items-start gap-3 text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0">
-                          <div className={cn('p-1.5 rounded', severityColor.split(' ')[1])}>
-                            <Shield className={cn('w-3.5 h-3.5', severityColor.split(' ')[0])} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={cn('font-medium text-xs px-1.5 py-0.5 rounded', severityColor)}>
-                                {log.attack_type || 'WAF'}
-                              </span>
-                              {isBlocking && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-500">Blocked</span>
-                              )}
-                              {log.rule_severity && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{log.rule_severity}</span>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1 truncate" title={log.rule_msg}>
-                              {log.rule_msg || 'No message'}
-                            </p>
-                            <p className="text-xs text-muted-foreground font-mono">Rule: {log.rule_id}</p>
-                            {log.uri && (
-                              <p className="text-xs text-muted-foreground truncate" title={log.uri}>
-                                URI: {log.uri}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              <span>{formatDateTime(log.timestamp)}</span>
-                              {log.total_score > 0 && (
-                                <>
-                                  <span>•</span>
-                                  <span>Score: {log.total_score}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
 
               {/* External Links */}
               <div className="flex flex-wrap gap-2 pt-2 border-t">

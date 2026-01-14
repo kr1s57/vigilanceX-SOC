@@ -32,48 +32,50 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 	conditions := []string{"1=1"}
 	args := []interface{}{}
 
+	// v3.55.101: Use e. prefix for all conditions to reference table columns
 	if filters.LogType != "" {
-		conditions = append(conditions, "log_type = ?")
+		conditions = append(conditions, "e.log_type = ?")
 		args = append(args, filters.LogType)
 	}
 	if filters.Category != "" {
-		conditions = append(conditions, "category = ?")
+		conditions = append(conditions, "e.category = ?")
 		args = append(args, filters.Category)
 	}
 	if filters.Severity != "" {
-		conditions = append(conditions, "severity = ?")
+		conditions = append(conditions, "e.severity = ?")
 		args = append(args, filters.Severity)
 	}
 	if filters.SrcIP != "" {
-		conditions = append(conditions, "IPv4NumToString(src_ip) = ?")
+		// v3.55.101: Use e. prefix to reference table column, not SELECT alias
+		conditions = append(conditions, "e.src_ip = toIPv4(?)")
 		args = append(args, filters.SrcIP)
 	}
 	if filters.DstIP != "" {
-		conditions = append(conditions, "dst_ip = toIPv4(?)")
+		conditions = append(conditions, "e.dst_ip = toIPv4(?)")
 		args = append(args, filters.DstIP)
 	}
 	if filters.Hostname != "" {
-		conditions = append(conditions, "hostname = ?")
+		conditions = append(conditions, "e.hostname = ?")
 		args = append(args, filters.Hostname)
 	}
 	if filters.RuleID != "" {
-		conditions = append(conditions, "rule_id = ?")
+		conditions = append(conditions, "e.rule_id = ?")
 		args = append(args, filters.RuleID)
 	}
 	if filters.Action != "" {
-		conditions = append(conditions, "action = ?")
+		conditions = append(conditions, "e.action = ?")
 		args = append(args, filters.Action)
 	}
 	if !filters.StartTime.IsZero() {
-		conditions = append(conditions, "timestamp >= ?")
+		conditions = append(conditions, "e.timestamp >= ?")
 		args = append(args, filters.StartTime)
 	}
 	if !filters.EndTime.IsZero() {
-		conditions = append(conditions, "timestamp <= ?")
+		conditions = append(conditions, "e.timestamp <= ?")
 		args = append(args, filters.EndTime)
 	}
 	if filters.SearchTerm != "" {
-		conditions = append(conditions, "(message ILIKE ? OR rule_name ILIKE ? OR url ILIKE ?)")
+		conditions = append(conditions, "(e.message ILIKE ? OR e.rule_name ILIKE ? OR e.url ILIKE ?)")
 		searchPattern := "%" + filters.SearchTerm + "%"
 		args = append(args, searchPattern, searchPattern, searchPattern)
 	}
@@ -81,24 +83,25 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 	whereClause := strings.Join(conditions, " AND ")
 
 	// Get total count
-	countQuery := fmt.Sprintf(`SELECT count() FROM events WHERE %s`, whereClause)
+	countQuery := fmt.Sprintf(`SELECT count() FROM events e WHERE %s`, whereClause)
 	var total uint64
 	if err := r.conn.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count events: %w", err)
 	}
 
 	// Get events
+	// v3.55.101: Use explicit table prefix e. to avoid alias collision with IPv4NumToString
 	query := fmt.Sprintf(`
 		SELECT
-			event_id, timestamp, log_type, category, sub_category, severity,
-			IPv4NumToString(src_ip) as src_ip, IPv4NumToString(dst_ip) as dst_ip,
-			src_port, dst_port, protocol, action, rule_id, rule_name,
-			hostname, user_name, url, http_method, http_status, user_agent,
-			geo_country, geo_city, geo_asn, geo_org, message, reason, sophos_id, ingested_at,
-			modsec_rule_ids, modsec_messages
-		FROM events
+			e.event_id, e.timestamp, e.log_type, e.category, e.sub_category, e.severity,
+			IPv4NumToString(e.src_ip) as src_ip, IPv4NumToString(e.dst_ip) as dst_ip,
+			e.src_port, e.dst_port, e.protocol, e.action, e.rule_id, e.rule_name,
+			e.hostname, e.user_name, e.url, e.http_method, e.http_status, e.user_agent,
+			e.geo_country, e.geo_city, e.geo_asn, e.geo_org, e.message, e.reason, e.sophos_id, e.ingested_at,
+			e.modsec_rule_ids, e.modsec_messages
+		FROM events e
 		WHERE %s
-		ORDER BY timestamp DESC
+		ORDER BY e.timestamp DESC
 		LIMIT ? OFFSET ?
 	`, whereClause)
 

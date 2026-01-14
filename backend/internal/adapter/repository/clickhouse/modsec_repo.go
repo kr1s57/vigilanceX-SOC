@@ -26,39 +26,40 @@ func NewModSecRepository(conn *Connection, logger *slog.Logger) *ModSecRepositor
 
 // GetLogs retrieves ModSec logs with filters and pagination
 func (r *ModSecRepository) GetLogs(ctx context.Context, filters entity.ModSecLogFilters, limit, offset int) ([]entity.ModSecLog, uint64, error) {
+	// v3.55.101: Use m. prefix to avoid column alias collision with IPv4NumToString
 	conditions := []string{"1=1"}
 	args := []interface{}{}
 
 	if filters.SrcIP != "" {
-		conditions = append(conditions, "IPv4NumToString(src_ip) = ?")
+		conditions = append(conditions, "m.src_ip = toIPv4(?)")
 		args = append(args, filters.SrcIP)
 	}
 	if filters.Hostname != "" {
-		conditions = append(conditions, "hostname = ?")
+		conditions = append(conditions, "m.hostname = ?")
 		args = append(args, filters.Hostname)
 	}
 	if filters.RuleID != "" {
-		conditions = append(conditions, "rule_id = ?")
+		conditions = append(conditions, "m.rule_id = ?")
 		args = append(args, filters.RuleID)
 	}
 	if filters.AttackType != "" {
-		conditions = append(conditions, "attack_type = ?")
+		conditions = append(conditions, "m.attack_type = ?")
 		args = append(args, filters.AttackType)
 	}
 	if filters.UniqueID != "" {
-		conditions = append(conditions, "unique_id = ?")
+		conditions = append(conditions, "m.unique_id = ?")
 		args = append(args, filters.UniqueID)
 	}
 	if !filters.StartTime.IsZero() {
-		conditions = append(conditions, "timestamp >= ?")
+		conditions = append(conditions, "m.timestamp >= ?")
 		args = append(args, filters.StartTime)
 	}
 	if !filters.EndTime.IsZero() {
-		conditions = append(conditions, "timestamp <= ?")
+		conditions = append(conditions, "m.timestamp <= ?")
 		args = append(args, filters.EndTime)
 	}
 	if filters.SearchTerm != "" {
-		conditions = append(conditions, "(rule_msg ILIKE ? OR uri ILIKE ? OR rule_data ILIKE ? OR rule_id ILIKE ? OR IPv4NumToString(src_ip) ILIKE ? OR hostname ILIKE ?)")
+		conditions = append(conditions, "(m.rule_msg ILIKE ? OR m.uri ILIKE ? OR m.rule_data ILIKE ? OR m.rule_id ILIKE ? OR IPv4NumToString(m.src_ip) ILIKE ? OR m.hostname ILIKE ?)")
 		searchPattern := "%" + filters.SearchTerm + "%"
 		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 	}
@@ -66,7 +67,7 @@ func (r *ModSecRepository) GetLogs(ctx context.Context, filters entity.ModSecLog
 	whereClause := strings.Join(conditions, " AND ")
 
 	// Get total count
-	countQuery := fmt.Sprintf(`SELECT count() FROM modsec_logs WHERE %s`, whereClause)
+	countQuery := fmt.Sprintf(`SELECT count() FROM modsec_logs m WHERE %s`, whereClause)
 	var total uint64
 	if err := r.conn.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count modsec logs: %w", err)
@@ -75,13 +76,13 @@ func (r *ModSecRepository) GetLogs(ctx context.Context, filters entity.ModSecLog
 	// Get logs
 	query := fmt.Sprintf(`
 		SELECT
-			toString(id), timestamp, unique_id, IPv4NumToString(src_ip) as src_ip,
-			src_port, hostname, uri, rule_id, rule_file, rule_msg,
-			rule_severity, rule_data, crs_version, paranoia_level,
-			attack_type, total_score, is_blocking, tags, raw_log, ingested_at
-		FROM modsec_logs
+			toString(m.id), m.timestamp, m.unique_id, IPv4NumToString(m.src_ip) as src_ip,
+			m.src_port, m.hostname, m.uri, m.rule_id, m.rule_file, m.rule_msg,
+			m.rule_severity, m.rule_data, m.crs_version, m.paranoia_level,
+			m.attack_type, m.total_score, m.is_blocking, m.tags, m.raw_log, m.ingested_at
+		FROM modsec_logs m
 		WHERE %s
-		ORDER BY timestamp DESC
+		ORDER BY m.timestamp DESC
 		LIMIT ? OFFSET ?
 	`, whereClause)
 
@@ -119,7 +120,7 @@ func (r *ModSecRepository) GetGroupedByRequest(ctx context.Context, filters enti
 	args := []interface{}{}
 
 	if filters.SrcIP != "" {
-		conditions = append(conditions, "IPv4NumToString(m.src_ip) = ?")
+		conditions = append(conditions, "m.src_ip = toIPv4(?)")
 		args = append(args, filters.SrcIP)
 	}
 	if filters.Hostname != "" {
