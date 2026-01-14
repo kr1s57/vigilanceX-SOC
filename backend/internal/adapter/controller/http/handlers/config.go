@@ -131,6 +131,7 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	configs := h.loadAllConfigs()
 	maskedConfigs := make(map[string]map[string]string)
 
+	// First, add configs from integrations.json
 	for id, config := range configs {
 		maskedConfigs[id] = make(map[string]string)
 		for key, value := range config.Fields {
@@ -150,7 +151,139 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// v3.53.105: Also check environment variables for plugins not in integrations.json
+	// This allows Disconnect button to work for plugins configured via .env
+	envPlugins := map[string][]string{
+		"abuseipdb":     {"ABUSEIPDB_API_KEY"},
+		"virustotal":    {"VIRUSTOTAL_API_KEY"},
+		"alienvault":    {"ALIENVAULT_API_KEY"},
+		"greynoise":     {"GREYNOISE_API_KEY"},
+		"crowdsec":      {"CROWDSEC_API_KEY"},
+		"criminalip":    {"CRIMINALIP_API_KEY"},
+		"pulsedive":     {"PULSEDIVE_API_KEY"},
+		"abusech":       {"ABUSECH_API_KEY"},
+		"sophos_api":    {"SOPHOS_HOST", "SOPHOS_PORT", "SOPHOS_USER", "SOPHOS_PASSWORD"},
+		"sophos_ssh":    {"SSH_HOST", "SSH_PORT", "SSH_USER", "SSH_KEY_PATH"},
+		"sophos_syslog": {"SYSLOG_SOURCE_IP", "SYSLOG_PORT"},
+	}
+
+	for pluginID, envKeys := range envPlugins {
+		// Skip if already in configs from file
+		if _, exists := maskedConfigs[pluginID]; exists {
+			continue
+		}
+
+		// Check if any env var is set
+		pluginConfig := make(map[string]string)
+		hasAnyValue := false
+		for _, envKey := range envKeys {
+			if value := os.Getenv(envKey); value != "" {
+				hasAnyValue = true
+				// Mask sensitive values
+				if strings.Contains(strings.ToLower(envKey), "password") ||
+					strings.Contains(strings.ToLower(envKey), "key") ||
+					strings.Contains(strings.ToLower(envKey), "secret") {
+					if len(value) > 4 {
+						pluginConfig[envKey] = value[:4] + "****"
+					} else {
+						pluginConfig[envKey] = "****"
+					}
+				} else {
+					pluginConfig[envKey] = value
+				}
+			}
+		}
+
+		if hasAnyValue {
+			maskedConfigs[pluginID] = pluginConfig
+		}
+	}
+
 	JSONResponse(w, http.StatusOK, maskedConfigs)
+}
+
+// ClearConfig removes a plugin configuration
+// DELETE /api/v1/config/{plugin_id}
+func (h *ConfigHandler) ClearConfig(w http.ResponseWriter, r *http.Request) {
+	// Get plugin_id from URL path
+	path := r.URL.Path
+	parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
+	if len(parts) < 1 {
+		ErrorResponse(w, http.StatusBadRequest, "Plugin ID required", nil)
+		return
+	}
+	pluginID := parts[len(parts)-1]
+
+	if pluginID == "" {
+		ErrorResponse(w, http.StatusBadRequest, "Plugin ID required", nil)
+		return
+	}
+
+	// Remove from config file
+	if err := h.clearIntegrationConfig(pluginID); err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to clear configuration", err)
+		return
+	}
+
+	// Clear environment variables
+	h.clearConfigFromEnv(pluginID)
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"message":   fmt.Sprintf("Configuration for %s has been cleared", pluginID),
+		"plugin_id": pluginID,
+	})
+}
+
+// clearIntegrationConfig removes a plugin from the config file
+func (h *ConfigHandler) clearIntegrationConfig(pluginID string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Load existing configs
+	configs := make(map[string]IntegrationConfig)
+	if data, err := os.ReadFile(h.configPath); err == nil {
+		json.Unmarshal(data, &configs)
+	}
+
+	// Delete the plugin config
+	delete(configs, pluginID)
+
+	// Save
+	data, err := json.MarshalIndent(configs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(h.configPath, data, 0600); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+
+	return nil
+}
+
+// clearConfigFromEnv clears environment variables for a plugin
+func (h *ConfigHandler) clearConfigFromEnv(pluginID string) {
+	envKeys := map[string][]string{
+		"sophos_api":         {"SOPHOS_HOST", "SOPHOS_PORT", "SOPHOS_USER", "SOPHOS_PASSWORD"},
+		"sophos_ssh":         {"SSH_HOST", "SSH_PORT", "SSH_USER", "SSH_KEY_PATH"},
+		"sophos_syslog":      {"SYSLOG_SOURCE_IP", "SYSLOG_PORT"},
+		"abuseipdb":          {"ABUSEIPDB_API_KEY"},
+		"virustotal":         {"VIRUSTOTAL_API_KEY"},
+		"alienvault":         {"ALIENVAULT_API_KEY"},
+		"greynoise":          {"GREYNOISE_API_KEY"},
+		"crowdsec":           {"CROWDSEC_API_KEY"},
+		"crowdsec_blocklist": {"CROWDSEC_BLOCKLIST_API_KEY"},
+		"criminalip":         {"CRIMINALIP_API_KEY"},
+		"pulsedive":          {"PULSEDIVE_API_KEY"},
+		"smtp":               {"SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY", "SMTP_FROM_EMAIL", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_RECIPIENTS"},
+	}
+
+	if keys, ok := envKeys[pluginID]; ok {
+		for _, key := range keys {
+			os.Unsetenv(key)
+		}
+	}
 }
 
 // testIntegration tests a specific integration

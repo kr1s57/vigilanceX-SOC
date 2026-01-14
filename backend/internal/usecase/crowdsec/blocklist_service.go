@@ -18,6 +18,8 @@ const (
 	BlocklistDataDir = "/app/data/crowdsec_blocklists"
 	// DefaultSyncInterval is the default sync interval (2 hours)
 	DefaultSyncInterval = 2 * time.Hour
+	// RetentionDuration is how long to keep data after API disconnect (30 days)
+	RetentionDuration = 30 * 24 * time.Hour
 )
 
 // BlocklistService manages CrowdSec blocklist download, storage and XGS sync
@@ -323,6 +325,9 @@ func (s *BlocklistService) Initialize(ctx context.Context) error {
 		slog.Info("[CROWDSEC_BL] Initialized in direct mode (CrowdSec API)")
 	}
 
+	// Check retention on startup - cleanup stale data if > 30 days since last sync
+	s.CheckRetention(ctx)
+
 	// Start worker if enabled and client is configured
 	if config.Enabled && s.client.IsConfigured() {
 		s.StartWorker()
@@ -382,12 +387,12 @@ func (s *BlocklistService) UpdateConfig(ctx context.Context, config *BlocklistCo
 			}
 		}()
 	} else if !config.Enabled && wasEnabled {
-		// Just disabled - stop worker and cleanup
-		slog.Info("[CROWDSEC_BL] Service disabled, cleaning up")
+		// Just disabled - stop worker but DON'T cleanup immediately
+		// Data is retained for 30 days (RetentionDuration)
+		// The retention check will clean up after 30 days of no sync
+		slog.Info("[CROWDSEC_BL] Service disabled, worker stopped. Data retained for 30 days.")
 		s.StopWorker()
-		if err := s.Cleanup(ctx); err != nil {
-			slog.Error("[CROWDSEC_BL] Cleanup failed", "error", err)
-		}
+		// Note: Cleanup is NOT called here anymore - data is retained for 30 days
 	}
 
 	if s.repo != nil {
@@ -753,6 +758,18 @@ func (s *BlocklistService) Cleanup(ctx context.Context) error {
 		slog.Info("[CROWDSEC_BL] Cleared all IPs from DB")
 	}
 
+	// Step 3: Clear XGS group IPs if XGS is configured
+	if s.xgs != nil && s.xgsGroupReady {
+		slog.Info("[CROWDSEC_BL] Clearing XGS group IPs", "group", XGSGroupName)
+		// Sync with empty list to remove all CS_* hosts
+		_, removed, err := s.xgs.SyncGroupIPs(XGSGroupName, XGSHostPrefix, []string{})
+		if err != nil {
+			slog.Error("[CROWDSEC_BL] Failed to clear XGS group", "error", err)
+		} else {
+			slog.Info("[CROWDSEC_BL] Cleared XGS group IPs", "removed", removed)
+		}
+	}
+
 	// Reset stats
 	s.mu.Lock()
 	s.config.TotalIPs = 0
@@ -761,6 +778,99 @@ func (s *BlocklistService) Cleanup(ctx context.Context) error {
 
 	slog.Info("[CROWDSEC_BL] Cleanup completed")
 	return nil
+}
+
+// CheckRetention checks if data should be cleaned up due to retention expiry
+// This is called on startup and periodically to clean up stale data
+// Data is kept for 30 days after the last sync when service is disabled
+func (s *BlocklistService) CheckRetention(ctx context.Context) {
+	s.mu.RLock()
+	enabled := s.config.Enabled
+	lastSync := s.config.LastSync
+	totalIPs := s.config.TotalIPs
+	s.mu.RUnlock()
+
+	// Only check retention if service is disabled and we have data
+	if enabled || totalIPs == 0 {
+		return
+	}
+
+	// Check if last sync was more than 30 days ago
+	if lastSync.IsZero() {
+		// No last sync recorded, check if we have stale files
+		slog.Debug("[CROWDSEC_BL] No last_sync recorded, skipping retention check")
+		return
+	}
+
+	timeSinceLastSync := time.Since(lastSync)
+	if timeSinceLastSync > RetentionDuration {
+		slog.Warn("[CROWDSEC_BL] Retention expired, cleaning up stale data",
+			"last_sync", lastSync,
+			"time_since_sync", timeSinceLastSync.Round(time.Hour),
+			"retention_duration", RetentionDuration)
+
+		if err := s.Cleanup(ctx); err != nil {
+			slog.Error("[CROWDSEC_BL] Failed to cleanup stale data", "error", err)
+		} else {
+			slog.Info("[CROWDSEC_BL] Stale data cleaned up successfully after 30 days retention")
+		}
+	} else {
+		remaining := RetentionDuration - timeSinceLastSync
+		slog.Info("[CROWDSEC_BL] Data retained (service disabled)",
+			"last_sync", lastSync,
+			"retention_remaining", remaining.Round(time.Hour),
+			"total_ips", totalIPs)
+	}
+}
+
+// GetRetentionStatus returns retention status information
+func (s *BlocklistService) GetRetentionStatus() map[string]interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.config.Enabled {
+		return map[string]interface{}{
+			"retention_active": false,
+			"reason":           "service_enabled",
+		}
+	}
+
+	if s.config.TotalIPs == 0 {
+		return map[string]interface{}{
+			"retention_active": false,
+			"reason":           "no_data",
+		}
+	}
+
+	if s.config.LastSync.IsZero() {
+		return map[string]interface{}{
+			"retention_active":    true,
+			"retention_remaining": "unknown",
+			"reason":              "no_last_sync_recorded",
+		}
+	}
+
+	timeSinceLastSync := time.Since(s.config.LastSync)
+	remaining := RetentionDuration - timeSinceLastSync
+
+	if remaining <= 0 {
+		return map[string]interface{}{
+			"retention_active":  true,
+			"retention_expired": true,
+			"last_sync":         s.config.LastSync,
+			"expires_at":        s.config.LastSync.Add(RetentionDuration),
+			"reason":            "retention_expired_pending_cleanup",
+		}
+	}
+
+	return map[string]interface{}{
+		"retention_active":    true,
+		"retention_remaining": remaining.Round(time.Hour).String(),
+		"last_sync":           s.config.LastSync,
+		"expires_at":          s.config.LastSync.Add(RetentionDuration),
+		"total_ips":           s.config.TotalIPs,
+		"reason":              "data_retained_after_disconnect",
+	}
 }
 
 // updateStats updates the total IPs and blocklists count and persists to DB
@@ -846,6 +956,9 @@ func (s *BlocklistService) GetStatus(ctx context.Context) map[string]interface{}
 		sourceMode = "proxy"
 	}
 
+	// Get retention status
+	retentionStatus := s.GetRetentionStatus()
+
 	return map[string]interface{}{
 		"configured":        s.client.IsConfigured(),
 		"enabled":           s.config.Enabled,
@@ -866,6 +979,8 @@ func (s *BlocklistService) GetStatus(ctx context.Context) map[string]interface{}
 		"xgs_ip_count":      xgsIPCount,
 		"proxy_configured":  s.proxyClient != nil,
 		"direct_configured": s.directClient != nil && s.directClient.IsConfigured(),
+		"retention_days":    int(RetentionDuration.Hours() / 24),
+		"retention_status":  retentionStatus,
 	}
 }
 

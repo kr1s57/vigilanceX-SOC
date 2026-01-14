@@ -442,6 +442,18 @@ func main() {
 	crowdsecBlocklistHandler := handlers.NewCrowdSecBlocklistHandler(crowdsecBlocklistService, crowdsecBlocklistRepo)
 	crowdsecBlocklistHandler.SetGeoIPClient(geoIPClient) // v3.53: Country enrichment for Neural-Sync
 
+	// v3.53.104: Neural-Sync handler for VigilanceKey proxy
+	neuralSyncHandler := handlers.NewNeuralSyncHandler()
+	if licenseClient != nil && cfg.License.ServerURL != "" {
+		vkClient := crowdsecext.NewVigilanceKeyClient(crowdsecext.VigilanceKeyConfig{
+			ServerURL:  cfg.License.ServerURL,
+			LicenseKey: licenseClient.GetLicenseKey(),
+			HardwareID: licenseClient.GetHardwareID(),
+		})
+		neuralSyncHandler.SetVigilanceKeyClient(vkClient)
+		logger.Info("Neural-Sync: VigilanceKey client configured", "server", cfg.License.ServerURL)
+	}
+
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
 	go wsHub.Run()
@@ -700,6 +712,16 @@ func main() {
 				r.Post("/sync/*", crowdsecBlocklistHandler.SyncBlocklist)
 			})
 
+			// Neural-Sync (v3.53.104 - VigilanceKey Proxy blocklists)
+			r.Route("/neural-sync", func(r chi.Router) {
+				r.Get("/config", neuralSyncHandler.GetConfig)
+				r.Put("/config", neuralSyncHandler.UpdateConfig)
+				r.Post("/test", neuralSyncHandler.TestConnection)
+				r.Get("/status", neuralSyncHandler.GetStatus)
+				r.Get("/blocklists", neuralSyncHandler.ListBlocklists)
+				r.Get("/ips", neuralSyncHandler.ListIPs)
+			})
+
 			// API Integrations (v3.53 - Provider status and quota tracking)
 			r.Route("/integrations", func(r chi.Router) {
 				r.Get("/providers", apiUsageHandler.GetAllProviders)
@@ -815,6 +837,7 @@ func main() {
 				r.Post("/test", configHandler.TestConfig)
 				r.Post("/save", configHandler.SaveConfig)
 				r.Get("/", configHandler.GetConfig)
+				r.Delete("/{plugin_id}", configHandler.ClearConfig) // v3.53.104 - Clear/disconnect plugin
 				// System whitelist (v2.3 - Protected IPs)
 				r.Get("/system-whitelist", configHandler.GetSystemWhitelist)
 				r.Get("/system-whitelist/check/*", configHandler.CheckSystemWhitelist)

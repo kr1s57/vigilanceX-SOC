@@ -178,6 +178,16 @@ const defaultPluginConfigs: PluginConfig[] = [
       { key: 'SMTP_RECIPIENTS', label: 'Recipients', type: 'text', value: '', placeholder: 'admin@company.com, soc@company.com' },
     ],
   },
+  {
+    id: 'neural_sync',
+    name: 'VGX Neural-Sync',
+    type: 'neural_sync' as any,
+    fields: [
+      { key: 'NEURAL_SYNC_SERVER_URL', label: 'VigilanceKey Server URL', type: 'text', value: '', placeholder: 'https://vigilancexkey.cloudcomputing.lu' },
+      { key: 'NEURAL_SYNC_LICENSE_KEY', label: 'License Key', type: 'password', value: '', placeholder: 'VX3-XXXX-XXXX-XXXX-XXXX' },
+      { key: 'NEURAL_SYNC_HARDWARE_ID', label: 'Hardware ID', type: 'text', value: '', placeholder: 'Auto-filled from license' },
+    ],
+  },
 ]
 
 export function Settings() {
@@ -217,6 +227,10 @@ export function Settings() {
   const [loadingRetention, setLoadingRetention] = useState(true)
   const [savingRetention, setSavingRetention] = useState(false)
   const [runningCleanup, setRunningCleanup] = useState(false)
+
+  // v3.53.105: Local input states to prevent cursor jumping
+  const [recipientsInput, setRecipientsInput] = useState('')
+  const [retentionInputs, setRetentionInputs] = useState<Record<string, string>>({})
 
   // Collapsible sections state - all collapsed by default
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -414,7 +428,29 @@ export function Settings() {
     fetchRetentionSettings()
   }, [])
 
-  // Handle retention settings change
+  // v3.53.105: Sync local inputs with notification settings
+  useEffect(() => {
+    if (notifSettings?.report_recipients) {
+      setRecipientsInput(notifSettings.report_recipients.join(', '))
+    }
+  }, [notifSettings?.report_recipients])
+
+  // v3.53.105: Sync local inputs with retention settings
+  useEffect(() => {
+    if (retentionSettings) {
+      setRetentionInputs({
+        events_retention_days: String(retentionSettings.events_retention_days || 30),
+        modsec_logs_retention_days: String(retentionSettings.modsec_logs_retention_days || 30),
+        vpn_events_retention_days: String(retentionSettings.vpn_events_retention_days || 30),
+        atp_events_retention_days: String(retentionSettings.atp_events_retention_days || 90),
+        antivirus_events_retention_days: String(retentionSettings.antivirus_events_retention_days || 90),
+        ban_history_retention_days: String(retentionSettings.ban_history_retention_days || 365),
+        audit_log_retention_days: String(retentionSettings.audit_log_retention_days || 365),
+      })
+    }
+  }, [retentionSettings])
+
+  // Handle retention settings change (for toggles and selects - immediate save)
   const handleRetentionChange = async <K extends keyof RetentionSettings>(key: K, value: RetentionSettings[K]) => {
     if (!retentionSettings) return
 
@@ -432,6 +468,33 @@ export function Settings() {
     } finally {
       setSavingRetention(false)
     }
+  }
+
+  // v3.53.105: Handle local retention input change (no API call)
+  const handleRetentionInputChange = (key: string, value: string) => {
+    setRetentionInputs(prev => ({ ...prev, [key]: value }))
+  }
+
+  // v3.53.105: Handle retention input blur - save to API
+  const handleRetentionInputBlur = async (key: keyof RetentionSettings) => {
+    if (!retentionSettings) return
+    const value = parseInt(retentionInputs[key] || '0') || 0
+    if (value === retentionSettings[key]) return // No change
+    await handleRetentionChange(key, value as RetentionSettings[typeof key])
+  }
+
+  // v3.53.105: Handle recipients input blur - save to API
+  const handleRecipientsBlur = async () => {
+    const emails = recipientsInput
+      .split(',')
+      .map(email => email.trim())
+      .filter(email => email.length > 0)
+
+    // Check if changed
+    const currentEmails = notifSettings?.report_recipients || []
+    if (JSON.stringify(emails) === JSON.stringify(currentEmails)) return
+
+    await handleNotifSettingChange('report_recipients', emails)
   }
 
   // Handle manual cleanup
@@ -582,9 +645,25 @@ export function Settings() {
   const handleEditPlugin = async (pluginId: string) => {
     const plugin = defaultPluginConfigs.find(p => p.id === pluginId)
     if (plugin) {
-      setEditingPlugin(plugin)
-      // Always fetch fresh configs before editing
+      // v3.53.105: Fetch configs BEFORE opening modal so disconnect button works
       try {
+        // v3.53.105: Special case for CrowdSec Blocklist - stored in ClickHouse
+        if (pluginId === 'crowdsec_blocklist') {
+          const blConfig = await crowdsecBlocklistApi.getConfig()
+          setCrowdsecBlocklistConfig(blConfig)
+          const initialData: Record<string, string> = {}
+          plugin.fields.forEach(field => {
+            if (field.key === 'api_key' && blConfig.api_key) {
+              initialData[field.key] = blConfig.api_key
+            } else {
+              initialData[field.key] = field.value
+            }
+          })
+          setPluginFormData(initialData)
+          setEditingPlugin(plugin)
+          return
+        }
+
         const freshConfigs = await configApi.get()
         setSavedConfigs(freshConfigs || {})
         const saved = (freshConfigs && freshConfigs[pluginId]) || {}
@@ -598,6 +677,8 @@ export function Settings() {
           }
         })
         setPluginFormData(initialData)
+        // Open modal AFTER configs are loaded
+        setEditingPlugin(plugin)
       } catch (err) {
         console.error('Failed to fetch configs:', err)
         // Fallback to cached or default values
@@ -611,6 +692,8 @@ export function Settings() {
           }
         })
         setPluginFormData(initialData)
+        // Open modal even on error
+        setEditingPlugin(plugin)
       }
     }
   }
@@ -624,6 +707,40 @@ export function Settings() {
     setSavingPlugin(true)
     setSaveResult(null)
     try {
+      // v3.53.105: Special case for CrowdSec Blocklist - stored in ClickHouse
+      if (editingPlugin.id === 'crowdsec_blocklist') {
+        const apiKey = pluginFormData['api_key'] || ''
+        // Skip if masked (no change)
+        if (apiKey.includes('****')) {
+          setSaveResult({ success: true, message: 'No changes to save' })
+          setTimeout(() => {
+            setEditingPlugin(null)
+            setSaveResult(null)
+          }, 1500)
+          return
+        }
+        // Update config with new API key and enable
+        await crowdsecBlocklistApi.updateConfig({ api_key: apiKey, enabled: !!apiKey })
+        // Test connection
+        const testResult = await crowdsecBlocklistApi.testConnection()
+        setSaveResult({
+          success: testResult.success,
+          message: testResult.message,
+        })
+        // Refresh config
+        const newConfig = await crowdsecBlocklistApi.getConfig()
+        setCrowdsecBlocklistConfig(newConfig)
+
+        if (testResult.success) {
+          setTimeout(() => {
+            setEditingPlugin(null)
+            setSaveResult(null)
+            window.location.reload()
+          }, 2000)
+        }
+        return
+      }
+
       // Filter out masked password fields (containing ****)
       // Only send password if user entered a new value
       const dataToSave: Record<string, string> = {}
@@ -669,6 +786,57 @@ export function Settings() {
   const handleClosePluginModal = () => {
     setEditingPlugin(null)
     setSaveResult(null)
+  }
+
+  // v3.53.104 - Disconnect/clear plugin configuration
+  const [disconnecting, setDisconnecting] = useState(false)
+
+  const handleDisconnectPlugin = async () => {
+    if (!editingPlugin) return
+    setDisconnecting(true)
+    try {
+      // v3.53.105: Special case for CrowdSec Blocklist - stored in ClickHouse
+      if (editingPlugin.id === 'crowdsec_blocklist') {
+        await crowdsecBlocklistApi.updateConfig({ api_key: '', enabled: false })
+        // Refresh CrowdSec Blocklist config
+        const newConfig = await crowdsecBlocklistApi.getConfig()
+        setCrowdsecBlocklistConfig(newConfig)
+      } else {
+        await configApi.clear(editingPlugin.id)
+        // Refresh saved configs
+        const newConfigs = await configApi.get()
+        setSavedConfigs(newConfigs || {})
+      }
+      setSaveResult({
+        success: true,
+        message: 'Configuration cleared successfully. Service will reload.',
+      })
+      setTimeout(() => {
+        setEditingPlugin(null)
+        setSaveResult(null)
+        window.location.reload()
+      }, 1500)
+    } catch (err: any) {
+      setSaveResult({
+        success: false,
+        message: err.response?.data?.error || 'Failed to clear configuration',
+      })
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
+  // Check if plugin is currently configured (has any saved values)
+  const isPluginConfigured = (pluginId: string): boolean => {
+    // v3.53.105: Special case for CrowdSec Blocklist - config stored in ClickHouse, not integrations.json
+    if (pluginId === 'crowdsec_blocklist') {
+      return !!crowdsecBlocklistConfig?.api_key
+    }
+
+    const config = savedConfigs[pluginId]
+    if (!config) return false
+    // Return true if any field has a non-empty value (masked or real)
+    return Object.values(config).some(v => v && v.trim() !== '')
   }
 
   // Find plugin by provider name
@@ -1114,14 +1282,9 @@ export function Settings() {
               <div className="flex items-center gap-2 w-full max-w-md">
                 <input
                   type="text"
-                  value={(notifSettings?.report_recipients || []).join(', ')}
-                  onChange={(e) => {
-                    const emails = e.target.value
-                      .split(',')
-                      .map(email => email.trim())
-                      .filter(email => email.length > 0)
-                    handleNotifSettingChange('report_recipients', emails)
-                  }}
+                  value={recipientsInput}
+                  onChange={(e) => setRecipientsInput(e.target.value)}
+                  onBlur={handleRecipientsBlur}
                   placeholder="admin@company.com, security@company.com"
                   disabled={!notifSettings?.smtp_configured || savingNotifSettings}
                   className="flex-1 px-3 py-2 bg-background border rounded-lg text-sm disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary"
@@ -1627,8 +1790,9 @@ export function Settings() {
                   type="number"
                   min="1"
                   max="365"
-                  value={retentionSettings?.events_retention_days || 30}
-                  onChange={(e) => handleRetentionChange('events_retention_days', parseInt(e.target.value) || 30)}
+                  value={retentionInputs.events_retention_days || '30'}
+                  onChange={(e) => handleRetentionInputChange('events_retention_days', e.target.value)}
+                  onBlur={() => handleRetentionInputBlur('events_retention_days')}
                   className="w-20 px-2 py-1 text-center rounded border border-border bg-background"
                   disabled={savingRetention}
                 />
@@ -1647,8 +1811,9 @@ export function Settings() {
                   type="number"
                   min="1"
                   max="365"
-                  value={retentionSettings?.modsec_logs_retention_days || 30}
-                  onChange={(e) => handleRetentionChange('modsec_logs_retention_days', parseInt(e.target.value) || 30)}
+                  value={retentionInputs.modsec_logs_retention_days || '30'}
+                  onChange={(e) => handleRetentionInputChange('modsec_logs_retention_days', e.target.value)}
+                  onBlur={() => handleRetentionInputBlur('modsec_logs_retention_days')}
                   className="w-20 px-2 py-1 text-center rounded border border-border bg-background"
                   disabled={savingRetention}
                 />
@@ -1667,8 +1832,9 @@ export function Settings() {
                   type="number"
                   min="1"
                   max="365"
-                  value={retentionSettings?.vpn_events_retention_days || 30}
-                  onChange={(e) => handleRetentionChange('vpn_events_retention_days', parseInt(e.target.value) || 30)}
+                  value={retentionInputs.vpn_events_retention_days || '30'}
+                  onChange={(e) => handleRetentionInputChange('vpn_events_retention_days', e.target.value)}
+                  onBlur={() => handleRetentionInputBlur('vpn_events_retention_days')}
                   className="w-20 px-2 py-1 text-center rounded border border-border bg-background"
                   disabled={savingRetention}
                 />
@@ -1687,8 +1853,9 @@ export function Settings() {
                   type="number"
                   min="30"
                   max="3650"
-                  value={retentionSettings?.ban_history_retention_days || 365}
-                  onChange={(e) => handleRetentionChange('ban_history_retention_days', parseInt(e.target.value) || 365)}
+                  value={retentionInputs.ban_history_retention_days || '365'}
+                  onChange={(e) => handleRetentionInputChange('ban_history_retention_days', e.target.value)}
+                  onBlur={() => handleRetentionInputBlur('ban_history_retention_days')}
                   className="w-20 px-2 py-1 text-center rounded border border-border bg-background"
                   disabled={savingRetention}
                 />
@@ -2099,15 +2266,31 @@ export function Settings() {
                 <button
                   type="button"
                   onClick={handleClosePluginModal}
-                  disabled={savingPlugin}
-                  className="flex-1 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+                  disabled={savingPlugin || disconnecting}
+                  className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
                 >
                   {saveResult ? 'Close' : 'Cancel'}
                 </button>
+                {/* Disconnect button - only show when plugin is configured and no success result */}
+                {!saveResult?.success && editingPlugin && isPluginConfigured(editingPlugin.id) && (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectPlugin}
+                    disabled={savingPlugin || disconnecting}
+                    className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {disconnecting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    {disconnecting ? 'Clearing...' : 'Disconnect'}
+                  </button>
+                )}
                 {!saveResult?.success && (
                   <button
                     onClick={handleSavePlugin}
-                    disabled={savingPlugin}
+                    disabled={savingPlugin || disconnecting}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
                     {savingPlugin ? (
@@ -2126,7 +2309,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.53.104</p>
+        <p>VIGILANCE X v3.53.105</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

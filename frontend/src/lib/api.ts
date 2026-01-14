@@ -131,10 +131,15 @@ export const statsApi = {
 
 // Geo API
 export const geoApi = {
-  heatmap: async (period: string = '24h', attackTypes?: string[]) => {
+  heatmap: async (period: string = '24h', attackTypes?: string[], dateRange?: { start: string; end: string }) => {
     const params: Record<string, string> = { period }
     if (attackTypes && attackTypes.length > 0) {
       params.attack_types = attackTypes.join(',')
+    }
+    // v3.53.105: Support custom date range
+    if (dateRange) {
+      params.start_time = dateRange.start
+      params.end_time = dateRange.end
     }
     const response = await api.get<{ data: Array<{ country: string; count: number; unique_ips: number }> }>('/geo/heatmap', {
       params
@@ -580,6 +585,12 @@ export const configApi = {
 
   get: async () => {
     const response = await api.get<Record<string, Record<string, string>>>('/config')
+    return response.data
+  },
+
+  // v3.53.104 - Clear/disconnect plugin configuration
+  clear: async (pluginId: string) => {
+    const response = await api.delete<{ success: boolean; message: string; plugin_id: string }>(`/config/${pluginId}`)
     return response.data
   },
 
@@ -1196,6 +1207,94 @@ export const crowdsecBlocklistApi = {
     message: string
   }> => {
     const response = await api.post('/crowdsec/blocklist/enrich')
+    return response.data
+  },
+}
+
+// v3.53.104: Neural-Sync API (VigilanceKey Proxy blocklists)
+export interface NeuralSyncConfig {
+  enabled: boolean
+  server_url: string
+  license_key: string
+  hardware_id: string
+  configured: boolean
+}
+
+export interface NeuralSyncStatus {
+  enabled: boolean
+  configured: boolean
+  connected: boolean
+  server_url: string
+  total_blocklists: number
+  total_ips: number
+  last_sync?: string
+  error?: string
+}
+
+export interface NeuralSyncIP {
+  ip: string
+  blocklist_id: string
+  blocklist_label: string
+  country_code: string
+}
+
+export interface NeuralSyncBlocklist {
+  id: string
+  name: string
+  label: string
+  description: string
+  ip_count: number
+  last_sync?: string
+  enabled: boolean
+}
+
+export const neuralSyncApi = {
+  // Get Neural-Sync configuration
+  getConfig: async (): Promise<NeuralSyncConfig> => {
+    const response = await api.get<NeuralSyncConfig>('/neural-sync/config')
+    return response.data
+  },
+
+  // Update Neural-Sync configuration
+  updateConfig: async (config: { server_url: string; license_key: string; hardware_id: string }): Promise<{ success: boolean; message: string }> => {
+    const response = await api.put<{ success: boolean; message: string }>('/neural-sync/config', config)
+    return response.data
+  },
+
+  // Test Neural-Sync connection
+  testConnection: async (): Promise<{ success: boolean; message: string }> => {
+    const response = await api.post<{ success: boolean; message: string }>('/neural-sync/test')
+    return response.data
+  },
+
+  // Get Neural-Sync status
+  getStatus: async (): Promise<NeuralSyncStatus> => {
+    const response = await api.get<NeuralSyncStatus>('/neural-sync/status')
+    return response.data
+  },
+
+  // List available blocklists from VigilanceKey
+  listBlocklists: async (): Promise<{ blocklists: NeuralSyncBlocklist[]; total: number; error?: string }> => {
+    const response = await api.get<{ blocklists: NeuralSyncBlocklist[]; total: number; error?: string }>('/neural-sync/blocklists')
+    return response.data
+  },
+
+  // Get IPs from VigilanceKey blocklists
+  getIPs: async (params: {
+    page?: number
+    page_size?: number
+    blocklist_id?: string
+    country?: string
+    search?: string
+  }): Promise<{
+    ips: NeuralSyncIP[]
+    total: number
+    page: number
+    page_size: number
+    total_pages: number
+    error?: string
+  }> => {
+    const response = await api.get('/neural-sync/ips', { params })
     return response.data
   },
 }

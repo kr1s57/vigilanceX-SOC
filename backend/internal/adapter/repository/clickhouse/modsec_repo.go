@@ -30,7 +30,7 @@ func (r *ModSecRepository) GetLogs(ctx context.Context, filters entity.ModSecLog
 	args := []interface{}{}
 
 	if filters.SrcIP != "" {
-		conditions = append(conditions, "src_ip = toIPv4(?)")
+		conditions = append(conditions, "IPv4NumToString(src_ip) = ?")
 		args = append(args, filters.SrcIP)
 	}
 	if filters.Hostname != "" {

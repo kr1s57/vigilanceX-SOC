@@ -45,7 +45,7 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 		args = append(args, filters.Severity)
 	}
 	if filters.SrcIP != "" {
-		conditions = append(conditions, "src_ip = toIPv4(?)")
+		conditions = append(conditions, "IPv4NumToString(src_ip) = ?")
 		args = append(args, filters.SrcIP)
 	}
 	if filters.DstIP != "" {
@@ -527,6 +527,71 @@ func (r *EventsRepository) GetGeoHeatmapFiltered(ctx context.Context, period str
 	rows, err := r.conn.Query(ctx, query, startTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query geo heatmap filtered: %w", err)
+	}
+	defer rows.Close()
+
+	result := []map[string]interface{}{}
+	for rows.Next() {
+		var country string
+		var count, uniqueIPs uint64
+		if err := rows.Scan(&country, &count, &uniqueIPs); err != nil {
+			return nil, fmt.Errorf("failed to scan geo data: %w", err)
+		}
+		result = append(result, map[string]interface{}{
+			"country":    country,
+			"count":      count,
+			"unique_ips": uniqueIPs,
+		})
+	}
+
+	return result, nil
+}
+
+// GetGeoHeatmapFilteredRange retrieves geographic distribution for explicit time range (v3.53.105)
+// Used for custom date selection in Attack Map
+func (r *EventsRepository) GetGeoHeatmapFilteredRange(ctx context.Context, startTime, endTime time.Time, attackTypes []string) ([]map[string]interface{}, error) {
+	// Build attack type filter conditions (same as GetGeoHeatmapFiltered)
+	var conditions []string
+	for _, at := range attackTypes {
+		switch at {
+		case "waf":
+			conditions = append(conditions, "log_type = 'WAF'")
+		case "ips":
+			conditions = append(conditions, "(log_type = 'IPS' OR category LIKE '%IDS%' OR category LIKE '%IPS%')")
+		case "malware":
+			conditions = append(conditions, "(log_type = 'Anti-Virus' OR category LIKE '%Malware%')")
+		case "bruteforce":
+			conditions = append(conditions, "(category LIKE '%Brute%' OR category LIKE '%Auth Failure%')")
+		case "ddos":
+			conditions = append(conditions, "(category LIKE '%DDoS%' OR category LIKE '%Flood%' OR category LIKE '%DoS%')")
+		case "threat":
+			conditions = append(conditions, "(log_type = 'Threat' OR category LIKE '%Threat%' OR category LIKE '%C2%' OR category LIKE '%Botnet%')")
+		}
+	}
+
+	// Build WHERE clause for attack types
+	var whereClause string
+	if len(conditions) > 0 {
+		whereClause = "AND (" + strings.Join(conditions, " OR ") + ")"
+	} else {
+		// By default (no filters), show all security attack types combined
+		whereClause = "AND (log_type = 'WAF' OR log_type = 'IPS' OR log_type = 'Anti-Virus' OR log_type = 'Threat' OR category LIKE '%Malware%' OR category LIKE '%IDS%' OR category LIKE '%IPS%' OR category LIKE '%Threat%' OR category LIKE '%C2%' OR category LIKE '%Botnet%')"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			geo_country,
+			count() as count,
+			uniqExact(src_ip) as unique_ips
+		FROM events
+		WHERE timestamp >= ? AND timestamp <= ? AND geo_country != '' %s
+		GROUP BY geo_country
+		ORDER BY count DESC
+	`, whereClause)
+
+	rows, err := r.conn.Query(ctx, query, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query geo heatmap filtered range: %w", err)
 	}
 	defer rows.Close()
 

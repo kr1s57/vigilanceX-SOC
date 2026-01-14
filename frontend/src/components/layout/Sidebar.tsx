@@ -43,6 +43,7 @@ const navigation: NavItem[] = [
   { name: 'Geoblocking', href: '/geoblocking', icon: Globe, colorClass: 'text-cyan-500' },
   { name: 'Whitelist', href: '/whitelist', icon: ShieldCheck, colorClass: 'text-green-500' },
   { name: 'Risk Scoring', href: '/scoring', icon: Activity, colorClass: 'text-yellow-500' },
+  { name: 'CrowdSec BL', href: '/crowdsec-bl', icon: Shield, colorClass: 'text-orange-500' },
   { name: 'Neural-Sync', href: '/neural-sync', icon: Brain, colorClass: 'text-purple-500' },
   { name: 'Reports', href: '/reports', icon: FileText, colorClass: 'text-indigo-500', adminOnly: true },
 ]

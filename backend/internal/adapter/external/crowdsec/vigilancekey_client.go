@@ -273,3 +273,10 @@ func (c *VigilanceKeyClient) SetAPIKey(apiKey string) {
 func (c *VigilanceKeyClient) GetAPIKey() string {
 	return ""
 }
+
+// GetServerURL returns the configured server URL
+func (c *VigilanceKeyClient) GetServerURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.baseURL
+}

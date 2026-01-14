@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.53.104 | **Derniere mise a jour**: 2026-01-14
+> **Version**: 3.53.105 | **Derniere mise a jour**: 2026-01-14
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -1628,6 +1628,18 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.53.105 (2026-01-14)
+- **Attack Map Date Picker Fix**: Backend supporte maintenant `start_time` et `end_time` params
+  - Nouvelle methode `GetGeoHeatmapFilteredRange(ctx, startTime, endTime, attackTypes)`
+  - Query avec `WHERE timestamp >= ? AND timestamp <= ?`
+  - Fichiers: `events.go`, `service.go`, `events_repo.go`
+- **Disconnect Button Fix**: Bouton "Disconnect" s'affiche maintenant correctement
+  - `handleEditPlugin` charge les configs AVANT d'ouvrir le modal
+  - Evite la race condition qui causait `isPluginConfigured` a retourner false
+- **Attack History Modal Fix**: Section visible independamment du threat score
+  - Ban History et Attack History extraits du bloc conditionnel `score ?`
+  - S'affichent maintenant meme si l'IP n'a pas de threat score en DB
 
 ### v3.53.104 (2026-01-14)
 - **Neural-Sync ProxyAPI Architecture**: VGX clients now fetch blocklists via VigilanceKey

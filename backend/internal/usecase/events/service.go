@@ -33,6 +33,7 @@ type Repository interface {
 	GetStatsByLogType(ctx context.Context, period string) (map[string]uint64, error)
 	GetGeoHeatmap(ctx context.Context, period string) ([]map[string]interface{}, error)
 	GetGeoHeatmapFiltered(ctx context.Context, period string, attackTypes []string) ([]map[string]interface{}, error)
+	GetGeoHeatmapFilteredRange(ctx context.Context, startTime, endTime time.Time, attackTypes []string) ([]map[string]interface{}, error)
 	GetUniqueHostnames(ctx context.Context, logType string) ([]string, error)
 	GetSyslogStatus(ctx context.Context) (*entity.SyslogStatus, error)
 	GetCriticalAlerts(ctx context.Context, limit int, period string) ([]entity.CriticalAlert, error)
@@ -312,6 +313,12 @@ func (s *Service) GetGeoHeatmapFiltered(ctx context.Context, period string, atta
 	}
 
 	return s.repo.GetGeoHeatmapFiltered(ctx, period, attackTypes)
+}
+
+// GetGeoHeatmapFilteredRange retrieves geographic distribution for explicit time range (v3.53.105)
+// Used for custom date selection in Attack Map
+func (s *Service) GetGeoHeatmapFilteredRange(ctx context.Context, startTime, endTime time.Time, attackTypes []string) ([]map[string]interface{}, error) {
+	return s.repo.GetGeoHeatmapFilteredRange(ctx, startTime, endTime, attackTypes)
 }
 
 // GetUniqueHostnames retrieves unique hostnames for a log type

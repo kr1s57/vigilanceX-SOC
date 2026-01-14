@@ -42,7 +42,7 @@ export function Geoblocking() {
 
   // Top attacking countries states
   const [topCountries, setTopCountries] = useState<TopCountry[]>([])
-  const [topCountriesExpanded, setTopCountriesExpanded] = useState(true)
+  const [topCountriesExpanded, setTopCountriesExpanded] = useState(false)
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
   const [countryAttackers, setCountryAttackers] = useState<TopAttacker[]>([])
   const [countryAttackersLoading, setCountryAttackersLoading] = useState(false)
@@ -314,29 +314,42 @@ export function Geoblocking() {
         </div>
       </div>
 
-      {/* Top 10 Attacking Countries */}
+      {/* Top 10 Attacking Countries - Compact */}
       <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
         <button
           onClick={() => setTopCountriesExpanded(!topCountriesExpanded)}
-          className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors"
+          className="w-full flex items-center justify-between p-3 hover:bg-gray-700/50 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-500/20 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-red-400" />
+            <div className="p-1.5 bg-red-500/20 rounded-lg">
+              <TrendingUp className="h-4 w-4 text-red-400" />
             </div>
             <div className="text-left">
-              <h2 className="text-lg font-semibold text-white">Top 10 Attacking Countries</h2>
-              <p className="text-gray-400 text-sm">Countries with most attack events on XGS</p>
+              <h2 className="text-sm font-semibold text-white">Top 10 Attacking Countries</h2>
+              <p className="text-gray-500 text-xs">Click to expand details</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Quick preview of top 3 when collapsed */}
+            {!topCountriesExpanded && topCountries.length > 0 && (
+              <div className="flex items-center gap-1 mr-2">
+                {topCountries.slice(0, 3).map((c) => (
+                  <span key={c.country} className="text-lg" title={`${getCountryName(c.country)}: ${c.count.toLocaleString()} events`}>
+                    {getCountryFlag(c.country)}
+                  </span>
+                ))}
+                {topCountries.length > 3 && (
+                  <span className="text-gray-500 text-xs ml-1">+{topCountries.length - 3}</span>
+                )}
+              </div>
+            )}
             {/* Period selector */}
-            <div className="flex gap-1 bg-gray-700 rounded-lg p-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex gap-0.5 bg-gray-700 rounded-lg p-0.5" onClick={(e) => e.stopPropagation()}>
               {['24h', '7d', '30d'].map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
-                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
                     period === p
                       ? 'bg-gray-600 text-white'
                       : 'text-gray-400 hover:text-white'
@@ -347,58 +360,50 @@ export function Geoblocking() {
               ))}
             </div>
             {topCountriesExpanded ? (
-              <ChevronUp className="h-5 w-5 text-gray-400" />
+              <ChevronUp className="h-4 w-4 text-gray-400" />
             ) : (
-              <ChevronDown className="h-5 w-5 text-gray-400" />
+              <ChevronDown className="h-4 w-4 text-gray-400" />
             )}
           </div>
         </button>
 
         {topCountriesExpanded && (
-          <div className="border-t border-gray-700">
+          <div className="border-t border-gray-700 p-3">
             {topCountries.length > 0 ? (
-              <div className="divide-y divide-gray-700">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                 {topCountries.map((country, index) => (
                   <button
                     key={country.country}
                     onClick={() => handleCountryClick(country.country)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-700/50 transition-colors text-left"
+                    className={`flex flex-col items-center p-2 rounded-lg hover:bg-gray-700/50 transition-colors border ${
+                      index === 0 ? 'border-red-500/30 bg-red-500/5' :
+                      index === 1 ? 'border-orange-500/30 bg-orange-500/5' :
+                      index === 2 ? 'border-yellow-500/30 bg-yellow-500/5' :
+                      'border-gray-700 bg-gray-700/20'
+                    }`}
                   >
-                    <div className="flex items-center gap-4">
-                      <span className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm ${
-                        index === 0 ? 'bg-red-500/20 text-red-400' :
-                        index === 1 ? 'bg-orange-500/20 text-orange-400' :
-                        index === 2 ? 'bg-yellow-500/20 text-yellow-400' :
-                        'bg-gray-700 text-gray-400'
-                      }`}>
-                        {index + 1}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{getCountryFlag(country.country)}</span>
-                        <div>
-                          <span className="text-white font-medium">{getCountryName(country.country)}</span>
-                          <span className="text-gray-500 text-sm ml-2">({country.country})</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <p className="text-white font-semibold">{country.count.toLocaleString()}</p>
-                        <p className="text-gray-400 text-xs">events</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-blue-400 font-semibold">{country.unique_ips.toLocaleString()}</p>
-                        <p className="text-gray-400 text-xs">unique IPs</p>
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                    <span className={`w-5 h-5 flex items-center justify-center rounded-full font-bold text-xs mb-1 ${
+                      index === 0 ? 'bg-red-500/20 text-red-400' :
+                      index === 1 ? 'bg-orange-500/20 text-orange-400' :
+                      index === 2 ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-gray-700 text-gray-400'
+                    }`}>
+                      {index + 1}
+                    </span>
+                    <span className="text-xl mb-1">{getCountryFlag(country.country)}</span>
+                    <span className="text-white text-xs font-medium truncate w-full text-center">{getCountryName(country.country)}</span>
+                    <div className="flex items-center gap-2 mt-1 text-xs">
+                      <span className="text-orange-400">{country.count.toLocaleString()}</span>
+                      <span className="text-gray-500">|</span>
+                      <span className="text-blue-400">{country.unique_ips}</span>
                     </div>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="p-8 text-center text-gray-400">
-                <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No attack data available for this period</p>
+              <div className="py-4 text-center text-gray-400">
+                <Globe className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No attack data available</p>
               </div>
             )}
           </div>

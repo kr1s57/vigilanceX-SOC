@@ -196,7 +196,29 @@ func (h *EventsHandler) GetGeoHeatmap(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	heatmap, err := h.service.GetGeoHeatmapFiltered(ctx, period, attackTypes)
+	// v3.53.105: Parse explicit time range for custom date selection
+	var startTime, endTime time.Time
+	if st := r.URL.Query().Get("start_time"); st != "" {
+		if t, err := time.Parse(time.RFC3339, st); err == nil {
+			startTime = t
+		}
+	}
+	if et := r.URL.Query().Get("end_time"); et != "" {
+		if t, err := time.Parse(time.RFC3339, et); err == nil {
+			endTime = t
+		}
+	}
+
+	var heatmap []map[string]interface{}
+	var err error
+
+	// Use explicit time range if provided, otherwise use period
+	if !startTime.IsZero() && !endTime.IsZero() {
+		heatmap, err = h.service.GetGeoHeatmapFilteredRange(ctx, startTime, endTime, attackTypes)
+	} else {
+		heatmap, err = h.service.GetGeoHeatmapFiltered(ctx, period, attackTypes)
+	}
+
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to retrieve geo heatmap", err)
 		return

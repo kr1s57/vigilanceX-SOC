@@ -12,6 +12,7 @@ import {
   Activity,
   Shield,
   Zap,
+  Calendar,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -137,13 +138,17 @@ const COUNTRY_NAMES: Record<string, string> = {
   'XX': 'Unknown',
 }
 
-// Period selector component
+// Period selector component with custom date support (v3.53.105)
 function PeriodSelector({
   period,
   onChange,
+  customDate,
+  onCustomDateChange,
 }: {
-  period: MapPeriod
+  period: MapPeriod | 'custom'
   onChange: (period: MapPeriod) => void
+  customDate: string
+  onCustomDateChange: (date: string) => void
 }) {
   const periods: { value: MapPeriod; label: string }[] = [
     { value: 'live', label: 'Live' },
@@ -152,27 +157,58 @@ function PeriodSelector({
     { value: '30d', label: '30d' },
   ]
 
+  const isCustom = customDate !== ''
+
   return (
-    <div className="flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-lg p-1">
-      {periods.map((p) => (
-        <button
-          key={p.value}
-          onClick={() => onChange(p.value)}
-          className={cn(
-            'px-3 py-1.5 text-sm font-medium rounded-md transition-all',
-            period === p.value
-              ? p.value === 'live'
-                ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-                : 'bg-primary text-primary-foreground'
-              : 'text-gray-300 hover:text-white hover:bg-white/10'
-          )}
-        >
-          {p.value === 'live' && (
-            <span className="inline-block w-2 h-2 bg-white rounded-full mr-1.5 animate-pulse" />
-          )}
-          {p.label}
-        </button>
-      ))}
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-lg p-1">
+        {periods.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => {
+              onCustomDateChange('') // Clear custom date when selecting preset
+              onChange(p.value)
+            }}
+            className={cn(
+              'px-3 py-1.5 text-sm font-medium rounded-md transition-all',
+              period === p.value && !isCustom
+                ? p.value === 'live'
+                  ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                  : 'bg-primary text-primary-foreground'
+                : 'text-gray-300 hover:text-white hover:bg-white/10'
+            )}
+          >
+            {p.value === 'live' && (
+              <span className="inline-block w-2 h-2 bg-white rounded-full mr-1.5 animate-pulse" />
+            )}
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {/* Custom date picker */}
+      <div className={cn(
+        'flex items-center gap-1 backdrop-blur-sm rounded-lg p-1 transition-all',
+        isCustom ? 'bg-cyan-500/20 ring-1 ring-cyan-500/50' : 'bg-black/60'
+      )}>
+        <div className="relative flex items-center">
+          <Calendar className={cn(
+            'absolute left-2 w-4 h-4 pointer-events-none z-10',
+            isCustom ? 'text-cyan-400' : 'text-gray-400'
+          )} />
+          <input
+            type="date"
+            value={customDate}
+            onChange={(e) => onCustomDateChange(e.target.value)}
+            max={new Date().toISOString().split('T')[0]}
+            className={cn(
+              'pl-8 pr-2 py-1.5 text-sm font-medium rounded-md transition-all bg-transparent border-0 focus:outline-none focus:ring-0 cursor-pointer',
+              isCustom ? 'text-cyan-400' : 'text-gray-400 hover:text-white',
+              '[color-scheme:dark]'
+            )}
+            title="Select a specific date to view attacks"
+          />
+        </div>
+      </div>
     </div>
   )
 }
@@ -272,6 +308,7 @@ export function AttackMap() {
   const mapRef = useRef<LeafletMap | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [customDate, setCustomDate] = useState('') // v3.53.105: Custom date selection
 
   const {
     period,
@@ -317,10 +354,15 @@ export function AttackMap() {
 
     setLoading(true)
     try {
-      const apiPeriod = period === 'live' ? '1h' : period
+      // v3.53.105: Support custom date range
+      const apiPeriod = customDate ? '24h' : (period === 'live' ? '1h' : period)
+      const dateRange = customDate ? {
+        start: `${customDate}T00:00:00Z`,
+        end: `${customDate}T23:59:59Z`,
+      } : undefined
 
       const [heatmapData] = await Promise.all([
-        geoApi.heatmap(apiPeriod, attackTypesArray),
+        geoApi.heatmap(apiPeriod, attackTypesArray, dateRange),
         statsApi.topAttackers(apiPeriod, 50),
       ])
 
@@ -370,18 +412,21 @@ export function AttackMap() {
     } finally {
       setLoading(false)
     }
-  }, [period, activeAttackTypes, getFlowColor, setCountryStats, setAttackFlows, setLoading, setIsConnected, setTotalAttacks])
+  }, [period, customDate, activeAttackTypes, getFlowColor, setCountryStats, setAttackFlows, setLoading, setIsConnected, setTotalAttacks])
 
   // Initial fetch and periodic refresh
   useEffect(() => {
     fetchData()
+
+    // v3.53.105: Don't auto-refresh when viewing custom date
+    if (customDate) return
 
     // Refresh interval based on period
     const interval = period === 'live' ? 10000 : 60000
     const timer = setInterval(fetchData, interval)
 
     return () => clearInterval(timer)
-  }, [fetchData, period])
+  }, [fetchData, period, customDate])
 
   // Handle country click
   const handleCountryClick = useCallback(async (countryCode: string) => {
@@ -497,10 +542,19 @@ export function AttackMap() {
             <Globe className="w-6 h-6 text-cyan-400" />
             <div>
               <h1 className="text-xl font-bold text-white">Attack Map</h1>
-              <p className="text-xs text-gray-400">Real-time threat visualization</p>
+              <p className="text-xs text-gray-400">
+                {customDate
+                  ? `Viewing attacks from ${new Date(customDate).toLocaleDateString()}`
+                  : 'Real-time threat visualization'}
+              </p>
             </div>
           </div>
-          <PeriodSelector period={period} onChange={setPeriod} />
+          <PeriodSelector
+            period={customDate ? 'custom' as any : period}
+            onChange={setPeriod}
+            customDate={customDate}
+            onCustomDateChange={setCustomDate}
+          />
           <AttackTypeFilter activeTypes={activeAttackTypes} onToggle={toggleAttackType} />
         </div>
 
