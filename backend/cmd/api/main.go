@@ -419,6 +419,20 @@ func main() {
 		crowdsecBlocklistService.SetXGSClient(sophosClient)
 		logger.Info("CrowdSec Blocklist: XGS sync enabled", "group", "grp_VGX-CrowdSBlockL")
 	}
+
+	// v3.53.104: VigilanceKey Proxy client for centralized blocklist access
+	// When UseProxy is enabled, VGX fetches blocklists from VigilanceKey instead of CrowdSec directly
+	if licenseClient != nil && cfg.License.ServerURL != "" {
+		vkProxyClient := crowdsecext.NewVigilanceKeyClient(crowdsecext.VigilanceKeyConfig{
+			ServerURL:  cfg.License.ServerURL,
+			LicenseKey: licenseClient.GetLicenseKey(),
+			HardwareID: licenseClient.GetHardwareID(),
+		})
+		crowdsecBlocklistService.SetProxyClient(vkProxyClient)
+		logger.Info("CrowdSec Blocklist: VigilanceKey proxy client configured",
+			"server", cfg.License.ServerURL)
+	}
+
 	// Initialize service (loads config and starts worker if enabled)
 	if err := crowdsecBlocklistService.Initialize(context.Background()); err != nil {
 		logger.Warn("CrowdSec Blocklist initialization failed", "error", err)

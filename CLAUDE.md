@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.53.103 | **Derniere mise a jour**: 2026-01-13
+> **Version**: 3.53.104 | **Derniere mise a jour**: 2026-01-14
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -572,75 +572,220 @@ POST   /api/v1/retention/cleanup    # Manual cleanup trigger
 - **Cleanup Interval**: Selecteur 1h/6h/12h/24h
 - **Manual Cleanup**: Bouton pour purge immediate
 
-### CrowdSec Blocklist - Neural-Sync (v3.53.102 - Active)
+### CrowdSec Blocklist - Neural-Sync ProxyAPI (v3.54 - Active)
 
-Integration des blocklists premium CrowdSec dans VigilanceX. Permet de synchroniser les IPs malveillantes identifiees par la communaute CrowdSec directement dans la base locale.
+Integration des blocklists premium CrowdSec via **VigilanceKey comme ProxyAPI**.
+Les VGX clients ne contactent plus CrowdSec directement - ils recuperent les blocklists depuis VigilanceKey.
 
-#### Comment ca fonctionne
+#### Architecture ProxyAPI (v3.54+)
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Neural-Sync Flow                                 │
-│                                                                      │
-│   CrowdSec API                    VigilanceX                        │
-│   ┌──────────┐                    ┌─────────────────────────────┐   │
-│   │ Premium  │  ──Download IPs──► │ crowdsec_blocklist_ips (DB) │   │
-│   │Blocklists│                    │ + country_code enrichment    │   │
-│   └──────────┘                    └──────────────┬──────────────┘   │
-│                                                  │                   │
-│                                                  ▼                   │
-│                                    ┌─────────────────────────────┐   │
-│                                    │   Neural-Sync UI Page       │   │
-│                                    │   - IP listing + flags      │   │
-│                                    │   - Country filtering       │   │
-│                                    │   - Blocklist filtering     │   │
-│                                    └─────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         VIGILANCEKEY SERVER (ProxyAPI)                       │
+│                           10.56.126.126 / Port 8080                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────┐      │
+│  │ CrowdSec Client │───►│ Downloader      │───►│ File Storage        │      │
+│  │ (API Download)  │    │ Worker (2h)     │    │ /data/blocklists/   │      │
+│  └─────────────────┘    │ Keep latest only│    │ - {id}.txt (IPs)    │      │
+│                         └────────┬────────┘    │ - {id}.meta.json    │      │
+│                                  │             └──────────┬──────────┘      │
+│                                  ▼                        │                  │
+│                         ┌─────────────────────────────────┴─────────────┐   │
+│                         │ PostgreSQL: crowdsec_blocklists               │   │
+│                         │ - id, name, label, ip_count, file_hash        │   │
+│                         └───────────────────────────────────────────────┘   │
+│                                                                              │
+│  ENDPOINTS (License-Protected):                                              │
+│  GET  /api/v1/blocklist/lists           → Liste blocklists disponibles      │
+│  GET  /api/v1/blocklist/{id}/download   → Download fichier IPs (text/plain) │
+│  GET  /api/v1/blocklist/status          → Status sync                       │
+│                                                                              │
+└──────────────────────────────────────────┬──────────────────────────────────┘
+                                           │
+                          HTTPS + License Validation (X-License-Key, X-Hardware-ID)
+                                           │
+          ┌────────────────────────────────┼────────────────────────────────┐
+          ▼                                ▼                                ▼
+┌─────────────────────┐       ┌─────────────────────┐       ┌─────────────────────┐
+│    VGX Client #1    │       │    VGX Client #2    │       │    VGX Client #N    │
+│                     │       │                     │       │                     │
+│ ┌─────────────────┐ │       │ ┌─────────────────┐ │       │ ┌─────────────────┐ │
+│ │ VK Blocklist    │ │       │ │ VK Blocklist    │ │       │ │ VK Blocklist    │ │
+│ │ Client          │ │       │ │ Client          │ │       │ │ Client          │ │
+│ │ - license auth  │ │       │ │ - license auth  │ │       │ │ - license auth  │ │
+│ │ - download VK   │ │       │ │ - download VK   │ │       │ │ - download VK   │ │
+│ └────────┬────────┘ │       │ └────────┬────────┘ │       │ └────────┬────────┘ │
+│          ▼          │       │          ▼          │       │          ▼          │
+│ ┌─────────────────┐ │       │ ┌─────────────────┐ │       │ ┌─────────────────┐ │
+│ │ Local Process   │ │       │ │ Local Process   │ │       │ │ Local Process   │ │
+│ │ - Sync DB       │ │       │ │ - Sync DB       │ │       │ │ - Sync DB       │ │
+│ │ - Enrich GeoIP  │ │       │ │ - Enrich GeoIP  │ │       │ │ - Enrich GeoIP  │ │
+│ │ - Sync XGS      │ │       │ │ - Sync XGS      │ │       │ │ - Sync XGS      │ │
+│ └─────────────────┘ │       │ └─────────────────┘ │       │ └─────────────────┘ │
+└─────────────────────┘       └─────────────────────┘       └─────────────────────┘
 ```
 
-1. **Configuration API Key**: Une Service API Key CrowdSec (scope "Blocklist") est requise
-2. **Sync des blocklists**: Le bouton "Sync Now" telecharge les IPs depuis CrowdSec
-3. **Stockage local**: Les IPs sont stockees dans `crowdsec_blocklist_ips` avec versioning
-4. **Enrichissement pays**: Chaque IP est enrichie avec son code pays via GeoIP (ip-api.com)
-5. **Filtrage**: Une fois enrichi, filtrage possible par pays ou par blocklist
+#### Flux de Synchronisation
 
-#### Enrichissement des pays
+**Etape 1: VigilanceKey telecharge depuis CrowdSec (toutes les 2h)**
 
-- **Rate limit**: ip-api.com limite a 45 requetes/minute (gratuit)
-- **Enrichissement automatique**: Bouton "Start Enrichment" traite 40 IPs/batch
-- **Progression visible**: Compteur d'IPs enrichies affiche en temps reel
-- **Filtre desactive**: Le filtre pays est grise tant que l'enrichissement n'est pas termine
+```
+CrowdSec API                    VigilanceKey Server
+───────────                     ──────────────────────
+GET /blocklists/{id}/download   Worker (sync every 2h)
+        ─────────────►          │
+                                ▼
+                                downloadAndCompare()
+                                ├─ Download new file
+                                ├─ Compute SHA256
+                                ├─ Compare with current
+                                │
+                     ┌──────────┴──────────┐
+                     │                     │
+                 DIFFERENT              IDENTICAL
+                     │                     │
+                     ▼                     ▼
+             Replace old file         No action
+             Update metadata          (already fresh)
+             Log to history
+```
 
-#### Composants
+**Etape 2: VGX Client telecharge depuis VigilanceKey**
+
+```
+VGX Client                      VigilanceKey Server
+──────────                      ──────────────────────
+GET /api/v1/blocklist/lists
+Headers:                        Middleware: ValidateLicense()
+  X-License-Key: VX3-XXX        ├─ Check license valid
+  X-Hardware-ID: abc123         ├─ Check status=ACTIVE
+        ─────────────►          └─ If OK → proceed
+
+                        ◄───────────────
+                        [{id: "bl_1", label: "Evil IPs", ip_count: 5000}, ...]
+
+GET /api/v1/blocklist/bl_1/download
+        ─────────────►          Read /data/blocklists/bl_1.txt
+
+                        ◄───────────────
+                        Content-Type: text/plain
+                        1.2.3.4
+                        5.6.7.8
+                        ...
+```
+
+**Etape 3: VGX traite les donnees localement (identique)**
+
+```
+VGX Client Local Processing
+───────────────────────────
+1. Download from VigilanceKey
+2. Compare with ClickHouse DB (add/remove)
+3. Enrich new IPs with GeoIP
+4. Persist to ClickHouse
+5. Sync to Sophos XGS (grp_VGX-CrowdSBlockL)
+```
+
+#### Avantages Architecture ProxyAPI
+
+| Aspect | Avant (Direct) | Apres (ProxyAPI) |
+|--------|----------------|------------------|
+| **Cles API** | N cles (1 par VGX) | 1 cle (sur VK) |
+| **Quota CrowdSec** | N x quota | 1 x quota |
+| **Controle d'acces** | Aucun | License-based |
+| **Audit** | Disperse | Centralise sur VK |
+| **Revocation** | Impossible | License revoked = no access |
+| **Bande passante** | CrowdSec → N clients | CrowdSec → VK → N clients |
+
+#### Composants VigilanceKey (ProxyAPI)
 
 | Composant | Fichier | Description |
 |-----------|---------|-------------|
-| API Client | `internal/adapter/external/crowdsec/blocklist_client.go` | Client API CrowdSec |
-| Service | `internal/usecase/crowdsec/blocklist_service.go` | Logique sync + enrichissement |
+| Entity | `internal/entity/blocklist.go` | BlocklistInfo, SyncStatus |
+| Repository | `internal/repository/postgres/blocklist_repo.go` | CRUD PostgreSQL |
+| Service | `internal/service/blocklist.go` | CrowdSec client + sync worker |
+| Handler | `internal/handler/blocklist.go` | HTTP endpoints |
+| Migration | `migrations/003_crowdsec_blocklist.sql` | Tables PostgreSQL |
+
+#### Composants VGX Client
+
+| Composant | Fichier | Description |
+|-----------|---------|-------------|
+| VK Client | `internal/adapter/external/crowdsec/vk_blocklist_client.go` | Client VigilanceKey |
+| Service | `internal/usecase/crowdsec/blocklist_service.go` | Logique sync (modifie) |
 | Repository | `internal/adapter/repository/clickhouse/crowdsec_blocklist_repo.go` | Persistence ClickHouse |
 | Handlers | `internal/adapter/controller/http/handlers/crowdsec_blocklist.go` | Endpoints HTTP |
-| Migration | `docker/clickhouse/migrations/011_crowdsec_country.sql` | Colonne country_code |
 | Frontend | `frontend/src/pages/NeuralSync.tsx` | Page UI Neural-Sync |
-| API Client | `frontend/src/lib/api.ts` | crowdsecBlocklistApi |
 
-#### Endpoints API
+#### Endpoints VigilanceKey (ProxyAPI)
 
 ```
-GET    /api/v1/crowdsec/blocklist/config      # Configuration (api_key masked)
-PUT    /api/v1/crowdsec/blocklist/config      # Update config
-POST   /api/v1/crowdsec/blocklist/test        # Test connexion API
-GET    /api/v1/crowdsec/blocklist/lists       # Liste blocklists disponibles
-GET    /api/v1/crowdsec/blocklist/status      # Status du service
-GET    /api/v1/crowdsec/blocklist/history     # Historique des syncs
-GET    /api/v1/crowdsec/blocklist/ips/list    # Liste paginee des IPs
-GET    /api/v1/crowdsec/blocklist/summary     # Resume par blocklist
+# Endpoints VGX Client (License-Protected)
+GET  /api/v1/blocklist/lists              # Liste blocklists disponibles
+GET  /api/v1/blocklist/{id}/download      # Download fichier IPs
+GET  /api/v1/blocklist/status             # Status sync
+
+# Endpoints Admin (JWT + Operator)
+GET  /api/v1/blocklist/config             # Configuration actuelle
+PUT  /api/v1/blocklist/config             # Update config (api_key)
+POST /api/v1/blocklist/sync               # Force sync all
+POST /api/v1/blocklist/sync/{id}          # Sync une blocklist
+GET  /api/v1/blocklist/history            # Historique sync
+```
+
+#### Endpoints VGX Client (inchanges)
+
+```
+GET    /api/v1/crowdsec/blocklist/config      # Configuration locale
+PUT    /api/v1/crowdsec/blocklist/config      # Update config (plus d'api_key!)
+GET    /api/v1/crowdsec/blocklist/lists       # Liste depuis VK
+GET    /api/v1/crowdsec/blocklist/status      # Status service
+GET    /api/v1/crowdsec/blocklist/ips/list    # Liste paginee IPs locales
 GET    /api/v1/crowdsec/blocklist/countries   # Liste pays uniques
-POST   /api/v1/crowdsec/blocklist/enrich      # Enrichir 40 IPs avec pays
-POST   /api/v1/crowdsec/blocklist/sync        # Sync toutes les blocklists
-POST   /api/v1/crowdsec/blocklist/sync/{id}   # Sync blocklist specifique
+POST   /api/v1/crowdsec/blocklist/enrich      # Enrichir GeoIP
+POST   /api/v1/crowdsec/blocklist/sync        # Sync depuis VK
 ```
 
-#### Table ClickHouse
+#### Tables PostgreSQL (VigilanceKey)
+
+```sql
+CREATE TABLE crowdsec_config (
+    id SERIAL PRIMARY KEY,
+    api_key TEXT NOT NULL DEFAULT '',
+    enabled BOOLEAN NOT NULL DEFAULT false,
+    sync_interval_minutes INTEGER NOT NULL DEFAULT 120,
+    last_sync TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE crowdsec_blocklists (
+    id VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    label VARCHAR(255) NOT NULL,
+    description TEXT,
+    ip_count INTEGER NOT NULL DEFAULT 0,
+    file_path VARCHAR(500),
+    file_hash VARCHAR(64),
+    last_sync TIMESTAMP,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE crowdsec_sync_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    blocklist_id VARCHAR(100),
+    sync_started_at TIMESTAMP NOT NULL,
+    sync_completed_at TIMESTAMP,
+    ips_in_file INTEGER DEFAULT 0,
+    file_hash VARCHAR(64),
+    success BOOLEAN DEFAULT false,
+    error_message TEXT
+);
+```
+
+#### Table ClickHouse (VGX Client - inchangee)
 
 ```sql
 CREATE TABLE vigilance_x.crowdsec_blocklist_ips (
@@ -655,11 +800,13 @@ CREATE TABLE vigilance_x.crowdsec_blocklist_ips (
 ORDER BY (blocklist_id, ip)
 ```
 
-#### Phase 2 (a venir)
+#### XGS Integration (VGX Client - inchangee)
 
-- Synchronisation vers groupe XGS `grp_VGX-CrowdSec`
-- Blocage automatique au niveau firewall Sophos
-- Integration avec Detect2Ban pour alerting
+```
+Groupe XGS: grp_VGX-CrowdSBlockL
+Description: "CrowdSec Blocklist IPs - Managed by VIGILANCE X Neural-Sync"
+Prefix host: CS_ (format: CS_1.2.3.4)
+```
 
 ---
 
@@ -1481,6 +1628,33 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.53.104 (2026-01-14)
+- **Neural-Sync ProxyAPI Architecture**: VGX clients now fetch blocklists via VigilanceKey
+  - **VigilanceKey Backend** (Phase 1 - Complete):
+    - New PostgreSQL tables: `crowdsec_config`, `crowdsec_blocklists`, `crowdsec_sync_history`
+    - Entity/Repository/Service/Handler for blocklist management
+    - CrowdSec API key stored centrally on VigilanceKey
+    - Background sync worker (every 2 hours by default)
+    - File-based caching with SHA256 hash comparison
+  - **VigilanceKey Endpoints for VGX Clients** (license-protected):
+    - `GET /api/v1/blocklist/lists` - List available blocklists
+    - `GET /api/v1/blocklist/{id}/download` - Download blocklist IPs (plain text)
+    - `GET /api/v1/blocklist/status` - Service status
+  - **VigilanceKey Admin Endpoints** (JWT + Operator):
+    - `GET/PUT /api/v1/admin/blocklist/config` - Configuration management
+    - `POST /api/v1/admin/blocklist/test` - Test CrowdSec connection
+    - `POST /api/v1/admin/blocklist/sync` - Trigger manual sync
+  - **VGX Client Changes** (Phase 2 - Complete):
+    - New `VigilanceKeyClient` in `internal/adapter/external/crowdsec/vigilancekey_client.go`
+    - `BlocklistProvider` interface for both direct and proxy clients
+    - `BlocklistService` now supports proxy mode (`UseProxy` config option)
+    - Auto-switch between direct CrowdSec and VigilanceKey proxy
+  - **New Config Fields**:
+    - `use_proxy` (bool) - Enable VigilanceKey proxy mode
+    - `proxy_server_url` (string) - VigilanceKey server URL
+  - **Migration 012**: Added `use_proxy`, `proxy_server_url` columns to `crowdsec_blocklist_config`
+- **Benefit**: Single CrowdSec API key on VigilanceKey, all VGX clients share via license auth
 
 ### v3.53.103 (2026-01-13)
 - **Neural-Sync XGS Integration**: Synchronisation automatique vers Sophos XGS Firewall

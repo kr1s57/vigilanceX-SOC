@@ -30,7 +30,9 @@ func (r *CrowdSecBlocklistRepository) GetConfig(ctx context.Context) (*crowdsec.
 			sync_interval_minutes,
 			last_sync,
 			total_ips,
-			total_blocklists
+			total_blocklists,
+			use_proxy,
+			proxy_server_url
 		FROM vigilance_x.crowdsec_blocklist_config
 		WHERE id = 1
 		ORDER BY version DESC
@@ -42,6 +44,8 @@ func (r *CrowdSecBlocklistRepository) GetConfig(ctx context.Context) (*crowdsec.
 	var syncInterval uint16
 	var lastSync time.Time
 	var totalIPs, totalBlocklists uint32
+	var useProxy uint8
+	var proxyServerURL string
 
 	row := r.conn.QueryRow(ctx, query)
 	err := row.Scan(
@@ -51,12 +55,15 @@ func (r *CrowdSecBlocklistRepository) GetConfig(ctx context.Context) (*crowdsec.
 		&lastSync,
 		&totalIPs,
 		&totalBlocklists,
+		&useProxy,
+		&proxyServerURL,
 	)
 
 	if err != nil {
 		slog.Warn("[CROWDSEC_REPO] GetConfig query failed, returning default", "error", err)
 		return &crowdsec.BlocklistConfig{
 			Enabled:             false,
+			UseProxy:            false,
 			SyncIntervalMinutes: 120,
 		}, nil
 	}
@@ -64,6 +71,8 @@ func (r *CrowdSecBlocklistRepository) GetConfig(ctx context.Context) (*crowdsec.
 	config := &crowdsec.BlocklistConfig{
 		APIKey:              apiKey,
 		Enabled:             enabled == 1,
+		UseProxy:            useProxy == 1,
+		ProxyServerURL:      proxyServerURL,
 		SyncIntervalMinutes: int(syncInterval),
 		LastSync:            lastSync,
 		TotalIPs:            int(totalIPs),
@@ -87,6 +96,11 @@ func (r *CrowdSecBlocklistRepository) SaveConfig(ctx context.Context, config *cr
 		enabled = 1
 	}
 
+	useProxy := uint8(0)
+	if config.UseProxy {
+		useProxy = 1
+	}
+
 	query := `
 		INSERT INTO vigilance_x.crowdsec_blocklist_config (
 			id,
@@ -96,9 +110,11 @@ func (r *CrowdSecBlocklistRepository) SaveConfig(ctx context.Context, config *cr
 			last_sync,
 			total_ips,
 			total_blocklists,
+			use_proxy,
+			proxy_server_url,
 			updated_at,
 			version
-		) VALUES (1, ?, ?, ?, ?, ?, ?, now(), ?)
+		) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, now(), ?)
 	`
 
 	err := r.conn.Exec(ctx, query,
@@ -108,6 +124,8 @@ func (r *CrowdSecBlocklistRepository) SaveConfig(ctx context.Context, config *cr
 		config.LastSync,
 		config.TotalIPs,
 		config.TotalBlocklists,
+		useProxy,
+		config.ProxyServerURL,
 		currentVersion+1,
 	)
 
