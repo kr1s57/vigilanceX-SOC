@@ -616,26 +616,40 @@ func (r *VigimailRepository) GetStats(ctx context.Context) (*entity.VigimailStat
 		LeaksBySource: make(map[string]int),
 	}
 
+	var cnt uint64
+
 	// Count domains
 	row := r.conn.QueryRow(ctx, `SELECT count() FROM vigilance_x.vigimail_domains FINAL WHERE deleted = 0`)
-	row.Scan(&stats.TotalDomains)
+	if row.Scan(&cnt) == nil {
+		stats.TotalDomains = int(cnt)
+	}
 
 	// Count emails by status
 	row = r.conn.QueryRow(ctx, `SELECT count() FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0`)
-	row.Scan(&stats.TotalEmails)
+	if row.Scan(&cnt) == nil {
+		stats.TotalEmails = int(cnt)
+	}
 
 	row = r.conn.QueryRow(ctx, `SELECT count() FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0 AND status = 'clean'`)
-	row.Scan(&stats.EmailsClean)
+	if row.Scan(&cnt) == nil {
+		stats.EmailsClean = int(cnt)
+	}
 
 	row = r.conn.QueryRow(ctx, `SELECT count() FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0 AND status = 'leaked'`)
-	row.Scan(&stats.EmailsWithLeaks)
+	if row.Scan(&cnt) == nil {
+		stats.EmailsWithLeaks = int(cnt)
+	}
 
 	row = r.conn.QueryRow(ctx, `SELECT count() FROM vigilance_x.vigimail_emails FINAL WHERE deleted = 0 AND status = 'pending'`)
-	row.Scan(&stats.EmailsPending)
+	if row.Scan(&cnt) == nil {
+		stats.EmailsPending = int(cnt)
+	}
 
 	// Count total leaks
 	row = r.conn.QueryRow(ctx, `SELECT count() FROM vigilance_x.vigimail_leaks`)
-	row.Scan(&stats.TotalLeaks)
+	if row.Scan(&cnt) == nil {
+		stats.TotalLeaks = int(cnt)
+	}
 
 	// Leaks by source
 	rows, err := r.conn.Query(ctx, `SELECT source, count() as cnt FROM vigilance_x.vigimail_leaks GROUP BY source`)
@@ -663,7 +677,9 @@ func (r *VigimailRepository) GetStats(ctx context.Context) (*entity.VigimailStat
 		for rows.Next() {
 			var bs entity.BreachStat
 			var date *time.Time
-			if rows.Scan(&bs.Name, &bs.AffectedCount, &date) == nil {
+			var affectedCnt uint64
+			if rows.Scan(&bs.Name, &affectedCnt, &date) == nil {
+				bs.AffectedCount = int(affectedCnt)
 				if date != nil {
 					bs.Date = date.Format("2006-01-02")
 				}
