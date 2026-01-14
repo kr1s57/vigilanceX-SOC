@@ -235,9 +235,11 @@ func (r *VigimailRepository) ListEmails(ctx context.Context, domain string) ([]e
 	var emails []entity.VigimailEmail
 	for rows.Next() {
 		var e entity.VigimailEmail
-		if err := rows.Scan(&e.ID, &e.Email, &e.Domain, &e.LastCheck, &e.LeakCount, &e.Status, &e.CreatedAt); err != nil {
+		var leakCount uint32
+		if err := rows.Scan(&e.ID, &e.Email, &e.Domain, &e.LastCheck, &leakCount, &e.Status, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan email: %w", err)
 		}
+		e.LeakCount = int(leakCount)
 		emails = append(emails, e)
 	}
 
@@ -262,9 +264,11 @@ func (r *VigimailRepository) ListAllEmails(ctx context.Context) ([]entity.Vigima
 	var emails []entity.VigimailEmail
 	for rows.Next() {
 		var e entity.VigimailEmail
-		if err := rows.Scan(&e.ID, &e.Email, &e.Domain, &e.LastCheck, &e.LeakCount, &e.Status, &e.CreatedAt); err != nil {
+		var leakCount uint32
+		if err := rows.Scan(&e.ID, &e.Email, &e.Domain, &e.LastCheck, &leakCount, &e.Status, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan email: %w", err)
 		}
+		e.LeakCount = int(leakCount)
 		emails = append(emails, e)
 	}
 
@@ -486,6 +490,7 @@ func (r *VigimailRepository) GetLatestDomainCheck(ctx context.Context, domain st
 
 	var d entity.DomainDNSCheck
 	var spfExists, spfValid, dkimExists, dkimValid, dmarcExists, dmarcValid, mxExists uint8
+	var overallScore uint8
 
 	row := r.conn.QueryRow(ctx, query, strings.ToLower(domain))
 	err := row.Scan(
@@ -494,7 +499,7 @@ func (r *VigimailRepository) GetLatestDomainCheck(ctx context.Context, domain st
 		&dkimExists, &d.DKIMSelectors, &dkimValid, &d.DKIMIssues,
 		&dmarcExists, &d.DMARCRecord, &d.DMARCPolicy, &dmarcValid, &d.DMARCIssues,
 		&mxExists, &d.MXRecords,
-		&d.OverallScore, &d.OverallStatus,
+		&overallScore, &d.OverallStatus,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("no DNS check found for domain: %w", err)
@@ -507,6 +512,7 @@ func (r *VigimailRepository) GetLatestDomainCheck(ctx context.Context, domain st
 	d.DMARCExists = dmarcExists == 1
 	d.DMARCValid = dmarcValid == 1
 	d.MXExists = mxExists == 1
+	d.OverallScore = int(overallScore)
 
 	return &d, nil
 }
@@ -589,9 +595,11 @@ func (r *VigimailRepository) GetDomainCheckHistory(ctx context.Context, domain s
 	var checks []entity.DomainDNSCheck
 	for rows.Next() {
 		var c entity.DomainDNSCheck
-		if err := rows.Scan(&c.ID, &c.Domain, &c.CheckTime, &c.OverallScore, &c.OverallStatus); err != nil {
+		var overallScore uint8
+		if err := rows.Scan(&c.ID, &c.Domain, &c.CheckTime, &overallScore, &c.OverallStatus); err != nil {
 			return nil, fmt.Errorf("scan DNS check: %w", err)
 		}
+		c.OverallScore = int(overallScore)
 		checks = append(checks, c)
 	}
 
