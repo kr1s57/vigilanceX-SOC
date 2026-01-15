@@ -1,6 +1,6 @@
 # VIGILANCE X - Production Docker Compose
 # Uses pre-built GHCR images (no local build required)
-# Version: 3.55.109
+# Version: 3.55.111
 
 version: '3.8'
 
@@ -140,7 +140,7 @@ services:
 
       # License System
       LICENSE_ENABLED: ${LICENSE_ENABLED:-true}
-      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-https://vigilancekey.cloudcomputing.lu}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-https://vgxkey.vigilancex.lu}
       LICENSE_KEY: ${LICENSE_KEY:-}
       LICENSE_HEARTBEAT_INTERVAL: ${LICENSE_HEARTBEAT_INTERVAL:-12h}
       LICENSE_GRACE_PERIOD: ${LICENSE_GRACE_PERIOD:-168h}

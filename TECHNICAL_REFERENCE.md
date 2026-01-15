@@ -969,7 +969,7 @@ ADMIN_PASSWORD=VigilanceX2024! # Password initial
 
 ```bash
 LICENSE_ENABLED=true
-LICENSE_SERVER_URL=https://vigilancexkey.cloudcomputing.lu
+LICENSE_SERVER_URL=https://vgxkey.vigilancex.lu
 LICENSE_KEY=VX3-XXXX-XXXX-XXXX-XXXX
 LICENSE_GRACE_PERIOD=168h      # 7 jours
 LICENSE_INSECURE_SKIP_VERIFY=false  # Pour certificats self-signed

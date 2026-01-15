@@ -75,7 +75,7 @@ docker exec vigilance_clickhouse clickhouse-client \
 
 1. Verify internet connectivity:
 ```bash
-curl -I https://vigilancexkey.cloudcomputing.lu
+curl -I https://vgxkey.vigilancex.lu
 ```
 
 2. Check machine ID exists:

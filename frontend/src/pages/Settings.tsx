@@ -185,7 +185,7 @@ const defaultPluginConfigs: PluginConfig[] = [
     name: 'VGX Neural-Sync',
     type: 'neural_sync' as any,
     fields: [
-      { key: 'NEURAL_SYNC_SERVER_URL', label: 'VigilanceKey Server URL', type: 'text', value: '', placeholder: 'https://vigilancexkey.cloudcomputing.lu' },
+      { key: 'NEURAL_SYNC_SERVER_URL', label: 'VigilanceKey Server URL', type: 'text', value: '', placeholder: 'https://vgxkey.vigilancex.lu' },
       { key: 'NEURAL_SYNC_LICENSE_KEY', label: 'License Key', type: 'password', value: '', placeholder: 'VX3-XXXX-XXXX-XXXX-XXXX' },
       { key: 'NEURAL_SYNC_HARDWARE_ID', label: 'Hardware ID', type: 'text', value: '', placeholder: 'Auto-filled from license' },
     ],
@@ -2356,7 +2356,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.55.110</p>
+        <p>VIGILANCE X v3.55.111</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

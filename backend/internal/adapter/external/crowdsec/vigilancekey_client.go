@@ -26,7 +26,7 @@ type VigilanceKeyClient struct {
 
 // VigilanceKeyConfig holds configuration for the VigilanceKey blocklist client
 type VigilanceKeyConfig struct {
-	ServerURL  string // VigilanceKey server URL (e.g., https://vigilancexkey.cloudcomputing.lu)
+	ServerURL  string // VigilanceKey server URL (e.g., https://vgxkey.vigilancex.lu)
 	LicenseKey string // VGX license key
 	HardwareID string // VGX hardware ID
 }

@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.55.110 | **Derniere mise a jour**: 2026-01-15
+> **Version**: 3.55.111 | **Derniere mise a jour**: 2026-01-15
 
 Ce fichier sert de memoire persistante pour Claude Code. Il contient les **regles, conventions et workflows** du projet VIGILANCE X.
 
@@ -1101,7 +1101,7 @@ ADMIN_PASSWORD=VigilanceX2024!
 
 # License (v3.0)
 LICENSE_ENABLED=true
-LICENSE_SERVER_URL=https://vigilancexkey.cloudcomputing.lu
+LICENSE_SERVER_URL=https://vgxkey.vigilancex.lu
 LICENSE_KEY=xxx
 LICENSE_GRACE_PERIOD=168h  # 7 jours
 
