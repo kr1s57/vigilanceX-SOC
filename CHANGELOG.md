@@ -7,6 +7,22 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.55.114] - 2026-01-16
+
+### Fixed
+- **Fresh Deploy License Key**: Correction critique du bug ou la clé de licence trial n'était pas transmise au client VGX
+  - VGXKey: `LicenseStatus` inclut maintenant `license_key` dans la réponse JSON
+  - VGXKey: `ToStatus()` retourne la clé de licence
+  - VGX Client: `FreshDeployResponse.License` inclut maintenant `LicenseKey`
+  - VGX Client: `FreshDeploy()` stocke la clé reçue de VGXKey
+  - Le sync de licence fonctionne maintenant correctement après fresh deploy
+
+### Technical
+- `vigilanceKey/backend/internal/entity/license.go`: Ajout `LicenseKey` à `LicenseStatus` + `ToStatus()`
+- `backend/internal/license/client.go`: Ajout `LicenseKey` à `FreshDeployResponse.License` + stockage dans `FreshDeploy()`
+
+---
+
 ## [3.55.113] - 2026-01-16
 
 ### Fixed

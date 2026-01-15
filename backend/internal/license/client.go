@@ -126,6 +126,7 @@ type FreshDeployResponse struct {
 		ExpiresAt        time.Time `json:"expires_at,omitempty"`
 		DaysRemaining    int       `json:"days_remaining,omitempty"`
 		Features         []string  `json:"features,omitempty"`
+		LicenseKey       string    `json:"license_key,omitempty"` // v3.55.114: Added to receive key from VGXKey
 		DeploymentType   string    `json:"deployment_type,omitempty"`
 		FirewallDetected bool      `json:"firewall_detected"`
 		AskProAvailable  bool      `json:"ask_pro_available"`
@@ -745,6 +746,7 @@ func (c *Client) FreshDeploy(ctx context.Context, email, hostname string) (*Fres
 	if freshResp.License != nil {
 		c.mu.Lock()
 		c.license = &LicenseInfo{
+			LicenseKey:   freshResp.License.LicenseKey, // v3.55.114: Store the key from VGXKey
 			CustomerName: freshResp.License.CustomerName,
 			ExpiresAt:    freshResp.License.ExpiresAt,
 			Features:     freshResp.License.Features,
@@ -760,6 +762,7 @@ func (c *Client) FreshDeploy(ctx context.Context, email, hostname string) (*Fres
 		}
 
 		slog.Info("Trial license registered",
+			"license_key", freshResp.License.LicenseKey,
 			"status", freshResp.License.Status,
 			"days_remaining", freshResp.License.DaysRemaining)
 	}
