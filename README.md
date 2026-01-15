@@ -478,17 +478,25 @@ Les bases de données VIGILANCE X (ClickHouse, Redis) ne sont accessibles que de
 ### 1. Cloner le dépôt
 ```bash
 git clone https://github.com/kr1s57/vigilanceX-SOC.git
-cd vigilanceX-SOC/docker
+cd vigilanceX-SOC
 ```
 
 ### 2. Configurer l'environnement
 ```bash
-cp .env.example .env
-nano .env
+cp .env.example docker/.env
+nano docker/.env
 ```
+
+**Variables essentielles à modifier :**
+- `CLICKHOUSE_PASSWORD` — Mot de passe base de données
+- `REDIS_PASSWORD` — Mot de passe cache Redis
+- `JWT_SECRET` — Clé secrète JWT (générer avec `openssl rand -hex 32`)
+- `SOPHOS_HOST` — IP de votre firewall Sophos XGS
+- `SOPHOS_PASSWORD` — Mot de passe API Sophos
 
 ### 3. Démarrer les services
 ```bash
+cd docker
 docker compose up -d
 ```
 
@@ -497,6 +505,8 @@ docker compose up -d
 https://votre-serveur-ip
 Identifiants par défaut : admin / VigilanceX2024!
 ```
+
+> **Important** : Changez le mot de passe admin dès la première connexion via Settings > User Management.
 
 ### Variables d'Environnement Essentielles
 
