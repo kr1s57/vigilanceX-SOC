@@ -248,6 +248,11 @@ jobs:
     if: success()
 
     steps:
+      - name: Checkout main repo (for docker-compose.prod.yml)
+        uses: actions/checkout@v4
+        with:
+          path: main-repo
+
       - name: Checkout client repo
         uses: actions/checkout@v4
         with:
@@ -263,12 +268,26 @@ jobs:
         run: |
           cd client-repo
 
-          # Update image tags in docker-compose.yml (in docker/ folder)
+          # Copy production docker-compose from main repo
+          if [ -f ../main-repo/docker/docker-compose.prod.yml ]; then
+            cp ../main-repo/docker/docker-compose.prod.yml docker/docker-compose.yml
+            echo "Copied docker-compose.prod.yml to client repo"
+          fi
+
+          # Update image tags to specific version
           if [ -f docker/docker-compose.yml ]; then
-            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-api:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-api:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
-            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-frontend:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-frontend:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
-            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-detect2ban:.*|ghcr.io/${{ github.repository_owner }}/vigilancex-detect2ban:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
-            echo "Updated docker/docker-compose.yml"
+            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-api:\${VGX_VERSION:-latest}|ghcr.io/${{ github.repository_owner }}/vigilancex-api:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
+            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-frontend:\${VGX_VERSION:-latest}|ghcr.io/${{ github.repository_owner }}/vigilancex-frontend:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
+            sed -i "s|ghcr.io/${{ github.repository_owner }}/vigilancex-detect2ban:\${VGX_VERSION:-latest}|ghcr.io/${{ github.repository_owner }}/vigilancex-detect2ban:${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
+            # Update version comment in file
+            sed -i "s|# Version:.*|# Version: ${{ steps.version.outputs.VERSION }}|g" docker/docker-compose.yml
+            echo "Updated docker/docker-compose.yml with version ${{ steps.version.outputs.VERSION }}"
+          fi
+
+          # Copy .env.example from main repo
+          if [ -f ../main-repo/.env.example ]; then
+            cp ../main-repo/.env.example docker/.env.example
+            echo "Copied .env.example to client repo"
           fi
 
           # Update VERSION file
@@ -315,7 +334,7 @@ jobs:
           done
 
           # Only add specific allowed changes
-          git add docker/docker-compose.yml VERSION 2>/dev/null || true
+          git add docker/docker-compose.yml docker/.env.example VERSION 2>/dev/null || true
 
           # Commit changes (version update + any sensitive file removals)
           git commit -m "chore: update to v${{ steps.version.outputs.VERSION }}" || echo "No changes to commit"
