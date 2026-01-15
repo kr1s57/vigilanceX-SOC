@@ -1,13 +1,19 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.55.103 | **Derniere mise a jour**: 2026-01-15
+> **Version**: 3.55.104 | **Derniere mise a jour**: 2026-01-15
 
 Ce fichier sert de memoire persistante pour Claude Code. Il contient les **regles, conventions et workflows** du projet VIGILANCE X.
 
 ---
 
-## Documentation Interne
+## Documentation du Projet
 
+### Fichiers Publics (sur repo public)
+| Fichier | Contenu |
+|---------|---------|
+| **README.md** | Documentation client - guide utilisateur et admin |
+
+### Fichiers Internes (repo prive uniquement)
 | Fichier | Contenu |
 |---------|---------|
 | **CLAUDE.md** (ce fichier) | Regles critiques, conventions, workflows, status features |
