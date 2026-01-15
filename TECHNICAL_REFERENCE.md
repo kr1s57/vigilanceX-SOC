@@ -1,6 +1,6 @@
 # VIGILANCE X - Technical Reference
 
-> **Version**: 3.55.104 | **Derniere mise a jour**: 2026-01-15
+> **Version**: 3.55.105 | **Derniere mise a jour**: 2026-01-15
 
 Ce fichier contient la reference technique complete du projet VIGILANCE X.
 Pour les regles, conventions et workflows, voir `CLAUDE.md`.
@@ -1277,6 +1277,42 @@ Score = 20 * (SPF + DKIM + DMARC + MX + DNSSEC)
 - DNSSEC valid: +20
 Total: 0-100
 ```
+
+---
+
+## Backups
+
+### Paths
+
+| Serveur | Path | Contenu |
+|---------|------|---------|
+| **vigilanceX** (10.25.72.28) | `/opt/vigilanceX/backups/` | ClickHouse, Redis, code |
+| **vigilanceKey** (10.56.126.126) | `/opt/vigilanceKey/backups/` | PostgreSQL, code |
+
+### Fichiers de Backup
+
+**vigilanceX:**
+- `clickhouse_YYYYMMDD_HHMMSS.tar.gz` - Donnees ClickHouse
+- `redis_YYYYMMDD_HHMMSS.rdb` - Snapshot Redis
+- `vigilanceX_code_YYYYMMDD_HHMMSS.tar.gz` - Code source
+
+**vigilanceKey:**
+- `postgres_YYYYMMDD_HHMMSS.sql.gz` - Dump PostgreSQL
+- `vigilancekey_code_YYYYMMDD_HHMMSS.tar.gz` - Code source
+
+### Scripts
+
+```bash
+# Backup vigilanceX (ClickHouse + Redis)
+/opt/vigilanceX/scripts/backup.sh
+
+# Backup to Forgejo (Git)
+/opt/vigilanceX/scripts/backup-to-forgejo.sh --all
+```
+
+### Retention
+
+Les backups sont conserves avec rotation automatique (7 derniers).
 
 ---
 

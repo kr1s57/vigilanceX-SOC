@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.55.104 | **Derniere mise a jour**: 2026-01-15
+> **Version**: 3.55.105 | **Derniere mise a jour**: 2026-01-15
 
 Ce fichier sert de memoire persistante pour Claude Code. Il contient les **regles, conventions et workflows** du projet VIGILANCE X.
 
@@ -48,6 +48,8 @@ Le repo PUBLIC ne doit contenir **QUE**:
 | `docs/` | Documentation interne complete |
 | `BUGFIXSESSION/` | Sessions de debug |
 | `FEATURESPROMPT/` | Prompts de features |
+| `.github/` | Workflows CI/CD, secrets, configs internes |
+| `backups/` | Donnees de backup sensibles |
 
 **INFORMATIONS A NE JAMAIS REVELER PUBLIQUEMENT:**
 - Seuils de detection (WAF thresholds, nombre d'events)
