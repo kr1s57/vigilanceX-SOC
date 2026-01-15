@@ -1,6 +1,6 @@
 # VIGILANCE X - Production Docker Compose
 # Uses pre-built GHCR images (no local build required)
-# Version: 3.55.111
+# Version: 3.55.112
 
 version: '3.8'
 

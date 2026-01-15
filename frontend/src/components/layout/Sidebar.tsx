@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard,
   Shield,
@@ -267,9 +267,9 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 bg-card border-r border-border flex flex-col">
-      {/* Logo */}
+      {/* Logo - Clickable to Dashboard */}
       <div className="h-16 flex items-center px-6 border-b border-border">
-        <div className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
             {/* Geometric Eye - Abstract Iris */}
             <svg
@@ -293,7 +293,7 @@ export function Sidebar() {
             <h1 className="font-bold text-lg">VIGILANCE X</h1>
             <p className="text-xs text-muted-foreground">Security Operations</p>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Navigation */}

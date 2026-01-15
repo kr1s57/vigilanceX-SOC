@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 import { licenseApi, LicenseStatus } from '@/lib/api'
+import { useAuth } from './AuthContext'
 
 interface LicenseContextType {
   status: LicenseStatus | null
@@ -22,6 +23,8 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<LicenseStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { isAuthenticated } = useAuth()
+  const prevAuthRef = useRef<boolean | null>(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -173,6 +176,31 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // Watch for authentication changes (login/logout)
+  // v3.55.112: Fix license persistence issue after logout
+  useEffect(() => {
+    // Skip on initial mount
+    if (prevAuthRef.current === null) {
+      prevAuthRef.current = isAuthenticated
+      return
+    }
+
+    // Detect auth state change
+    if (prevAuthRef.current !== isAuthenticated) {
+      prevAuthRef.current = isAuthenticated
+
+      if (!isAuthenticated) {
+        // User logged out - reset license state so it re-checks on next login
+        setStatus(null)
+        setError(null)
+        setIsLoading(true)
+      } else {
+        // User logged in - refresh license status from backend
+        refresh()
+      }
+    }
+  }, [isAuthenticated, refresh])
 
   // Refresh periodically (every 5 minutes)
   useEffect(() => {

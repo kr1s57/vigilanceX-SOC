@@ -7,6 +7,29 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.55.112] - 2026-01-15
+
+### Added
+- **Clickable Logo**: Le logo VIGILANCE X dans la sidebar est maintenant cliquable et redirige vers le dashboard
+
+### Fixed
+- **License Persistence After Logout**: Correction du bug ou la licence etait re-demandee apres logout/login meme quand elle etait deja synchronisee
+  - LicenseContext detecte maintenant les changements d'authentification
+  - Reset de l'etat licence au logout, refresh automatique au login
+
+### Improved
+- **VPS Deployment**: Mise a jour de la documentation pour simplifier le deploiement
+  - docker-compose utilise `${VGX_VERSION:-latest}` pour les images GHCR
+  - README avec instructions detaillees pour .env
+  - Ajout de la configuration reverse proxy recommandee
+
+### Technical
+- LicenseContext.tsx: Ajout de useAuth() hook pour detecter les changements d'auth
+- client-dist/deploy/docker-compose.yml: Images GHCR avec version dynamique
+- client-dist/README.md: Instructions de deploiement ameliorees
+
+---
+
 ## [3.55.102] - 2026-01-15
 
 ### Added

@@ -2,7 +2,7 @@
 
 **La plateforme SOC temps réel conçue pour Sophos XGS**
 
-[![Version](https://img.shields.io/badge/version-3.0.1-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-3.55.112-blue.svg)]()
 [![License](https://img.shields.io/badge/license-Commercial-green.svg)]()
 [![Sophos](https://img.shields.io/badge/Sophos-XGS%20Ready-red.svg)]()
 
@@ -139,24 +139,99 @@ VIGILANCE X ingère et structure **tous** vos logs Sophos XGS :
 
 ## Installation Rapide
 
+### Étape 1 - Cloner et configurer
+
 ```bash
-# 1. Cloner le repository
+# Cloner le repository
 git clone https://github.com/kr1s57/vigilanceX-SOC.git
 cd vigilanceX-SOC
 
-# 2. Se connecter au registry Docker
+# Se connecter au registry Docker (token fourni avec licence)
 echo "VOTRE_TOKEN" | docker login ghcr.io -u kr1s57 --password-stdin
+```
 
-# 3. Configurer
-cp deploy/config.template deploy/.env
-nano deploy/.env
+### Étape 2 - Créer le fichier .env
 
-# 4. Installer et démarrer
-./vigilance.sh install
-./vigilance.sh start
+Créer le fichier `deploy/.env` avec le contenu suivant :
 
-# 5. Accéder au dashboard
-# https://VOTRE_IP (admin / VigilanceX2024!)
+```bash
+# ======================================
+# VIGILANCE X - Configuration
+# ======================================
+
+# === Base de données ===
+CLICKHOUSE_USER=vigilance
+CLICKHOUSE_PASSWORD=VOTRE_MOT_DE_PASSE_CH
+
+# === Cache Redis ===
+REDIS_PASSWORD=VOTRE_MOT_DE_PASSE_REDIS
+
+# === Authentification ===
+JWT_SECRET=votre-cle-secrete-jwt-minimum-32-caracteres
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=VigilanceX2024!
+
+# === Sophos XGS Integration ===
+SOPHOS_HOST=IP_DE_VOTRE_SOPHOS_XGS
+SOPHOS_PORT=4444
+SOPHOS_USER=admin
+SOPHOS_PASSWORD=VOTRE_MOT_DE_PASSE_XGS
+
+# === Licence (optionnel si Fresh Deploy) ===
+LICENSE_KEY=
+
+# === Version (optionnel, défaut: latest) ===
+# VGX_VERSION=3.55.112
+```
+
+### Étape 3 - Démarrer les services
+
+```bash
+cd deploy
+docker compose pull
+docker compose up -d
+```
+
+### Étape 4 - Accéder au dashboard
+
+```
+URL: http://VOTRE_IP:3000
+Login: admin
+Password: VigilanceX2024!
+```
+
+> **Note** : Après le premier login, configurez votre licence via l'interface ou utilisez Fresh Deploy pour un trial de 15 jours.
+
+---
+
+## Déploiement via Reverse Proxy (WAF/nginx)
+
+Si vous accédez à VIGILANCE X via un reverse proxy (Sophos WAF, nginx, etc.) :
+
+```bash
+# Accès direct au backend pour tests
+curl http://localhost:8080/health
+
+# Le frontend est sur le port 3000
+curl http://localhost:3000
+```
+
+**Configuration nginx recommandée** :
+```nginx
+location / {
+    proxy_pass http://vigilance_frontend;
+}
+
+location /api/ {
+    proxy_pass http://vigilance_backend:8080;
+}
+
+location /ws {
+    proxy_pass http://vigilance_backend:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
 ```
 
 ---
