@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -297,8 +298,16 @@ func (c *Client) LoadFromStore() error {
 		Status:       stored.Status,
 	}
 
-	// Restore IsValid based on status if it was active
-	if stored.Status == "active" && stored.ExpiresAt.After(time.Now()) {
+	// Restore IsValid based on status if license is valid
+	// v3.55.113: Fix - support trial statuses (FDEPLOY, TRIAL, trial, etc.) not just "active"
+	statusLower := strings.ToLower(stored.Status)
+	validStatuses := map[string]bool{
+		"active":  true,
+		"trial":   true,
+		"fdeploy": true,
+		"asked":   true, // Asked for Pro - still valid trial
+	}
+	if validStatuses[statusLower] && stored.ExpiresAt.After(time.Now()) {
 		c.license.IsValid = true
 	}
 

@@ -7,6 +7,19 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.55.113] - 2026-01-16
+
+### Fixed
+- **License Persistence for Trial Status**: Correction critique du bug ou les licences trial (FDEPLOY, TRIAL) n'etaient pas correctement restaurees apres un restart du backend
+  - `LoadFromStore()` ne supportait que le status "active", pas les status trial
+  - Ajout du support pour les status: active, trial, fdeploy, asked (case-insensitive)
+  - Les utilisateurs ne seront plus forces de re-demander une licence apres logout/login
+
+### Technical
+- `backend/internal/license/client.go`: `LoadFromStore()` utilise maintenant une map de statuts valides
+
+---
+
 ## [3.55.112] - 2026-01-15
 
 ### Added
@@ -30,6 +43,14 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.55.111] - 2026-01-15
+
+### Fixed
+- **Domain Migration**: Migration de domaine completee
+- **Password Fix**: Correction du mot de passe par defaut
+
+---
+
 ## [3.55.102] - 2026-01-15
 
 ### Added
@@ -48,6 +69,45 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Technical
 - Backend: entity/trackip.go, repository/trackip_repo.go, usecase/trackip/service.go, handlers/trackip.go
 - Frontend: pages/TrackIP.tsx (810 lignes), types, api client
+
+---
+
+## [3.55.101] - 2026-01-14
+
+### Fixed
+- **Report Recipients Persistence**: Correction du bug ou les emails Report Recipients ne persistaient pas
+  - Ajout du champ `report_recipients` dans `MergeAndUpdateSettings()` (notifications/service.go)
+- **Unified Attack History**: Section Attack History unifiee dans IPThreatModal
+  - Fusion des sections "Attack History" et "WAF Attack History"
+- **Attack History API 500 Error**: Correction critique du filtrage par IP
+  - Probleme: ClickHouse collision d'alias `There is no supertype for types String, IPv4`
+  - Solution: Prefixes de table explicites (`e.` pour events, `m.` pour modsec_logs)
+
+---
+
+## [3.55.100] - 2026-01-14
+
+### Added
+- **D2B v2 Phase 2 - Decision Engine avec logique zones**
+  - Engine D2B v2 avec nouvelles interfaces: `GeoIPClient`, `GeoZoneRepository`, `PendingBansRepository`
+  - Logique de decision par zone geographique (Hostile/Authorized/Neutral)
+  - Service Bans avec `BanIPWithTier()` et `UnbanIPWithConditional()`
+  - Handler Pending Bans pour gestion file d'attente admin
+  - Routes `/api/v1/pending-bans/*` ajoutees
+
+---
+
+## [3.54.100] - 2026-01-14
+
+### Added
+- **Vigimail Checker Module**: Nouveau module complet de verification emails et securite DNS
+  - Migration ClickHouse `013_vigimail_checker.sql` (5 tables)
+  - Clients externes: HIBP v3, LeakCheck.io, DNS checker natif
+  - 14 endpoints HTTP sous `/api/v1/vigimail/*`
+  - Page `VigimailChecker.tsx` avec UI complete
+  - Worker background configurable (6h/12h/24h/48h/7d)
+- **Settings Reorganisation**: Integrations reorganisees par categories
+  - 5 categories: Sophos Firewall, CrowdSec, Threat Intelligence, Email & Notifications, Premium
 
 ---
 

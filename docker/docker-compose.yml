@@ -81,14 +81,11 @@ services:
   # Backend Go - API REST
   # ============================================
   backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    image: ghcr.io/kr1s57/vigilancex-api:${VGX_VERSION:-latest}
     container_name: vigilance_backend
     ports:
       - "8080:8080"
     volumes:
-      - ../backend/scenarios:/app/scenarios:ro
       - ./ssh/id_rsa_xgs:/app/.ssh/id_rsa_xgs:ro
       - backend_data:/app/data
       - backend_config:/app/config
@@ -182,12 +179,8 @@ services:
   # Detect2Ban Engine - Detection daemon
   # ============================================
   detect2ban:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile.detect2ban
+    image: ghcr.io/kr1s57/vigilancex-detect2ban:${VGX_VERSION:-latest}
     container_name: vigilance_detect2ban
-    volumes:
-      - ../backend/scenarios:/app/scenarios:ro
     environment:
       APP_ENV: ${APP_ENV:-production}
       CLICKHOUSE_HOST: clickhouse
@@ -212,12 +205,7 @@ services:
   # Frontend React
   # ============================================
   frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
-        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8080/ws}
+    image: ghcr.io/kr1s57/vigilancex-frontend:${VGX_VERSION:-latest}
     container_name: vigilance_frontend
     ports:
       - "3000:80"
