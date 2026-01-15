@@ -274,12 +274,50 @@ jobs:
           # Update VERSION file
           echo "${{ steps.version.outputs.VERSION }}" > VERSION
 
-      - name: Commit and push
+      - name: Remove sensitive files and commit
         run: |
           cd client-repo
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add .
+
+          # CRITICAL: Remove sensitive/internal files that should NEVER be in public repo
+          # These files contain internal processes, thresholds, and security details
+          SENSITIVE_FILES=(
+            "CLAUDE.md"
+            "TECHNICAL_REFERENCE.md"
+            "CHANGELOG.md"
+            "RELEASE.md"
+            "DESCRIPTIFDET.md"
+            "project.md"
+          )
+          SENSITIVE_DIRS=(
+            "docs"
+            "BUGFIXSESSION"
+            "FEATURESPROMPT"
+            ".github"
+            "backups"
+          )
+
+          # Remove sensitive files if they exist
+          for file in "${SENSITIVE_FILES[@]}"; do
+            if [ -f "$file" ]; then
+              git rm -f "$file" 2>/dev/null || rm -f "$file"
+              echo "Removed sensitive file: $file"
+            fi
+          done
+
+          # Remove sensitive directories if they exist
+          for dir in "${SENSITIVE_DIRS[@]}"; do
+            if [ -d "$dir" ]; then
+              git rm -rf "$dir" 2>/dev/null || rm -rf "$dir"
+              echo "Removed sensitive directory: $dir"
+            fi
+          done
+
+          # Only add specific allowed changes
+          git add docker/docker-compose.yml VERSION 2>/dev/null || true
+
+          # Commit changes (version update + any sensitive file removals)
           git commit -m "chore: update to v${{ steps.version.outputs.VERSION }}" || echo "No changes to commit"
           git push || echo "Nothing to push"
 

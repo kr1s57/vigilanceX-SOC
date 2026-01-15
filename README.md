@@ -58,6 +58,7 @@ VIGILANCE X centralise la supervision et la réponse active pour toute votre inf
 
 ### Guide Administrateur
 - [Prérequis Système](#prérequis-système)
+- [Sécurité et Déploiement](#sécurité-et-déploiement)
 - [Démarrage Rapide](#démarrage-rapide)
 - [Configuration Sophos XGS](#configuration-sophos-xgs)
 - [Commandes de Maintenance](#commandes-de-maintenance)
@@ -384,6 +385,91 @@ Hub central de configuration pour toutes les fonctionnalités VIGILANCE X.
 | 443 | TCP | Interface web HTTPS |
 | 514 | UDP | Réception Syslog |
 | 1514 | TCP | Réception Syslog (TCP) |
+
+---
+
+## Sécurité et Déploiement
+
+### Architecture Sécurisée Recommandée
+
+> **VIGILANCE X est un outil SIEM critique qui ne doit JAMAIS être exposé sur Internet.**
+
+Comme tout outil de sécurité (firewall, SIEM, console d'administration), VIGILANCE X doit être déployé dans un environnement réseau sécurisé et isolé.
+
+### Recommandations de Déploiement
+
+| Aspect | Recommandation |
+|--------|----------------|
+| **Exposition réseau** | Réseau interne uniquement — Aucune exposition Internet |
+| **VLAN** | Déployer dans un VLAN dédié à l'administration sécurité |
+| **Accès réseau** | Limiter aux IPs des administrateurs sécurité uniquement |
+| **Accès distant** | VPN obligatoire pour tout accès hors site |
+| **Utilisateurs** | Restreindre aux membres autorisés (équipe sécurité/infra) |
+
+### Pourquoi cette isolation ?
+
+VIGILANCE X contient et traite des informations sensibles :
+- Logs de sécurité complets (WAF, IPS, VPN, ATP)
+- Adresses IP internes et externes
+- Patterns d'attaques et signatures
+- Configuration du firewall Sophos XGS
+- Données de Threat Intelligence
+
+Exposer cette interface reviendrait à donner aux attaquants :
+- Une cartographie complète de votre infrastructure
+- Les règles de détection et leurs seuils
+- Les IPs bannies (qu'ils pourraient contourner)
+- Des vecteurs d'attaque potentiels vers le firewall
+
+### Modèle d'Accès Recommandé
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        INTERNET                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ (Aucun accès direct)
+                              ✕
+┌─────────────────────────────────────────────────────────────┐
+│                     FIREWALL (XGS)                          │
+│                   VPN Gateway + Rules                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌───────────────┐   ┌─────────────────┐   ┌───────────────────┐
+│ VLAN Servers  │   │ VLAN Admin/Sécu │   │    VPN Users      │
+│               │   │                 │   │  (Autorisés)      │
+│  Syslog ────────► │  VIGILANCE X    │ ◄─────────────────────┤
+│               │   │  (Port 443)     │   │                   │
+└───────────────┘   └─────────────────┘   └───────────────────┘
+                              │
+                    Accès limité aux:
+                    • Administrateurs infra
+                    • Équipe sécurité
+                    • Auditeurs autorisés
+```
+
+### Règles Firewall Suggérées
+
+```
+# Autoriser Syslog depuis les serveurs
+ALLOW UDP/514, TCP/1514 FROM servers_vlan TO vigilancex_ip
+
+# Autoriser HTTPS depuis VLAN Admin uniquement
+ALLOW TCP/443 FROM admin_vlan TO vigilancex_ip
+
+# Autoriser HTTPS depuis VPN (utilisateurs autorisés)
+ALLOW TCP/443 FROM vpn_pool TO vigilancex_ip
+
+# Bloquer tout autre accès
+DENY ANY TO vigilancex_ip
+```
+
+### Accès Base de Données
+
+Les bases de données VIGILANCE X (ClickHouse, Redis) ne sont accessibles que depuis les conteneurs Docker internes. Seuls les administrateurs qui implémentent, administrent et opèrent la plateforme doivent avoir accès au serveur hébergeant VIGILANCE X.
 
 ---
 
