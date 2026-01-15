@@ -503,7 +503,7 @@ docker compose up -d
 ### 4. Accéder à l'interface
 ```
 https://votre-serveur-ip
-Identifiants par défaut : admin / VigilanceX2024!
+Identifiants par défaut : admin / VigilanceX2024
 ```
 
 > **Important** : Changez le mot de passe admin dès la première connexion via Settings > User Management.
