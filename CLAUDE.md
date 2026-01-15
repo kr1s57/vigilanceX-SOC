@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.55.101 | **Derniere mise a jour**: 2026-01-14
+> **Version**: 3.55.102 | **Derniere mise a jour**: 2026-01-15
 
 Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
 
@@ -1628,6 +1628,28 @@ tail -f /tmp/claude-hooks.log
 ---
 
 ## Notes de Version Recentes
+
+### v3.55.102 (2026-01-15)
+- **Track IP Feature Complete**: Outil de recherche forensique IP/hostname
+  - Recherche une IP ou hostname a travers toutes les tables de logs
+  - 8 categories de recherche parallele: events, waf, modsec, firewall, vpn, atp, antivirus, heartbeat
+  - Enrichissement GeoIP automatique
+  - Summary avec severity breakdown et time range
+  - **Fichiers backend**:
+    - `backend/internal/entity/trackip.go` - Entites (166 lignes)
+    - `backend/internal/adapter/repository/clickhouse/trackip_repo.go` - Repository (800 lignes)
+    - `backend/internal/usecase/trackip/service.go` - Service avec recherche parallele
+    - `backend/internal/adapter/controller/http/handlers/trackip.go` - Handler HTTP
+  - **Fichiers frontend**:
+    - `frontend/src/pages/TrackIP.tsx` - Page complete (810 lignes)
+    - `frontend/src/types/index.ts` - Types TrackIP
+    - `frontend/src/lib/api.ts` - Client API trackIPApi
+  - **API Endpoint**: `GET /api/v1/track-ip?query={ip}&period={1h|24h|7d|30d}`
+  - **Navigation**: Sidebar > Network > Track IP
+- **Fix WAF Events in Track IP**: La section WAF Events utilise maintenant les logs WAF Sophos
+  - Nouvelle methode `SearchWAFSophos()` qui filtre `log_type='WAF'` dans la table events
+  - Renommage "XGS Events" en "Firewall Events"
+  - Section WAF affiche les vrais logs WAF Sophos (pas ModSecurity)
 
 ### v3.55.101 (2026-01-14)
 - **Fix Report Recipients Persistence**: Correction du bug ou les emails Report Recipients ne persistaient pas

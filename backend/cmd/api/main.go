@@ -40,6 +40,7 @@ import (
 	"github.com/kr1s57/vigilancex/internal/usecase/reports"
 	"github.com/kr1s57/vigilancex/internal/usecase/retention"
 	"github.com/kr1s57/vigilancex/internal/usecase/threats"
+	"github.com/kr1s57/vigilancex/internal/usecase/trackip"
 	vigimailuc "github.com/kr1s57/vigilancex/internal/usecase/vigimail"
 	"github.com/kr1s57/vigilancex/internal/usecase/wafwatcher"
 
@@ -87,6 +88,7 @@ func main() {
 	crowdsecBlocklistRepo := clickhouse.NewCrowdSecBlocklistRepository(chConn) // v3.53: CrowdSec Blocklist
 	apiUsageRepo := clickhouse.NewAPIUsageRepository(chConn)                   // v3.53: API Usage Tracking
 	vigimailRepo := clickhouse.NewVigimailRepository(chConn)                   // v3.54: Vigimail Checker
+	trackIPRepo := clickhouse.NewTrackIPRepository(chConn.Conn())              // v3.56: TrackIP forensic search
 
 	// v3.53: API Usage Tracking Service
 	apiUsageService := apiusage.NewService(apiUsageRepo)
@@ -469,6 +471,12 @@ func main() {
 	}
 	vigimailHandler := handlers.NewVigimailHandler(vigimailService)
 
+	// v3.56: TrackIP forensic search - search IP/hostname across all log tables
+	trackIPService := trackip.NewService(trackIPRepo, logger)
+	trackIPService.SetGeoIPProvider(geoIPClient) // Reuse existing GeoIP client
+	trackIPHandler := handlers.NewTrackIPHandler(trackIPService)
+	logger.Info("TrackIP forensic search service initialized")
+
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
 	go wsHub.Run()
@@ -783,6 +791,9 @@ func main() {
 				r.Get("/ports", handlers.NotImplemented)
 				r.Get("/interfaces", handlers.NotImplemented)
 			})
+
+			// TrackIP (v3.56 - Forensic IP/hostname search across all logs)
+			r.Get("/track-ip", trackIPHandler.Search)
 
 			// VPN
 			r.Route("/vpn", func(r chi.Router) {

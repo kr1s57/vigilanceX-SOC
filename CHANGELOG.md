@@ -7,6 +7,27 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.55.102] - 2026-01-15
+
+### Added
+- **Track IP Feature**: Nouvel outil de recherche forensique pour traquer une IP/hostname a travers tous les logs
+  - 8 categories de recherche parallele: events, waf, modsec, firewall, vpn, atp, antivirus, heartbeat
+  - Enrichissement GeoIP automatique
+  - Summary avec severity breakdown et time range
+  - API: `GET /api/v1/track-ip?query={ip}&period={1h|24h|7d|30d}`
+  - Navigation: Sidebar > Network > Track IP
+
+### Fixed
+- **WAF Events in Track IP**: La section WAF Events utilise maintenant les vrais logs WAF Sophos
+  - Nouvelle methode `SearchWAFSophos()` filtrant `log_type='WAF'` dans la table events
+  - Renommage "XGS Events" en "Firewall Events" pour plus de clarte
+
+### Technical
+- Backend: entity/trackip.go, repository/trackip_repo.go, usecase/trackip/service.go, handlers/trackip.go
+- Frontend: pages/TrackIP.tsx (810 lignes), types, api client
+
+---
+
 ## [3.53.106] - 2026-01-14
 
 ### Fixed

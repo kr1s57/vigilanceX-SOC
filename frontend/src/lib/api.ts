@@ -1474,3 +1474,30 @@ export const vigimailApi = {
   },
 }
 
+// ==============================================
+// TrackIP API (v3.56 - IP/Hostname Tracking)
+// ==============================================
+
+import type { TrackIPResponse } from '../types'
+
+export const trackIPApi = {
+  // Search for IP or hostname activity across all log tables
+  search: async (params: {
+    query: string
+    start_time?: string
+    end_time?: string
+    period?: '1h' | '24h' | '7d' | '30d'
+    limit?: number
+  }): Promise<TrackIPResponse> => {
+    const queryParams = new URLSearchParams()
+    queryParams.append('query', params.query)
+    if (params.start_time) queryParams.append('start_time', params.start_time)
+    if (params.end_time) queryParams.append('end_time', params.end_time)
+    if (params.period) queryParams.append('period', params.period)
+    if (params.limit) queryParams.append('limit', String(params.limit))
+
+    const response = await api.get<TrackIPResponse>(`/track-ip?${queryParams}`)
+    return response.data
+  },
+}
+

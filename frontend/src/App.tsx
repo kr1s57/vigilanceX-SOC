@@ -17,6 +17,7 @@ import { RiskScoring } from '@/pages/RiskScoring'
 import { NeuralSync } from '@/pages/NeuralSync'
 import { CrowdSecBL } from '@/pages/CrowdSecBL'
 import { VigimailChecker } from '@/pages/VigimailChecker'
+import { TrackIP } from '@/pages/TrackIP'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 import UserManagement from '@/pages/UserManagement'
@@ -49,6 +50,7 @@ function App() {
                   <Route path="/crowdsec-bl" element={<CrowdSecBL />} />
                   <Route path="/neural-sync" element={<NeuralSync />} />
                   <Route path="/vigimail" element={<VigimailChecker />} />
+                  <Route path="/track-ip" element={<TrackIP />} />
                   {/* Admin-only routes */}
                   <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                   <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />

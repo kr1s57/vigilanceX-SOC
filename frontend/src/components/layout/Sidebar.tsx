@@ -25,6 +25,7 @@ import {
   Radar,
   ListX,
   Mail,
+  Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -98,6 +99,7 @@ const categories: NavCategory[] = [
     colorClass: 'text-purple-500',
     items: [
       { name: 'VPN & Network', href: '/vpn', icon: Network, colorClass: 'text-purple-500' },
+      { name: 'Track IP', href: '/track-ip', icon: Search, colorClass: 'text-blue-500' },
       { name: 'Risk Scoring', href: '/scoring', icon: Activity, colorClass: 'text-yellow-500' },
     ]
   },

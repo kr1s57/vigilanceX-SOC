@@ -853,3 +853,151 @@ export interface VigimailCheckHistory {
   leaks_found: number
   duration_ms: number
 }
+
+// ==============================================
+// TrackIP Types (v3.56 - IP/Hostname Tracking)
+// ==============================================
+
+export interface TrackIPQuery {
+  query: string
+  query_type: 'ip' | 'hostname'
+  start_time?: string
+  end_time?: string
+  limit: number
+}
+
+export interface TrackIPTimeRange {
+  start: string
+  end: string
+}
+
+export interface TrackIPSummary {
+  total_events: number
+  categories_found: number
+  first_seen?: string
+  last_seen?: string
+  unique_hostnames: string[]
+  unique_dst_ips: string[]
+  top_ports: number[]
+  severity_breakdown: Record<string, number>
+}
+
+export interface TrackIPCategoryResult {
+  count: number
+  events: unknown[]
+}
+
+export interface TrackIPGeoInfo {
+  country_code: string
+  country_name: string
+  city: string
+  asn: number
+  org: string
+}
+
+export interface TrackIPResponse {
+  query: string
+  query_type: 'ip' | 'hostname'
+  time_range: TrackIPTimeRange
+  summary: TrackIPSummary
+  categories: Record<string, TrackIPCategoryResult>
+  geo_info?: TrackIPGeoInfo
+}
+
+// Category-specific event types
+export interface TrackIPWAFEvent {
+  event_id: string
+  timestamp: string
+  log_type: string
+  category: string
+  severity: string
+  src_ip: string
+  dst_ip: string
+  src_port: number
+  dst_port: number
+  protocol: string
+  hostname: string
+  url: string
+  rule_id: string
+  rule_name: string
+  action: string
+  message: string
+}
+
+export interface TrackIPModSecEvent {
+  id: string
+  timestamp: string
+  unique_id: string
+  src_ip: string
+  hostname: string
+  uri: string
+  rule_id: string
+  rule_msg: string
+  attack_type: string
+  total_score: number
+  is_blocking: boolean
+}
+
+export interface TrackIPFirewallEvent {
+  event_id: string
+  timestamp: string
+  rule_name: string
+  src_ip: string
+  dst_ip: string
+  src_port: number
+  dst_port: number
+  protocol: string
+  action: string
+  src_zone: string
+  dst_zone: string
+  bytes: number
+  application: string
+}
+
+export interface TrackIPVPNEvent {
+  event_id: string
+  timestamp: string
+  event_type: string
+  vpn_type: string
+  user_name: string
+  src_ip: string
+  assigned_ip?: string
+  duration_seconds: number
+  bytes_in: number
+  bytes_out: number
+  geo_country?: string
+}
+
+export interface TrackIPATPEvent {
+  event_id: string
+  timestamp: string
+  src_ip: string
+  dst_ip: string
+  threat_name: string
+  threat_type: string
+  severity: string
+  action: string
+  url: string
+  user_name?: string
+}
+
+export interface TrackIPAntivirusEvent {
+  event_id: string
+  timestamp: string
+  src_ip: string
+  dst_ip: string
+  malware_name: string
+  malware_type: string
+  action: string
+  file_name: string
+  file_path?: string
+}
+
+export interface TrackIPHeartbeatEvent {
+  event_id: string
+  timestamp: string
+  endpoint_name: string
+  endpoint_ip: string
+  health_status: string
+  os_type?: string
+}
