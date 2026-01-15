@@ -1488,6 +1488,8 @@ export const trackIPApi = {
     end_time?: string
     period?: '1h' | '24h' | '7d' | '30d'
     limit?: number
+    offset?: number    // For pagination
+    category?: string  // For loading specific category only
   }): Promise<TrackIPResponse> => {
     const queryParams = new URLSearchParams()
     queryParams.append('query', params.query)
@@ -1495,6 +1497,8 @@ export const trackIPApi = {
     if (params.end_time) queryParams.append('end_time', params.end_time)
     if (params.period) queryParams.append('period', params.period)
     if (params.limit) queryParams.append('limit', String(params.limit))
+    if (params.offset) queryParams.append('offset', String(params.offset))
+    if (params.category) queryParams.append('category', params.category)
 
     const response = await api.get<TrackIPResponse>(`/track-ip?${queryParams}`)
     return response.data

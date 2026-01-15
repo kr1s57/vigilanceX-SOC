@@ -13,6 +13,7 @@ import {
   HeartPulse,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   X,
   MapPin,
   Building,
@@ -87,21 +88,38 @@ function ActionBadge({ action }: { action: string }) {
   )
 }
 
-// Category section component
-function CategorySection({
+// Items per page for pagination
+const PAGE_SIZE = 25
+
+// Category section component with pagination
+function CategorySection<T>({
   name,
   icon: Icon,
   iconColor,
   count,
+  events,
   renderTable,
 }: {
   name: string
   icon: React.ElementType
   iconColor: string
   count: number
-  renderTable: () => React.ReactNode
+  events: T[]
+  renderTable: (paginatedEvents: T[]) => React.ReactNode
 }) {
   const [isOpen, setIsOpen] = useState(count > 0)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const totalPages = Math.ceil(events.length / PAGE_SIZE)
+  const startIndex = (currentPage - 1) * PAGE_SIZE
+  const endIndex = startIndex + PAGE_SIZE
+  const paginatedEvents = events.slice(startIndex, endIndex)
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+    }
+  }
 
   return (
     <div className="bg-card rounded-xl border overflow-hidden">
@@ -128,8 +146,60 @@ function CategorySection({
         )}
       </button>
       {isOpen && count > 0 && (
-        <div className="border-t overflow-x-auto">
-          {renderTable()}
+        <div className="border-t">
+          <div className="overflow-x-auto">
+            {renderTable(paginatedEvents)}
+          </div>
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between p-3 border-t bg-muted/30">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1}-{Math.min(endIndex, events.length)} of {events.length}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {/* Page numbers */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number
+                  if (totalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i
+                  } else {
+                    pageNum = currentPage - 2 + i
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      className={`w-8 h-8 rounded text-sm font-medium transition-colors ${
+                        currentPage === pageNum
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-muted'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -196,7 +266,7 @@ export function TrackIP() {
       const response = await trackIPApi.search({
         query: query.trim(),
         period: period === 'custom' ? undefined : period,
-        limit: 100,
+        limit: 500, // Get all events for client-side pagination
       })
       setResult(response)
     } catch (err: unknown) {
@@ -493,12 +563,13 @@ export function TrackIP() {
           {/* Category Sections */}
           <div className="space-y-4">
             {/* Firewall Events (Traffic logs) */}
-            <CategorySection
+            <CategorySection<TrackIPWAFEvent>
               name="Firewall Events"
               icon={Shield}
               iconColor="bg-emerald-500/10 text-emerald-500"
               count={result.categories?.events?.count || 0}
-              renderTable={() => (
+              events={result.categories?.events?.events as TrackIPWAFEvent[] || []}
+              renderTable={(paginatedEvents) => (
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
@@ -512,7 +583,7 @@ export function TrackIP() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(result.categories?.events?.events as TrackIPWAFEvent[] || []).map((event, idx) => (
+                    {paginatedEvents.map((event, idx) => (
                       <tr key={idx} className="border-t hover:bg-muted/30 transition-colors">
                         <td className="py-2 px-3 whitespace-nowrap text-muted-foreground">
                           {new Date(event.timestamp).toLocaleString('fr-FR', {
@@ -545,12 +616,13 @@ export function TrackIP() {
             />
 
             {/* WAF Events (Sophos WAF) */}
-            <CategorySection
+            <CategorySection<TrackIPWAFEvent>
               name="WAF Events"
               icon={ShieldAlert}
               iconColor="bg-orange-500/10 text-orange-500"
               count={result.categories?.waf?.count || 0}
-              renderTable={() => (
+              events={result.categories?.waf?.events as TrackIPWAFEvent[] || []}
+              renderTable={(paginatedEvents) => (
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
@@ -564,7 +636,7 @@ export function TrackIP() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(result.categories?.waf?.events as TrackIPWAFEvent[] || []).map((event, idx) => (
+                    {paginatedEvents.map((event, idx) => (
                       <tr key={idx} className="border-t hover:bg-muted/30 transition-colors">
                         <td className="py-2 px-3 whitespace-nowrap text-muted-foreground">
                           {new Date(event.timestamp).toLocaleString('fr-FR', {
@@ -589,12 +661,13 @@ export function TrackIP() {
             />
 
             {/* VPN Events */}
-            <CategorySection
+            <CategorySection<TrackIPVPNEvent>
               name="VPN Events"
               icon={Lock}
               iconColor="bg-cyan-500/10 text-cyan-500"
               count={result.categories?.vpn?.count || 0}
-              renderTable={() => (
+              events={result.categories?.vpn?.events as TrackIPVPNEvent[] || []}
+              renderTable={(paginatedEvents) => (
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
@@ -608,7 +681,7 @@ export function TrackIP() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(result.categories?.vpn?.events as TrackIPVPNEvent[] || []).map((event, idx) => (
+                    {paginatedEvents.map((event, idx) => (
                       <tr key={idx} className="border-t hover:bg-muted/30 transition-colors">
                         <td className="py-2 px-3 whitespace-nowrap text-muted-foreground">
                           {new Date(event.timestamp).toLocaleString('fr-FR', {
@@ -642,12 +715,13 @@ export function TrackIP() {
             />
 
             {/* ATP Events */}
-            <CategorySection
+            <CategorySection<TrackIPATPEvent>
               name="Advanced Threat Protection"
               icon={AlertTriangle}
               iconColor="bg-red-500/10 text-red-500"
               count={result.categories?.atp?.count || 0}
-              renderTable={() => (
+              events={result.categories?.atp?.events as TrackIPATPEvent[] || []}
+              renderTable={(paginatedEvents) => (
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
@@ -661,7 +735,7 @@ export function TrackIP() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(result.categories?.atp?.events as TrackIPATPEvent[] || []).map((event, idx) => (
+                    {paginatedEvents.map((event, idx) => (
                       <tr key={idx} className="border-t hover:bg-muted/30 transition-colors">
                         <td className="py-2 px-3 whitespace-nowrap text-muted-foreground">
                           {new Date(event.timestamp).toLocaleString('fr-FR', {
@@ -684,12 +758,13 @@ export function TrackIP() {
             />
 
             {/* Antivirus Events */}
-            <CategorySection
+            <CategorySection<TrackIPAntivirusEvent>
               name="Antivirus Events"
               icon={Bug}
               iconColor="bg-pink-500/10 text-pink-500"
               count={result.categories?.antivirus?.count || 0}
-              renderTable={() => (
+              events={result.categories?.antivirus?.events as TrackIPAntivirusEvent[] || []}
+              renderTable={(paginatedEvents) => (
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
@@ -702,7 +777,7 @@ export function TrackIP() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(result.categories?.antivirus?.events as TrackIPAntivirusEvent[] || []).map((event, idx) => (
+                    {paginatedEvents.map((event, idx) => (
                       <tr key={idx} className="border-t hover:bg-muted/30 transition-colors">
                         <td className="py-2 px-3 whitespace-nowrap text-muted-foreground">
                           {new Date(event.timestamp).toLocaleString('fr-FR', {
@@ -724,12 +799,13 @@ export function TrackIP() {
             />
 
             {/* Heartbeat Events */}
-            <CategorySection
+            <CategorySection<TrackIPHeartbeatEvent>
               name="Endpoint Heartbeat"
               icon={HeartPulse}
               iconColor="bg-teal-500/10 text-teal-500"
               count={result.categories?.heartbeat?.count || 0}
-              renderTable={() => (
+              events={result.categories?.heartbeat?.events as TrackIPHeartbeatEvent[] || []}
+              renderTable={(paginatedEvents) => (
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
@@ -741,7 +817,7 @@ export function TrackIP() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(result.categories?.heartbeat?.events as TrackIPHeartbeatEvent[] || []).map((event, idx) => (
+                    {paginatedEvents.map((event, idx) => (
                       <tr key={idx} className="border-t hover:bg-muted/30 transition-colors">
                         <td className="py-2 px-3 whitespace-nowrap text-muted-foreground">
                           {new Date(event.timestamp).toLocaleString('fr-FR', {

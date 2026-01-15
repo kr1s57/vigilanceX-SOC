@@ -1,8 +1,21 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.55.102 | **Derniere mise a jour**: 2026-01-15
+> **Version**: 3.55.103 | **Derniere mise a jour**: 2026-01-15
 
-Ce fichier sert de memoire persistante pour Claude Code. Il documente l'architecture, les conventions et les regles du projet VIGILANCE X.
+Ce fichier sert de memoire persistante pour Claude Code. Il contient les **regles, conventions et workflows** du projet VIGILANCE X.
+
+---
+
+## Documentation Interne
+
+| Fichier | Contenu |
+|---------|---------|
+| **CLAUDE.md** (ce fichier) | Regles critiques, conventions, workflows, status features |
+| **TECHNICAL_REFERENCE.md** | API reference, DB schemas, entities, variables env |
+| **CHANGELOG.md** | Historique detaille des versions |
+| **docs/BUGFIX-KB.md** | Knowledge base bugs corriges |
+
+> **Pour les details techniques** (endpoints API, schemas DB, entities Go/TS, variables d'environnement), consulter `TECHNICAL_REFERENCE.md`.
 
 ---
 
@@ -21,6 +34,7 @@ Le repo PUBLIC ne doit contenir **QUE**:
 | Fichier/Dossier | Raison |
 |-----------------|--------|
 | `CLAUDE.md` | Process internes, architecture, secrets |
+| `TECHNICAL_REFERENCE.md` | Reference technique complete |
 | `CHANGELOG.md` | Details implementation, vulnerabilites |
 | `RELEASE.md` | Process de release |
 | `DESCRIPTIFDET.md` | Descriptions techniques |
@@ -1246,7 +1260,8 @@ Quand l'utilisateur dit "gitgo":
 | **vigilanceX-SOC** (public) | Client | Code + README client only | Clients/Admins |
 
 **Repo PRIVATE (vigilanceX) - Documentation complete:**
-- CLAUDE.md - Memoire technique complete
+- CLAUDE.md - Memoire technique (regles, workflows)
+- TECHNICAL_REFERENCE.md - Reference technique (API, DB, entities)
 - CHANGELOG.md - Historique detaille des versions
 - docs/ - Documentation technique complete
 - BUGFIXSESSION/ - Sessions de debug
@@ -1257,6 +1272,7 @@ Quand l'utilisateur dit "gitgo":
 
 Fichiers a SUPPRIMER/EXCLURE systematiquement:
 - `CLAUDE.md` - Process internes, methodologie
+- `TECHNICAL_REFERENCE.md` - Reference technique complete
 - `CHANGELOG.md` - Details implementation
 - `DESCRIPTIFDET.md` - Descriptions techniques
 - `RELEASE.md` - Process de release

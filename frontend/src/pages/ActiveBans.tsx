@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat, Search } from 'lucide-react'
 import { bansApi, detect2banApi, type Detect2BanStatus } from '@/lib/api'
 import { IPThreatModal } from '@/components/IPThreatModal'
 import { formatDateTime, getCountryFlag } from '@/lib/utils'
@@ -22,6 +22,9 @@ export function ActiveBans() {
   // Detect2Ban state
   const [detect2banStatus, setDetect2banStatus] = useState<Detect2BanStatus | null>(null)
   const [togglingDetect2ban, setTogglingDetect2ban] = useState(false)
+
+  // IP Search filter
+  const [searchIP, setSearchIP] = useState('')
 
   const handleIPLookup = (ip: string) => {
     setSelectedIP(ip)
@@ -57,6 +60,13 @@ export function ActiveBans() {
       default: return ''
     }
   }
+
+  // Filter bans by IP search
+  const filteredBans = useMemo(() => {
+    if (!searchIP.trim()) return bans
+    const search = searchIP.trim().toLowerCase()
+    return bans.filter(ban => ban.ip.toLowerCase().includes(search))
+  }, [bans, searchIP])
 
   // Form states
   const [banIP, setBanIP] = useState('')
@@ -278,6 +288,32 @@ export function ActiveBans() {
 
       {/* Bans Table */}
       <div className="bg-card rounded-xl border overflow-hidden">
+        {/* IP Search Filter */}
+        <div className="p-4 border-b bg-muted/30">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchIP}
+              onChange={(e) => setSearchIP(e.target.value)}
+              placeholder="Search by IP address..."
+              className="w-full pl-10 pr-10 py-2 bg-background border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {searchIP && (
+              <button
+                onClick={() => setSearchIP('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded transition-colors"
+              >
+                <X className="w-3 h-3 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+          {searchIP && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Found {filteredBans.length} result{filteredBans.length !== 1 ? 's' : ''} for "{searchIP}"
+            </p>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>
@@ -299,14 +335,14 @@ export function ActiveBans() {
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
                   </td>
                 </tr>
-              ) : bans.length === 0 ? (
+              ) : filteredBans.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No active bans
+                    {searchIP ? `No bans found for "${searchIP}"` : 'No active bans'}
                   </td>
                 </tr>
               ) : (
-                bans.map((ban) => (
+                filteredBans.map((ban) => (
                   <tr
                     key={ban.ip}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"

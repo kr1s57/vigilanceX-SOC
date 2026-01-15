@@ -8,7 +8,9 @@ type TrackIPQuery struct {
 	QueryType string     `json:"query_type"` // "ip" or "hostname" (auto-detected)
 	StartTime *time.Time `json:"start_time,omitempty"`
 	EndTime   *time.Time `json:"end_time,omitempty"`
-	Limit     int        `json:"limit"` // Per-category limit (default 100)
+	Limit     int        `json:"limit"`              // Per-category limit (default 100)
+	Offset    int        `json:"offset"`             // Offset for pagination (default 0)
+	Category  string     `json:"category,omitempty"` // Optional: load only specific category
 }
 
 // TrackIPTimeRange represents the time range of the search

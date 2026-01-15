@@ -86,10 +86,10 @@ func (r *TrackIPRepository) SearchEvents(ctx context.Context, query *entity.Trac
 		FROM vigilance_x.events e
 		WHERE %s
 		ORDER BY e.timestamp DESC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, whereClause)
 
-	args = append(args, query.Limit)
+	args = append(args, query.Limit, query.Offset)
 	rows, err := r.conn.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query events: %w", err)
@@ -169,10 +169,10 @@ func (r *TrackIPRepository) SearchModSec(ctx context.Context, query *entity.Trac
 		FROM vigilance_x.modsec_logs m
 		WHERE %s
 		ORDER BY m.timestamp DESC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, whereClause)
 
-	args = append(args, query.Limit)
+	args = append(args, query.Limit, query.Offset)
 	rows, err := r.conn.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query modsec: %w", err)
@@ -257,10 +257,10 @@ func (r *TrackIPRepository) SearchFirewall(ctx context.Context, query *entity.Tr
 		FROM vigilance_x.firewall_events f
 		WHERE %s
 		ORDER BY f.timestamp DESC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, whereClause)
 
-	args = append(args, query.Limit)
+	args = append(args, query.Limit, query.Offset)
 	rows, err := r.conn.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query firewall: %w", err)
@@ -343,10 +343,10 @@ func (r *TrackIPRepository) SearchVPN(ctx context.Context, query *entity.TrackIP
 		FROM vigilance_x.vpn_events v
 		WHERE %s
 		ORDER BY v.timestamp DESC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, whereClause)
 
-	args = append(args, query.Limit)
+	args = append(args, query.Limit, query.Offset)
 	rows, err := r.conn.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query vpn: %w", err)
@@ -425,10 +425,10 @@ func (r *TrackIPRepository) SearchATP(ctx context.Context, query *entity.TrackIP
 		FROM vigilance_x.atp_events a
 		WHERE %s
 		ORDER BY a.timestamp DESC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, whereClause)
 
-	args = append(args, query.Limit)
+	args = append(args, query.Limit, query.Offset)
 	rows, err := r.conn.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query atp: %w", err)
@@ -506,10 +506,10 @@ func (r *TrackIPRepository) SearchAntivirus(ctx context.Context, query *entity.T
 		FROM vigilance_x.antivirus_events av
 		WHERE %s
 		ORDER BY av.timestamp DESC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, whereClause)
 
-	args = append(args, query.Limit)
+	args = append(args, query.Limit, query.Offset)
 	rows, err := r.conn.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query antivirus: %w", err)
@@ -584,10 +584,10 @@ func (r *TrackIPRepository) SearchHeartbeat(ctx context.Context, query *entity.T
 		FROM vigilance_x.heartbeat_events h
 		WHERE %s
 		ORDER BY h.timestamp DESC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, whereClause)
 
-	args = append(args, query.Limit)
+	args = append(args, query.Limit, query.Offset)
 	rows, err := r.conn.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query heartbeat: %w", err)
@@ -773,10 +773,10 @@ func (r *TrackIPRepository) SearchWAFSophos(ctx context.Context, query *entity.T
 		FROM vigilance_x.events e
 		WHERE %s
 		ORDER BY e.timestamp DESC
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, whereClause)
 
-	args = append(args, query.Limit)
+	args = append(args, query.Limit, query.Offset)
 	rows, err := r.conn.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query waf sophos: %w", err)

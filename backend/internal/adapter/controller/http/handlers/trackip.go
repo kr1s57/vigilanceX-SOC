@@ -47,6 +47,16 @@ func (h *TrackIPHandler) Search(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse offset for pagination
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
+			trackQuery.Offset = offset
+		}
+	}
+
+	// Parse category filter (for loading more in specific category)
+	trackQuery.Category = r.URL.Query().Get("category")
+
 	// Parse time range - either period or start_time/end_time
 	if period := r.URL.Query().Get("period"); period != "" {
 		startTime := getStartTimeFromPeriodTrackIP(period)
