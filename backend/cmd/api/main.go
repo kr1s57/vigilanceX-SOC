@@ -546,6 +546,7 @@ func main() {
 			// v3.2: License management endpoints (authenticated, no license required)
 			r.Post("/license/ask-pro", licenseHandler.AskProLicense)
 			r.Post("/license/sync-firewall", licenseHandler.SyncFirewall)
+			r.Post("/license/validate", licenseHandler.ForceValidate) // v3.55.115: Moved to free routes for sync to work
 
 			// Events (free - core dashboard functionality)
 			r.Route("/events", func(r chi.Router) {
@@ -608,9 +609,8 @@ func main() {
 					r.Delete("/{id}", usersHandler.Delete)
 					r.Post("/{id}/reset-password", usersHandler.ResetPassword)
 				})
-				// v2.9: License admin routes
+				// v2.9: License admin routes (info only - validate moved to free routes)
 				r.Get("/license/info", licenseHandler.GetInfo)
-				r.Post("/license/validate", licenseHandler.ForceValidate)
 			})
 
 			// Geo (licensed - heatmap and geo features)

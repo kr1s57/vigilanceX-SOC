@@ -7,6 +7,21 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.55.115] - 2026-01-16
+
+### Fixed
+- **License Sync 402 Error**: Correction du bug où `/license/validate` était protégé par le middleware de licence
+  - L'endpoint `/license/validate` déplacé vers les routes FREE (sans licence requise)
+  - Permet maintenant de synchroniser la licence même quand elle n'est pas valide localement
+- **VGXKey Auto-Activation**: Les nouvelles licences trial sont automatiquement activées lors du FreshDeploy
+  - Création automatique d'un enregistrement d'activation dans la DB
+
+### Technical
+- `backend/cmd/api/main.go`: `/license/validate` moved to free routes group
+- `vigilanceKey/backend/internal/service/license.go`: Auto-create activation in FreshDeploy
+
+---
+
 ## [3.55.114] - 2026-01-16
 
 ### Fixed
