@@ -7,6 +7,8 @@ import {
   Activity,
   X,
   Clock,
+  ArrowUp,
+  CheckCircle2,
 } from 'lucide-react'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
@@ -15,12 +17,17 @@ import { ZoneTrafficCard } from '@/components/dashboard/ZoneTrafficCard'
 import { statsApi, eventsApi, alertsApi } from '@/lib/api'
 import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
+import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
+
+// v3.55.116: Current installed version
+const INSTALLED_VERSION = '3.55.116'
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
 export function Dashboard() {
   const { settings } = useSettings()
+  const { status: licenseStatus } = useLicense()
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
   const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlert[]>([])
@@ -98,7 +105,37 @@ export function Dashboard() {
       {/* Header with period selector and clock */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Security Dashboard</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">Security Dashboard</h1>
+            {/* v3.55.116: Version badge with update check */}
+            {(() => {
+              const latestVersion = licenseStatus?.latest_vgx_version
+              const isUpToDate = !latestVersion || latestVersion === INSTALLED_VERSION
+              return (
+                <span
+                  className={cn(
+                    "px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1",
+                    isUpToDate
+                      ? "bg-green-500/10 text-green-500"
+                      : "bg-orange-500/10 text-orange-500"
+                  )}
+                  title={isUpToDate ? "Up to date" : `Update available: ${latestVersion}`}
+                >
+                  {isUpToDate ? (
+                    <>
+                      <CheckCircle2 className="w-3 h-3" />
+                      v{INSTALLED_VERSION}
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUp className="w-3 h-3" />
+                      Update: v{latestVersion}
+                    </>
+                  )}
+                </span>
+              )
+            })()}
+          </div>
           <p className="text-muted-foreground">Real-time security overview</p>
         </div>
         <div className="flex items-center gap-4">

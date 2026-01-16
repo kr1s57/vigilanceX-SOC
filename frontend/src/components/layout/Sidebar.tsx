@@ -321,49 +321,62 @@ export function Sidebar() {
 
       {/* License Status & Settings */}
       <div className="px-3 py-4 border-t border-border space-y-1">
-        {/* License Status Indicator */}
-        <div className={cn(
-          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm",
-          isLicensed
-            ? "bg-green-500/10 text-green-400"
-            : licenseStatus?.grace_mode
-              ? "bg-amber-500/10 text-amber-400"
-              : "bg-red-500/10 text-red-400"
-        )}>
-          {isLicensed ? (
-            <Key className="w-4 h-4" />
-          ) : (
-            <AlertCircle className="w-4 h-4" />
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="font-medium truncate">
-              {isLicensed
-                ? 'Licensed'
-                : licenseStatus?.grace_mode
-                  ? 'Grace Mode'
-                  : 'Unlicensed'}
-            </p>
-            {isLicensed && licenseStatus?.days_remaining !== undefined && (
-              <p className="text-xs opacity-75">
-                {licenseStatus.days_remaining} days remaining
-              </p>
-            )}
-            {licenseStatus?.grace_mode && (
-              <p className="text-xs opacity-75">
-                Server unreachable
-              </p>
-            )}
-          </div>
-          {isAdmin && (
-            <NavLink
-              to="/license"
-              className="p-1 hover:bg-white/10 rounded transition-colors"
-              title="Manage License"
-            >
-              <Settings className="w-3 h-3" />
-            </NavLink>
-          )}
-        </div>
+        {/* License Status Indicator - v3.55.116: Color based on days remaining */}
+        {(() => {
+          const days = licenseStatus?.days_remaining
+          const getLicenseColor = () => {
+            if (!isLicensed) {
+              return licenseStatus?.grace_mode
+                ? "bg-amber-500/10 text-amber-400"
+                : "bg-red-500/10 text-red-400"
+            }
+            // Licensed - check days remaining
+            if (days !== undefined && days <= 15) return "bg-red-500/10 text-red-400"
+            if (days !== undefined && days <= 30) return "bg-orange-500/10 text-orange-400"
+            return "bg-green-500/10 text-green-400"
+          }
+          return (
+            <div className={cn("flex items-center gap-3 px-3 py-2 rounded-lg text-sm", getLicenseColor())}>
+              {isLicensed ? (
+                <Key className="w-4 h-4" />
+              ) : (
+                <AlertCircle className="w-4 h-4" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">
+                  {isLicensed
+                    ? days !== undefined && days <= 15
+                      ? `License expiring!`
+                      : days !== undefined && days <= 30
+                        ? `License expiring`
+                        : 'Licensed'
+                    : licenseStatus?.grace_mode
+                      ? 'Grace Mode'
+                      : 'Unlicensed'}
+                </p>
+                {isLicensed && days !== undefined && (
+                  <p className="text-xs opacity-75">
+                    {days} days remaining
+                  </p>
+                )}
+                {licenseStatus?.grace_mode && (
+                  <p className="text-xs opacity-75">
+                    Server unreachable
+                  </p>
+                )}
+              </div>
+              {isAdmin && (
+                <NavLink
+                  to="/license"
+                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                  title="Manage License"
+                >
+                  <Settings className="w-3 h-3" />
+                </NavLink>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Users - Admin only */}
         {isAdmin && (

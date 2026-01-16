@@ -728,6 +728,8 @@ export interface LicenseStatus {
   firewall_detected?: boolean
   ask_pro_available?: boolean
   needs_fresh_deploy?: boolean
+  // v3.55.116: For update check
+  latest_vgx_version?: string
 }
 
 export interface LicenseActivateResponse {

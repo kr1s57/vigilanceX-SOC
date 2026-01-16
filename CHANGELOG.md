@@ -7,6 +7,31 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.55.116] - 2026-01-16
+
+### Added
+- **Version Check Badge**: Dashboard affiche la version installée avec indicateur de mise à jour
+  - Pastille verte si à jour, orange si mise à jour disponible
+  - Compare la version installée avec la dernière version depuis VGXKey
+- **Login Page Version**: Affichage de la version en footer sur les pages de login (VGX et VGXKey)
+
+### Improved
+- **License Badge Colors**: Couleur du badge licence selon les jours restants
+  - Vert: >30 jours restants
+  - Orange: ≤30 jours restants
+  - Rouge: ≤15 jours restants ou expiré
+- **VGXKey License Display**: Couleurs uniformisées pour les licences expirantes
+  - "X days remaining" en rouge si ≤15 jours
+  - "X days remaining" en orange si ≤30 jours
+
+### Technical
+- `VGXKey`: Nouveau champ `LatestVGXVersion` dans LicenseStatus
+- `VGX Dashboard`: Import de `useLicense` + badge version dynamique
+- `VGX Sidebar`: Logique de couleur basée sur `days_remaining`
+- `VGX Login`: Footer avec version v3.55.116
+
+---
+
 ## [3.55.115] - 2026-01-16
 
 ### Fixed

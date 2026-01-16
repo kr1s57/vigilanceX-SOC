@@ -2,7 +2,7 @@ version: '3.8'
 
 # ============================================
 # VIGILANCE X - Client Deployment
-# Version: 3.55.115
+# Version: 3.55.116
 # Uses pre-built GHCR images (no local build required)
 # ============================================
 

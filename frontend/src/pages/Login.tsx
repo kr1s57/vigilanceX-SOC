@@ -188,8 +188,8 @@ export default function Login() {
 
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-zinc-800 text-center">
-            <p className="text-zinc-500 text-xs">
-              VIGILANCE X v2.6.0 - Secured Access
+            <p className="text-zinc-600 text-xs">
+              VIGILANCE X v3.55.116
             </p>
           </div>
         </div>
