@@ -494,6 +494,8 @@ nano docker/.env
 - `SOPHOS_HOST` — IP de votre firewall Sophos XGS
 - `SOPHOS_PASSWORD` — Mot de passe API Sophos
 
+> ⚠️ **Important - Mots de passe** : N'utilisez PAS de caractères spéciaux (`#`, `$`, `&`, `@`, `!`, etc.) dans `CLICKHOUSE_PASSWORD` et `REDIS_PASSWORD`. Ces caractères peuvent causer des erreurs de connexion. Utilisez uniquement des lettres, chiffres et underscores.
+
 ### 3. Démarrer les services
 ```bash
 cd docker
