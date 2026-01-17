@@ -907,6 +907,183 @@ func (c *Client) SyncGroupIPsWithList(groupName, listPrefix string, targetIPs []
 	return len(targetIPs), nil
 }
 
+// SyncBlocklistIPLists synchronizes a CrowdSec blocklist to XGS IPList objects
+// Creates/updates IPList objects with naming: grp_CS_{BlocklistName}_01, _02, etc.
+// Each IPList contains max 1000 IPs (XGS limit)
+// Returns: (total IPs synced, lists created/updated, error)
+func (c *Client) SyncBlocklistIPLists(blocklistName string, ips []string) (int, int, error) {
+	const maxIPsPerList = 1000
+
+	if len(ips) == 0 {
+		slog.Info("[XGS] No IPs to sync for blocklist", "blocklist", blocklistName)
+		return 0, 0, nil
+	}
+
+	// Sanitize blocklist name for XGS object naming
+	safeName := sanitizeBlocklistName(blocklistName)
+	prefix := fmt.Sprintf("grp_CS_%s", safeName)
+
+	slog.Info("[XGS] Syncing blocklist to IPLists",
+		"blocklist", blocklistName,
+		"safe_name", safeName,
+		"prefix", prefix,
+		"total_ips", len(ips))
+
+	// Calculate number of lists needed
+	numLists := (len(ips) + maxIPsPerList - 1) / maxIPsPerList
+
+	// Create/update IPList objects for each chunk
+	successCount := 0
+	for i := 0; i < numLists; i++ {
+		start := i * maxIPsPerList
+		end := start + maxIPsPerList
+		if end > len(ips) {
+			end = len(ips)
+		}
+		chunk := ips[start:end]
+
+		// List name: grp_CS_BotnetActors_01, grp_CS_BotnetActors_02, etc.
+		listName := fmt.Sprintf("%s_%02d", prefix, i+1)
+
+		// Try to update first, if fails try to create
+		err := c.UpdateIPListObject(listName, chunk)
+		if err != nil {
+			// Try create instead
+			err = c.CreateIPListObject(listName, chunk)
+			if err != nil {
+				slog.Error("[XGS] Failed to create/update IPList",
+					"name", listName,
+					"error", err)
+				continue
+			}
+		}
+		successCount++
+		slog.Info("[XGS] Created/updated IPList",
+			"name", listName,
+			"ip_count", len(chunk),
+			"chunk", fmt.Sprintf("%d/%d", i+1, numLists))
+	}
+
+	// Clean up old lists that are no longer needed
+	// e.g., if we now have 5 lists but previously had 8, delete _06, _07, _08
+	c.cleanupOldIPLists(prefix, numLists)
+
+	slog.Info("[XGS] Blocklist sync completed",
+		"blocklist", blocklistName,
+		"total_ips", len(ips),
+		"lists_synced", successCount)
+
+	return len(ips), successCount, nil
+}
+
+// sanitizeBlocklistName converts blocklist label to safe XGS object name
+func sanitizeBlocklistName(label string) string {
+	// Map known blocklist labels to short names
+	nameMap := map[string]string{
+		"Curated Botnet Actors":    "BotnetActors",
+		"Public Internet Scanners": "InternetScanners",
+		"Malicious IPs":            "MaliciousIPs",
+		"Tor Exit Nodes":           "TorExitNodes",
+		"Known Attackers":          "KnownAttackers",
+	}
+
+	if safeName, ok := nameMap[label]; ok {
+		return safeName
+	}
+
+	// Generic sanitization: remove spaces and special chars
+	safe := ""
+	for _, r := range label {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			safe += string(r)
+		}
+	}
+	if len(safe) > 20 {
+		safe = safe[:20]
+	}
+	return safe
+}
+
+// cleanupOldIPLists removes IPList objects that are no longer needed
+// e.g., if blocklist shrunk from 8 lists to 5, delete _06, _07, _08
+func (c *Client) cleanupOldIPLists(prefix string, currentCount int) {
+	// Try to delete lists starting from currentCount+1 up to a reasonable max (50)
+	for i := currentCount + 1; i <= 50; i++ {
+		listName := fmt.Sprintf("%s_%02d", prefix, i)
+		err := c.DeleteIPHost(listName)
+		if err != nil {
+			// Object doesn't exist or can't be deleted, stop trying
+			break
+		}
+		slog.Info("[XGS] Deleted old IPList", "name", listName)
+	}
+}
+
+// DeleteIPHost removes an IPHost object from XGS
+func (c *Client) DeleteIPHost(name string) error {
+	deleteReq := &APIRequest{
+		Remove: &Remove{
+			IPHost: &IPHostFilter{
+				Name: name,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(deleteReq)
+	if err != nil {
+		return fmt.Errorf("failed to delete IPHost: %w", err)
+	}
+
+	// Check for errors
+	if len(resp.IPHost) > 0 {
+		status := resp.IPHost[0].Status
+		if status.Code != 200 && status.Code != 0 {
+			return fmt.Errorf("API error deleting IPHost: %s (code: %d)", status.Message, status.Code)
+		}
+	}
+
+	return nil
+}
+
+// GetBlocklistIPLists returns all IPList names for a blocklist
+func (c *Client) GetBlocklistIPLists(blocklistName string) ([]string, error) {
+	safeName := sanitizeBlocklistName(blocklistName)
+	prefix := fmt.Sprintf("grp_CS_%s", safeName)
+
+	var lists []string
+	for i := 1; i <= 50; i++ {
+		listName := fmt.Sprintf("%s_%02d", prefix, i)
+		// Try to get the IPHost - if it exists, add to list
+		getReq := &APIRequest{
+			Get: &Get{
+				IPHost: &IPHostFilter{
+					Name: listName,
+				},
+			},
+		}
+
+		resp, err := c.sendRequest(getReq)
+		if err != nil {
+			break
+		}
+
+		// Check if we got a valid response
+		found := false
+		for _, host := range resp.IPHost {
+			if host.Name == listName {
+				lists = append(lists, listName)
+				found = true
+				break
+			}
+		}
+		if !found {
+			break // No more lists
+		}
+	}
+
+	return lists, nil
+}
+
 // SyncGroupIPs synchronizes a group to contain exactly the given IPs
 // Returns: (added count, removed count, error)
 // NOTE: For large lists (>100 IPs), consider using SyncGroupIPsWithList instead

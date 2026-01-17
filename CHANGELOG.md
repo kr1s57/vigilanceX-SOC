@@ -7,6 +7,32 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.103] - 2026-01-17
+
+### Changed
+- **CrowdSec Blocklist XGS Architecture**: Nouvelle architecture de nommage pour les listes CrowdSec
+  - Limite XGS découverte: **1000 IPs maximum par IPList** (erreur code 522 si dépassé)
+  - Nouveau nommage: `grp_CS_{BlocklistName}_XX` (ex: `grp_CS_BotnetActors_01`, `_02`, etc.)
+  - Chaque blocklist CrowdSec obtient sa propre série d'IPLists
+  - Sync séparé par blocklist (plus de liste globale)
+  - Cleanup automatique des anciennes listes lors de réduction du nombre d'IPs
+
+### Technical
+- `backend/internal/adapter/external/sophos/client.go`:
+  - `SyncBlocklistIPLists()`: Synchronise une blocklist vers IPLists numérotées
+  - `sanitizeBlocklistName()`: Convertit labels en noms XGS valides
+  - `cleanupOldIPLists()`: Supprime les IPLists obsolètes
+  - `DeleteIPHost()`: Suppression d'objet IPHost
+- `backend/internal/usecase/crowdsec/blocklist_service.go`:
+  - `SyncToXGS()` réécrit pour sync chaque blocklist séparément
+
+### Result
+- 33 IPLists créées sur XGS:
+  - `grp_CS_BotnetActors_01` à `_24` (23,471 IPs)
+  - `grp_CS_InternetScanners_01` à `_09` (8,511 IPs)
+
+---
+
 ## [3.57.102] - 2026-01-17
 
 ### Fixed

@@ -73,6 +73,7 @@ type XGSClient interface {
 	EnsureGroupExists(groupName, description string) error
 	GetGroupIPs(groupName string) ([]string, error)
 	SyncGroupIPs(groupName, hostPrefix string, targetIPs []string) (int, int, error)
+	SyncBlocklistIPLists(blocklistName string, ips []string) (int, int, error)
 }
 
 // XGS Group configuration
@@ -220,47 +221,73 @@ func equalFoldASCII(s, t string) bool {
 	return true
 }
 
-// SyncToXGS synchronizes all blocklist IPs to the XGS group
+// SyncToXGS synchronizes all blocklist IPs to XGS IPList objects
+// Creates IPLists per blocklist: grp_CS_BotnetActors_01, grp_CS_InternetScanners_01, etc.
 func (s *BlocklistService) SyncToXGS(ctx context.Context) (added, removed int, err error) {
 	if s.xgs == nil {
 		return 0, 0, fmt.Errorf("XGS client not configured")
 	}
 
-	// Ensure group exists first
-	if !s.xgsGroupReady {
-		if err := s.EnsureXGSGroup(); err != nil {
-			return 0, 0, err
+	// Get all blocklist IDs from database
+	blocklists, err := s.repo.GetExistingBlocklistIDs(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get blocklist IDs: %w", err)
+	}
+
+	if len(blocklists) == 0 {
+		slog.Info("[CROWDSEC_BL] No blocklists to sync to XGS")
+		return 0, 0, nil
+	}
+
+	slog.Info("[CROWDSEC_BL] Syncing blocklists to XGS IPLists",
+		"blocklist_count", len(blocklists))
+
+	totalAdded := 0
+	totalLists := 0
+
+	// Sync each blocklist separately
+	for _, bl := range blocklists {
+		// Get IPs for this blocklist
+		ips, err := s.repo.GetIPsForBlocklist(ctx, bl.ID)
+		if err != nil {
+			slog.Error("[CROWDSEC_BL] Failed to get IPs for blocklist",
+				"blocklist_id", bl.ID,
+				"label", bl.Label,
+				"error", err)
+			continue
 		}
-	}
 
-	// Get all IPs from database
-	allIPs, err := s.repo.GetAllIPs(ctx)
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get IPs from DB: %w", err)
-	}
+		if len(ips) == 0 {
+			slog.Info("[CROWDSEC_BL] Skipping empty blocklist",
+				"blocklist_id", bl.ID,
+				"label", bl.Label)
+			continue
+		}
 
-	// Extract just the IP addresses
-	ipList := make([]string, 0, len(allIPs))
-	for _, ip := range allIPs {
-		ipList = append(ipList, ip.IP)
-	}
+		// Sync this blocklist to XGS
+		ipCount, listCount, err := s.xgs.SyncBlocklistIPLists(bl.Label, ips)
+		if err != nil {
+			slog.Error("[CROWDSEC_BL] Failed to sync blocklist to XGS",
+				"blocklist_id", bl.ID,
+				"label", bl.Label,
+				"error", err)
+			continue
+		}
 
-	slog.Info("[CROWDSEC_BL] Syncing to XGS",
-		"group", XGSGroupName,
-		"ip_count", len(ipList))
+		totalAdded += ipCount
+		totalLists += listCount
 
-	// Sync to XGS
-	added, removed, err = s.xgs.SyncGroupIPs(XGSGroupName, XGSHostPrefix, ipList)
-	if err != nil {
-		return 0, 0, fmt.Errorf("XGS sync failed: %w", err)
+		slog.Info("[CROWDSEC_BL] Blocklist synced to XGS",
+			"label", bl.Label,
+			"ips", ipCount,
+			"lists", listCount)
 	}
 
 	slog.Info("[CROWDSEC_BL] XGS sync completed",
-		"group", XGSGroupName,
-		"added", added,
-		"removed", removed)
+		"total_ips", totalAdded,
+		"total_lists", totalLists)
 
-	return added, removed, nil
+	return totalAdded, 0, nil
 }
 
 // Initialize loads config and starts worker if enabled
