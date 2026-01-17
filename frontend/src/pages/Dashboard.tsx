@@ -21,8 +21,8 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
 
-// v3.57.104: Current installed version
-const INSTALLED_VERSION = '3.57.104'
+// v3.57.105: Current installed version
+const INSTALLED_VERSION = '3.57.105'
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
@@ -211,10 +211,17 @@ export function Dashboard() {
 
       {/* Bottom Row - 2x2 grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Top Attackers - with scroll */}
+        {/* Top Attackers - 5 visible with scroll */}
         <div className="bg-card rounded-xl border p-6">
-          <h3 className="text-lg font-semibold mb-4">Top Attackers</h3>
-          <div className="space-y-3 max-h-[280px] overflow-y-auto pr-2 scrollbar-thin">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Top Attackers</h3>
+            {overview?.top_attackers && overview.top_attackers.length > 5 && (
+              <span className="text-xs text-muted-foreground">
+                {overview.top_attackers.length} total
+              </span>
+            )}
+          </div>
+          <div className="space-y-2 max-h-[320px] overflow-y-auto pr-2 scrollbar-thin">
             {overview?.top_attackers.slice(0, settings.topAttackersCount).map((attacker, index) => (
               <TopAttackerRow key={attacker.ip} attacker={attacker} rank={index + 1} />
             ))}
@@ -224,17 +231,17 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Log Type Distribution - compact */}
+        {/* Log Type Distribution - very compact */}
         <div className="bg-card rounded-xl border p-6">
-          <h3 className="text-lg font-semibold mb-4">Events by Type</h3>
-          <div className="space-y-2 max-h-[140px] overflow-y-auto pr-2 scrollbar-thin">
+          <h3 className="text-lg font-semibold mb-3">Events by Type</h3>
+          <div className="space-y-1.5 max-h-[100px] overflow-y-auto pr-2 scrollbar-thin">
             {overview?.by_log_type && Object.entries(overview.by_log_type)
               .sort(([, a], [, b]) => b - a)
               .map(([logType, count]) => (
-                <LogTypeRow key={logType} logType={logType} count={count} total={stats?.total_events || 1} />
+                <LogTypeRowCompact key={logType} logType={logType} count={count} total={stats?.total_events || 1} />
               ))}
             {(!overview?.by_log_type || Object.keys(overview.by_log_type).length === 0) && (
-              <p className="text-muted-foreground text-center py-4">No data available</p>
+              <p className="text-muted-foreground text-center py-2 text-sm">No data</p>
             )}
           </div>
         </div>
@@ -418,7 +425,8 @@ function TopAttackerRow({ attacker, rank }: { attacker: TopAttacker; rank: numbe
   )
 }
 
-function LogTypeRow({ logType, count, total }: { logType: string; count: number; total: number }) {
+// Compact version for dashboard
+function LogTypeRowCompact({ logType, count, total }: { logType: string; count: number; total: number }) {
   const percentage = (count / total) * 100
   const colorMap: Record<string, string> = {
     WAF: 'bg-blue-500',
@@ -428,20 +436,18 @@ function LogTypeRow({ logType, count, total }: { logType: string; count: number;
     Firewall: 'bg-green-500',
     VPN: 'bg-cyan-500',
     Heartbeat: 'bg-gray-500',
+    Event: 'bg-yellow-500',
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">{logType}</span>
-        <span className="text-muted-foreground">
-          {formatNumber(count)} ({formatPercent(percentage)})
-        </span>
-      </div>
-      <div className="h-2 bg-muted rounded-full overflow-hidden">
+    <div className="flex items-center gap-2">
+      <div className={`w-2 h-2 rounded-full ${colorMap[logType] || 'bg-primary'}`} />
+      <span className="text-xs font-medium flex-1">{logType}</span>
+      <span className="text-xs text-muted-foreground">{formatNumber(count)}</span>
+      <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
         <div
-          className={`h-full ${colorMap[logType] || 'bg-primary'} rounded-full transition-all`}
-          style={{ width: `${percentage}%` }}
+          className={`h-full ${colorMap[logType] || 'bg-primary'} rounded-full`}
+          style={{ width: `${Math.min(percentage, 100)}%` }}
         />
       </div>
     </div>
