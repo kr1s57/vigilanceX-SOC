@@ -7,6 +7,27 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.104] - 2026-01-17
+
+### Added
+- **Dashboard XGS Login Activity**: Nouvelle carte affichant les connexions admin XGS
+  - Affiche username, IP source, pays, timestamp
+  - Marqueur vert pour succès, rouge + badge "FAILED" pour échecs
+  - Scroll avec max 50 entrées visibles
+  - Refresh automatique selon settings
+
+### Changed
+- **Dashboard Layout Improvements**:
+  - Top Attackers: Liste réduite avec scroll (max-height 280px)
+  - Events by Type: Section compacte avec scroll (max-height 140px)
+  - Grid 2x2 au lieu de 3 colonnes pour accommoder XGS Logins
+
+### Technical
+- `frontend/src/components/dashboard/XGSLoginCard.tsx`: Nouveau composant
+- `frontend/src/pages/Dashboard.tsx`: Import XGSLoginCard, layout 2x2, scroll sections
+
+---
+
 ## [3.57.103] - 2026-01-17
 
 ### Changed

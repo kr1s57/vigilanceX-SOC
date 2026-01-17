@@ -14,14 +14,15 @@ import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
 import { SeverityChart } from '@/components/charts/SeverityChart'
 import { WAFServersCard } from '@/components/dashboard/WAFServersCard'
+import { XGSLoginCard } from '@/components/dashboard/XGSLoginCard'
 import { statsApi, eventsApi, alertsApi } from '@/lib/api'
 import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
 
-// v3.57.103: Current installed version
-const INSTALLED_VERSION = '3.57.103'
+// v3.57.104: Current installed version
+const INSTALLED_VERSION = '3.57.104'
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
@@ -208,12 +209,12 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Top Attackers */}
+      {/* Bottom Row - 2x2 grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Top Attackers - with scroll */}
         <div className="bg-card rounded-xl border p-6">
           <h3 className="text-lg font-semibold mb-4">Top Attackers</h3>
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-[280px] overflow-y-auto pr-2 scrollbar-thin">
             {overview?.top_attackers.slice(0, settings.topAttackersCount).map((attacker, index) => (
               <TopAttackerRow key={attacker.ip} attacker={attacker} rank={index + 1} />
             ))}
@@ -223,10 +224,10 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Log Type Distribution */}
+        {/* Log Type Distribution - compact */}
         <div className="bg-card rounded-xl border p-6">
           <h3 className="text-lg font-semibold mb-4">Events by Type</h3>
-          <div className="space-y-3">
+          <div className="space-y-2 max-h-[140px] overflow-y-auto pr-2 scrollbar-thin">
             {overview?.by_log_type && Object.entries(overview.by_log_type)
               .sort(([, a], [, b]) => b - a)
               .map(([logType, count]) => (
@@ -237,6 +238,9 @@ export function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* XGS Login Activity */}
+        <XGSLoginCard refreshInterval={settings.refreshInterval} />
 
         {/* WAF Servers Status (v3.57.101) */}
         <WAFServersCard refreshInterval={settings.refreshInterval} />
