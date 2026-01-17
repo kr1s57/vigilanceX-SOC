@@ -1,3 +1,7 @@
+# VIGILANCE X - Production Docker Compose
+# Uses pre-built GHCR images (no local build required)
+# Version: 3.57.103
+
 version: '3.8'
 
 services:
@@ -39,8 +43,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: vigilance_redis
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
@@ -63,7 +65,6 @@ services:
     ports:
       - "514:514/udp"    # Syslog UDP
       - "1514:1514/tcp"  # Syslog TCP
-      - "8686:8686"      # Vector API
     volumes:
       - ./vector/vector.toml:/etc/vector/vector.toml:ro
       - vector_data:/var/lib/vector
@@ -78,14 +79,15 @@ services:
     restart: unless-stopped
 
   # ============================================
-  # Backend Go - API REST
+  # Backend API (GHCR Image)
   # ============================================
   backend:
-    image: ghcr.io/kr1s57/vigilancex-api:${VGX_VERSION:-latest}
+    image: ghcr.io/kr1s57/vigilancex-api:3.57.103
     container_name: vigilance_backend
     ports:
       - "8080:8080"
     volumes:
+      - ./scenarios:/app/scenarios:ro
       - ./ssh/id_rsa_xgs:/app/.ssh/id_rsa_xgs:ro
       - backend_data:/app/data
       - backend_config:/app/config
@@ -122,15 +124,13 @@ services:
       SOPHOS_SSH_LOG_PATH: /log/reverseproxy.log
       SOPHOS_SSH_SYNC_INTERVAL: ${SOPHOS_SSH_SYNC_INTERVAL:-5m}
 
-      # Threat Intel APIs - Tier 1
-      ALIENVAULT_API_KEY: ${ALIENVAULT_API_KEY}
-      ABUSECH_API_KEY: ${ABUSECH_API_KEY:-}  # v3.53: ThreatFox + URLhaus
-      # Threat Intel APIs - Tier 2
-      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY}
+      # Threat Intel APIs
+      ALIENVAULT_API_KEY: ${ALIENVAULT_API_KEY:-}
+      ABUSECH_API_KEY: ${ABUSECH_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
       GREYNOISE_API_KEY: ${GREYNOISE_API_KEY:-}
       CROWDSEC_API_KEY: ${CROWDSEC_API_KEY:-}
-      # Threat Intel APIs - Tier 3
-      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY}
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
       CRIMINALIP_API_KEY: ${CRIMINALIP_API_KEY:-}
       PULSEDIVE_API_KEY: ${PULSEDIVE_API_KEY:-}
 
@@ -138,21 +138,17 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: 24h
 
-      # v2.9: License System
+      # License System
       LICENSE_ENABLED: ${LICENSE_ENABLED:-true}
-      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-https://vgxkey.vigilancex.lu}
       LICENSE_KEY: ${LICENSE_KEY:-}
       LICENSE_HEARTBEAT_INTERVAL: ${LICENSE_HEARTBEAT_INTERVAL:-12h}
-      LICENSE_GRACE_PERIOD: ${LICENSE_GRACE_PERIOD:-72h}
+      LICENSE_GRACE_PERIOD: ${LICENSE_GRACE_PERIOD:-168h}
       LICENSE_STORE_PATH: /app/data/license.json
+      # For self-signed certificates on license server
+      LICENSE_INSECURE_SKIP_VERIFY: ${LICENSE_INSECURE_SKIP_VERIFY:-false}
 
-      # v2.9: OSINT Proxy
-      OSINT_PROXY_ENABLED: ${OSINT_PROXY_ENABLED:-false}
-      OSINT_PROXY_URL: ${OSINT_PROXY_URL:-}
-      OSINT_PROXY_TIMEOUT: ${OSINT_PROXY_TIMEOUT:-30s}
-      OSINT_PROXY_RATE_LIMIT: ${OSINT_PROXY_RATE_LIMIT:-60}
-
-      # v3.3: SMTP Email Notifications
+      # SMTP Email Notifications
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURITY: ${SMTP_SECURITY:-tls}
@@ -160,7 +156,6 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_RECIPIENTS: ${SMTP_RECIPIENTS:-}
-      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-30s}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -176,11 +171,13 @@ services:
     restart: unless-stopped
 
   # ============================================
-  # Detect2Ban Engine - Detection daemon
+  # Detect2Ban Engine (GHCR Image)
   # ============================================
   detect2ban:
-    image: ghcr.io/kr1s57/vigilancex-detect2ban:${VGX_VERSION:-latest}
+    image: ghcr.io/kr1s57/vigilancex-detect2ban:3.57.103
     container_name: vigilance_detect2ban
+    volumes:
+      - ./scenarios:/app/scenarios:ro
     environment:
       APP_ENV: ${APP_ENV:-production}
       CLICKHOUSE_HOST: clickhouse
@@ -202,10 +199,10 @@ services:
     restart: unless-stopped
 
   # ============================================
-  # Frontend React
+  # Frontend (GHCR Image)
   # ============================================
   frontend:
-    image: ghcr.io/kr1s57/vigilancex-frontend:${VGX_VERSION:-latest}
+    image: ghcr.io/kr1s57/vigilancex-frontend:3.57.103
     container_name: vigilance_frontend
     ports:
       - "3000:80"
@@ -215,36 +212,12 @@ services:
       - vigilance_net
     restart: unless-stopped
 
-  # ============================================
-  # Nginx - Reverse Proxy (Production)
-  # ============================================
-  nginx:
-    image: nginx:alpine
-    container_name: vigilance_nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - vigilance_net
-    restart: unless-stopped
-    profiles:
-      - production
-
 # ============================================
 # Networks & Volumes
 # ============================================
 networks:
   vigilance_net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
 
 volumes:
   clickhouse_data:
