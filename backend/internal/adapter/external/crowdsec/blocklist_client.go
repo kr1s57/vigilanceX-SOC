@@ -273,8 +273,18 @@ func (c *BlocklistClient) TestConnection(ctx context.Context) error {
 	}
 
 	c.mu.RLock()
-	req.Header.Set("x-api-key", c.apiKey)
+	apiKey := c.apiKey
 	c.mu.RUnlock()
+
+	keyPrefix := apiKey
+	if len(keyPrefix) > 8 {
+		keyPrefix = keyPrefix[:8]
+	}
+	slog.Info("[CROWDSEC_CLIENT] Testing connection",
+		"api_key_length", len(apiKey),
+		"api_key_prefix", keyPrefix+"...")
+
+	req.Header.Set("x-api-key", apiKey)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -285,6 +295,10 @@ func (c *BlocklistClient) TestConnection(ctx context.Context) error {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("invalid API key")
+	}
+
+	if resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("API key lacks blocklist permissions. Ensure your CrowdSec Console API key has 'blocklists:read' scope and your organization has blocklist access enabled")
 	}
 
 	if resp.StatusCode != http.StatusOK {

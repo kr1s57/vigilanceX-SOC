@@ -18,23 +18,26 @@ func NewBansRepository(conn *Connection) *BansRepository {
 	return &BansRepository{conn: conn}
 }
 
-// GetActiveBans retrieves all currently active bans
+// GetActiveBans retrieves all currently active bans with GeoIP data via JOIN
+// v3.57.101: Uses LEFT JOIN with ip_geolocation for efficient country lookup
 func (r *BansRepository) GetActiveBans(ctx context.Context) ([]entity.BanStatus, error) {
 	query := `
 		SELECT
-			ip,
-			status,
-			ban_count,
-			first_ban,
-			last_ban,
-			expires_at,
-			reason,
-			source,
-			synced_xgs,
-			updated_at
-		FROM ip_ban_status FINAL
-		WHERE status IN ('active', 'permanent')
-		ORDER BY last_ban DESC
+			b.ip,
+			b.status,
+			b.ban_count,
+			b.first_ban,
+			b.last_ban,
+			b.expires_at,
+			b.reason,
+			b.source,
+			b.synced_xgs,
+			b.updated_at,
+			COALESCE(g.country_code, '') as country_code
+		FROM ip_ban_status b FINAL
+		LEFT JOIN ip_geolocation g FINAL ON b.ip = g.ip
+		WHERE b.status IN ('active', 'permanent')
+		ORDER BY b.last_ban DESC
 	`
 
 	rows, err := r.conn.DB().Query(ctx, query)
@@ -47,6 +50,7 @@ func (r *BansRepository) GetActiveBans(ctx context.Context) ([]entity.BanStatus,
 	for rows.Next() {
 		var ban entity.BanStatus
 		var expiresAt *time.Time
+		var countryCode string
 
 		if err := rows.Scan(
 			&ban.IP,
@@ -59,6 +63,7 @@ func (r *BansRepository) GetActiveBans(ctx context.Context) ([]entity.BanStatus,
 			&ban.Source,
 			&ban.SyncedXGS,
 			&ban.UpdatedAt,
+			&countryCode,
 		); err != nil {
 			return nil, fmt.Errorf("scan ban row: %w", err)
 		}
@@ -66,11 +71,42 @@ func (r *BansRepository) GetActiveBans(ctx context.Context) ([]entity.BanStatus,
 		if expiresAt != nil {
 			ban.ExpiresAt = expiresAt
 		}
+		ban.Country = countryCode
 
 		bans = append(bans, ban)
 	}
 
 	return bans, nil
+}
+
+// GetBannedIPsWithoutGeoIP returns active/permanent banned IPs that don't have GeoIP data
+// v3.57.101: Used for background rescan routine to ensure all banned IPs have flags
+func (r *BansRepository) GetBannedIPsWithoutGeoIP(ctx context.Context, limit int) ([]string, error) {
+	query := `
+		SELECT DISTINCT IPv4NumToString(b.ip) as ip_str
+		FROM ip_ban_status b FINAL
+		LEFT JOIN ip_geolocation g FINAL ON b.ip = g.ip
+		WHERE b.status IN ('active', 'permanent')
+		  AND (g.ip IS NULL OR g.country_code = '')
+		LIMIT ?
+	`
+
+	rows, err := r.conn.DB().Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query banned IPs without GeoIP: %w", err)
+	}
+	defer rows.Close()
+
+	var ips []string
+	for rows.Next() {
+		var ip string
+		if err := rows.Scan(&ip); err != nil {
+			return nil, fmt.Errorf("scan IP: %w", err)
+		}
+		ips = append(ips, ip)
+	}
+
+	return ips, nil
 }
 
 // GetBanByIP retrieves a specific ban by IP address

@@ -223,6 +223,7 @@ func (r *EventsRepository) GetTimeline(ctx context.Context, period string, inter
 }
 
 // GetStats retrieves event statistics
+// v3.57.101: Combines events table with modsec_logs for accurate WAF blocking stats
 func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity.EventStats, error) {
 	var startTime time.Time
 	now := time.Now()
@@ -240,6 +241,7 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 		startTime = now.Add(-24 * time.Hour)
 	}
 
+	// Main events table stats
 	query := `
 		SELECT
 			count() as total_events,
@@ -264,6 +266,28 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 		&stats.LowEvents,
 	); err != nil {
 		return nil, fmt.Errorf("failed to get stats: %w", err)
+	}
+
+	// v3.57.101: Add modsec_logs stats for WAF blocking/severity data
+	// This is where the real WAF blocking info lives (is_blocking, rule_severity)
+	modsecQuery := `
+		SELECT
+			countIf(is_blocking = 1) as blocked,
+			countIf(rule_severity = 'CRITICAL') as critical,
+			countIf(rule_severity = 'WARNING' OR rule_severity = 'ERROR') as high
+		FROM modsec_logs
+		WHERE timestamp >= ?
+	`
+	var modsecBlocked, modsecCritical, modsecHigh uint64
+	if err := r.conn.QueryRow(ctx, modsecQuery, startTime).Scan(
+		&modsecBlocked,
+		&modsecCritical,
+		&modsecHigh,
+	); err == nil {
+		// Add modsec stats to totals
+		stats.BlockedEvents += modsecBlocked
+		stats.CriticalEvents += modsecCritical
+		stats.HighEvents += modsecHigh
 	}
 
 	if stats.TotalEvents > 0 {
@@ -294,9 +318,9 @@ func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, l
 	query := `
 		SELECT
 			IPv4NumToString(src_ip) as ip,
-			count() as attack_count,
-			countIf(action IN ('drop', 'reject', 'block', 'blocked')) as blocked_count,
-			uniqExact(rule_id) as unique_rules,
+			toInt64(count()) as attack_count,
+			toInt64(countIf(action IN ('drop', 'reject', 'block', 'blocked'))) as blocked_count,
+			toInt64(uniqExact(rule_id)) as unique_rules,
 			groupUniqArray(5)(category) as categories,
 			any(geo_country) as country
 		FROM events
@@ -345,8 +369,8 @@ func (r *EventsRepository) GetTopTargets(ctx context.Context, period string, lim
 	query := `
 		SELECT
 			hostname,
-			count() as attack_count,
-			uniqExact(src_ip) as unique_ips
+			toInt64(count()) as attack_count,
+			toInt64(uniqExact(src_ip)) as unique_ips
 		FROM events
 		WHERE timestamp >= ? AND hostname != ''
 		GROUP BY hostname
@@ -685,6 +709,7 @@ func (r *EventsRepository) GetSyslogStatus(ctx context.Context) (*entity.SyslogS
 }
 
 // GetCriticalAlerts returns recent critical and high severity alerts
+// v3.57.101: Now queries modsec_logs for WAF critical alerts (CRITICAL/WARNING severity)
 func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int, period string) ([]entity.CriticalAlert, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
@@ -707,7 +732,55 @@ func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int, per
 		startTime = now.Add(-24 * time.Hour)
 	}
 
-	query := `
+	alerts := []entity.CriticalAlert{}
+
+	// v3.57.101: Query modsec_logs for WAF critical alerts (where real severity data lives)
+	modsecQuery := `
+		SELECT
+			toString(id) as event_id,
+			timestamp,
+			'WAF' as log_type,
+			attack_type as category,
+			CASE
+				WHEN rule_severity = 'CRITICAL' THEN 'critical'
+				WHEN rule_severity = 'WARNING' OR rule_severity = 'ERROR' THEN 'high'
+				ELSE 'medium'
+			END as severity,
+			IPv4NumToString(src_ip) as src_ip,
+			'' as dst_ip,
+			hostname,
+			rule_id,
+			rule_msg as rule_name,
+			rule_data as message,
+			CASE WHEN is_blocking = 1 THEN 'blocked' ELSE 'detected' END as action,
+			'' as geo_country
+		FROM modsec_logs
+		WHERE rule_severity IN ('CRITICAL', 'WARNING', 'ERROR')
+		AND timestamp >= ?
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`
+
+	rows, err := r.conn.Query(ctx, modsecQuery, startTime, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query modsec critical alerts: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var a entity.CriticalAlert
+		if err := rows.Scan(
+			&a.EventID, &a.Timestamp, &a.LogType, &a.Category, &a.Severity,
+			&a.SrcIP, &a.DstIP, &a.Hostname, &a.RuleID, &a.RuleName,
+			&a.Message, &a.Action, &a.Country,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan modsec alert: %w", err)
+		}
+		alerts = append(alerts, a)
+	}
+
+	// Also check events table for any properly-tagged alerts (IPS, ATP, etc.)
+	eventsQuery := `
 		SELECT
 			toString(event_id) as event_id,
 			timestamp,
@@ -729,23 +802,25 @@ func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int, per
 		LIMIT ?
 	`
 
-	rows, err := r.conn.Query(ctx, query, startTime, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query critical alerts: %w", err)
-	}
-	defer rows.Close()
-
-	alerts := []entity.CriticalAlert{}
-	for rows.Next() {
-		var a entity.CriticalAlert
-		if err := rows.Scan(
-			&a.EventID, &a.Timestamp, &a.LogType, &a.Category, &a.Severity,
-			&a.SrcIP, &a.DstIP, &a.Hostname, &a.RuleID, &a.RuleName,
-			&a.Message, &a.Action, &a.Country,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan alert: %w", err)
+	rows2, err := r.conn.Query(ctx, eventsQuery, startTime, limit)
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var a entity.CriticalAlert
+			if err := rows2.Scan(
+				&a.EventID, &a.Timestamp, &a.LogType, &a.Category, &a.Severity,
+				&a.SrcIP, &a.DstIP, &a.Hostname, &a.RuleID, &a.RuleName,
+				&a.Message, &a.Action, &a.Country,
+			); err == nil {
+				alerts = append(alerts, a)
+			}
 		}
-		alerts = append(alerts, a)
+	}
+
+	// Sort by timestamp descending and limit
+	// (already sorted from queries, just ensure limit)
+	if len(alerts) > limit {
+		alerts = alerts[:limit]
 	}
 
 	return alerts, nil

@@ -417,8 +417,8 @@ export function VigimailChecker() {
           <span className="text-gray-400">LeakCheck: {status?.leakcheck_configured ? 'Configured' : 'Active (Free)'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${status?.worker_active ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
-          <span className="text-gray-400">Auto-check: {status?.worker_active ? `Every ${config?.check_interval_hours}h` : 'Disabled'}</span>
+          <span className={`w-2 h-2 rounded-full ${status?.worker_running ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
+          <span className="text-gray-400">Auto-check: {status?.worker_running ? `Every ${config?.check_interval_hours}h` : 'Disabled'}</span>
         </div>
         <button onClick={handleRefresh} disabled={refreshing} className="ml-auto text-gray-400 hover:text-white">
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />

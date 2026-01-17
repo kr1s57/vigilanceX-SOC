@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye, Ban, Loader2 } from 'lucide-react'
-import { modsecApi, bansApi } from '@/lib/api'
+import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye, Ban, Loader2, Settings } from 'lucide-react'
+import { modsecApi, bansApi, wafServersApi, type WAFMonitoredServer } from '@/lib/api'
 import { formatDateTime, formatDateTimeFull, getCountryFlag, getCountryName } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import { IPThreatModal } from '@/components/IPThreatModal'
+import { WAFServerModal } from '@/components/WAFServerModal'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
 
 // Period options for WAF logs
@@ -114,6 +115,9 @@ export function WafExplorer() {
   const [bannedIPs, setBannedIPs] = useState<Set<string>>(new Set())
   // IP Threat Modal state
   const [selectedIP, setSelectedIP] = useState<string | null>(null)
+  // v3.57: WAF Servers Modal state
+  const [showServerModal, setShowServerModal] = useState(false)
+  const [configuredServers, setConfiguredServers] = useState<WAFMonitoredServer[]>([])
 
   const handleBanIP = async (ip: string, reason: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -133,11 +137,33 @@ export function WafExplorer() {
     modsecApi.getStats().then(setSyncStatus).catch(() => {})
   }, [])
 
-  // Fetch unique hostnames for filter
+  // v3.57: Fetch unique hostnames for filter and merge with configured servers
+  const fetchHostnames = async () => {
+    try {
+      // Fetch both auto-discovered and configured hostnames in parallel
+      const [autoDiscovered, configured] = await Promise.all([
+        modsecApi.getHostnames().catch(() => []),
+        wafServersApi.list().catch(() => ({ data: [] })),
+      ])
+
+      setConfiguredServers(configured.data || [])
+
+      // Merge hostnames, prioritizing configured servers
+      const configuredHostnames = (configured.data || []).map(s => s.hostname)
+      const autoHostnames = autoDiscovered || []
+
+      // Combine both lists and remove duplicates
+      const allHostnames = [...new Set([...configuredHostnames, ...autoHostnames])]
+      allHostnames.sort()
+
+      setHostnames(allHostnames)
+    } catch (err) {
+      console.error('Failed to fetch hostnames:', err)
+    }
+  }
+
   useEffect(() => {
-    modsecApi.getHostnames().then(data => {
-      setHostnames(data || [])
-    }).catch(() => {})
+    fetchHostnames()
   }, [])
 
   // Fetch grouped ModSec logs - reset data when period changes
@@ -665,16 +691,32 @@ export function WafExplorer() {
             />
           </div>
         </div>
-        <select
-          value={hostname}
-          onChange={(e) => setHostname(e.target.value)}
-          className="px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          <option value="">All Webservers</option>
-          {hostnames.map(h => (
-            <option key={h} value={h}>{h}</option>
-          ))}
-        </select>
+        {/* v3.57: Hostname selector with settings button */}
+        <div className="flex items-center gap-1">
+          <select
+            value={hostname}
+            onChange={(e) => setHostname(e.target.value)}
+            className="px-4 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="">All Webservers</option>
+            {hostnames.map(h => {
+              const server = configuredServers.find(s => s.hostname === h)
+              return (
+                <option key={h} value={h}>
+                  {server?.display_name || h}
+                  {server?.policy_enabled && ' *'}
+                </option>
+              )
+            })}
+          </select>
+          <button
+            onClick={() => setShowServerModal(true)}
+            className="p-2 bg-background border rounded-lg hover:bg-muted transition-colors"
+            title="Manage WAF Servers"
+          >
+            <Settings className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
         <select
           value={attackType}
           onChange={(e) => setAttackType(e.target.value)}
@@ -909,6 +951,13 @@ export function WafExplorer() {
           onClose={() => setSelectedIP(null)}
         />
       )}
+
+      {/* v3.57: WAF Servers Modal */}
+      <WAFServerModal
+        isOpen={showServerModal}
+        onClose={() => setShowServerModal(false)}
+        onServersUpdated={fetchHostnames}
+      />
     </div>
   )
 }

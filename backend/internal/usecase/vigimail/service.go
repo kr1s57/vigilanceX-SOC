@@ -418,15 +418,20 @@ func (s *Service) GetEmailLeaks(ctx context.Context, email string) ([]entity.Vig
 func (s *Service) CheckAll(ctx context.Context) (*entity.VigimailCheckHistory, error) {
 	startTime := time.Now()
 
+	// Use a background context with extended timeout (5 minutes)
+	// to prevent HTTP request cancellation from killing the checks
+	checkCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
 	history := &entity.VigimailCheckHistory{
 		CheckType: "full",
 	}
 
 	// Check all domains DNS
-	domains, err := s.repo.ListDomains(ctx)
+	domains, err := s.repo.ListDomains(checkCtx)
 	if err == nil {
 		for _, d := range domains {
-			if _, err := s.CheckDomain(ctx, d.Domain); err != nil {
+			if _, err := s.CheckDomain(checkCtx, d.Domain); err != nil {
 				history.DNSIssuesFound++
 			}
 			history.DomainsChecked++
@@ -434,10 +439,10 @@ func (s *Service) CheckAll(ctx context.Context) (*entity.VigimailCheckHistory, e
 	}
 
 	// Check all emails for leaks
-	emails, err := s.repo.ListAllEmails(ctx)
+	emails, err := s.repo.ListAllEmails(checkCtx)
 	if err == nil {
 		for _, e := range emails {
-			leaks, err := s.CheckEmail(ctx, e.Email)
+			leaks, err := s.CheckEmail(checkCtx, e.Email)
 			if err != nil {
 				slog.Warn("[VIGIMAIL] Check failed", "email", e.Email, "error", err)
 			} else {
@@ -452,13 +457,13 @@ func (s *Service) CheckAll(ctx context.Context) (*entity.VigimailCheckHistory, e
 	history.CheckTime = time.Now()
 
 	// Save history
-	s.repo.SaveCheckHistory(ctx, history)
+	s.repo.SaveCheckHistory(checkCtx, history)
 
 	// Update last check time
 	s.mu.Lock()
 	s.config.LastCheck = time.Now()
 	s.mu.Unlock()
-	s.repo.UpdateLastCheck(ctx, time.Now())
+	s.repo.UpdateLastCheck(checkCtx, time.Now())
 
 	slog.Info("[VIGIMAIL] Full check completed",
 		"domains", history.DomainsChecked,

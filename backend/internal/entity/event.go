@@ -99,20 +99,23 @@ type TimelinePoint struct {
 // TopAttacker represents a top attacking IP
 type TopAttacker struct {
 	IP           string   `json:"ip"`
-	AttackCount  uint64   `json:"attack_count"`
-	BlockedCount uint64   `json:"blocked_count"`
-	UniqueRules  uint64   `json:"unique_rules"`
+	AttackCount  int64    `json:"attack_count"`
+	BlockedCount int64    `json:"blocked_count"`
+	UniqueRules  int64    `json:"unique_rules"`
 	Categories   []string `json:"categories"`
 	Country      string   `json:"country"`
 	ThreatScore  int      `json:"threat_score,omitempty"`
 }
 
 // TopTarget represents a frequently targeted resource
+// v3.57.101: Added BlockedCount and Percentage for enhanced reports
 type TopTarget struct {
-	Hostname    string `json:"hostname"`
-	URL         string `json:"url,omitempty"`
-	AttackCount uint64 `json:"attack_count"`
-	UniqueIPs   uint64 `json:"unique_ips"`
+	Hostname     string `json:"hostname"`
+	URL          string `json:"url,omitempty"`
+	AttackCount  int64  `json:"attack_count"`
+	BlockedCount int64  `json:"blocked_count"`
+	UniqueIPs    int64  `json:"unique_ips"`
+	Percentage   int    `json:"percentage"`
 }
 
 // Severity levels

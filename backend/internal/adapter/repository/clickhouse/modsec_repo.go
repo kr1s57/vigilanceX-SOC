@@ -406,3 +406,27 @@ func (r *ModSecRepository) GetAttackTypeStats(ctx context.Context, period string
 
 	return stats, nil
 }
+
+// DeleteLogsByHostname deletes all ModSec logs for a specific hostname
+// This is used when a user explicitly requests log deletion when removing a server
+func (r *ModSecRepository) DeleteLogsByHostname(ctx context.Context, hostname string) error {
+	if hostname == "" {
+		return fmt.Errorf("hostname cannot be empty")
+	}
+
+	// In ClickHouse with MergeTree, we can use ALTER TABLE DELETE
+	// Note: This is an asynchronous operation in ClickHouse
+	query := `ALTER TABLE modsec_logs DELETE WHERE hostname = ?`
+
+	if err := r.conn.Exec(ctx, query, hostname); err != nil {
+		r.logger.Error("[MODSEC-REPO] Failed to delete logs by hostname",
+			"hostname", hostname,
+			"error", err)
+		return fmt.Errorf("failed to delete logs for hostname %s: %w", hostname, err)
+	}
+
+	r.logger.Info("[MODSEC-REPO] Logs deletion initiated for hostname",
+		"hostname", hostname)
+
+	return nil
+}

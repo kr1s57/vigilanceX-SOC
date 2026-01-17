@@ -155,6 +155,36 @@ export function getCountryFlag(countryCode: string): string {
   return String.fromCodePoint(...codePoints)
 }
 
+// v3.57.101: Copy to clipboard with fallback for non-secure contexts
+export async function copyToClipboard(text: string): Promise<boolean> {
+  // Try modern clipboard API first (requires secure context)
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fall through to fallback
+    }
+  }
+
+  // Fallback for non-secure contexts (HTTP)
+  try {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-9999px'
+    textArea.style.top = '-9999px'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    const success = document.execCommand('copy')
+    document.body.removeChild(textArea)
+    return success
+  } catch {
+    return false
+  }
+}
+
 export function getCountryName(countryCode: string): string {
   const names: Record<string, string> = {
     'FRA': 'France', 'FR': 'France',

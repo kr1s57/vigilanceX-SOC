@@ -35,6 +35,7 @@ func (h *BansHandler) SetGeoIPClient(client GeoIPClient) {
 
 // List returns all active bans
 // GET /api/v1/bans
+// v3.57.101: Country codes now come from DB JOIN (ip_geolocation), no more runtime lookups
 func (h *BansHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -44,15 +45,8 @@ func (h *BansHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enrich with country codes if GeoIP client is available
-	if h.geoIPClient != nil {
-		for i := range activeBans {
-			geo, err := h.geoIPClient.Lookup(ctx, activeBans[i].IP)
-			if err == nil && geo != nil {
-				activeBans[i].Country = geo.CountryCode
-			}
-		}
-	}
+	// Country codes are now included via JOIN with ip_geolocation table
+	// No runtime GeoIP lookups needed - much faster!
 
 	// Wrap in data object for frontend compatibility
 	JSONResponse(w, http.StatusOK, map[string]interface{}{"data": activeBans})

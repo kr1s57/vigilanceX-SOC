@@ -1,16 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, RefreshCw, Wifi, WifiOff, Server, ServerOff, AlertTriangle, X, Shield, ShieldOff } from 'lucide-react'
+import { Bell, RefreshCw, Wifi, WifiOff, Server, ServerOff, AlertTriangle, X, Shield, ShieldOff, Terminal, TerminalSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWebSocket, useRealtimeEvents } from '@/hooks/useWebSocket'
-import { statusApi, alertsApi, detect2banApi, type Detect2BanStatus } from '@/lib/api'
+import { statusApi, alertsApi, detect2banApi, modsecApi, type Detect2BanStatus } from '@/lib/api'
 import type { SyslogStatus, CriticalAlert } from '@/types'
+
+interface SSHStatus {
+  connected: boolean
+  message: string
+}
 
 export function Header() {
   const navigate = useNavigate()
   const { isConnected } = useWebSocket()
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const [syslogStatus, setSyslogStatus] = useState<SyslogStatus | null>(null)
+  const [sshStatus, setSshStatus] = useState<SSHStatus | null>(null)
   const [d2bStatus, setD2bStatus] = useState<Detect2BanStatus | null>(null)
   const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlert[]>([])
   const [readAlertIds, setReadAlertIds] = useState<Set<string>>(new Set())
@@ -22,7 +28,7 @@ export function Header() {
     setLastUpdate(new Date())
   })
 
-  // Fetch syslog status, D2B status, and critical alerts
+  // Fetch syslog status, SSH status, D2B status, and critical alerts
   useEffect(() => {
     async function fetchStatus() {
       try {
@@ -34,6 +40,17 @@ export function Header() {
         setCriticalAlerts(alerts.data || [])
       } catch (err) {
         console.error('Failed to fetch status:', err)
+      }
+
+      // Fetch SSH status (ModSec test connection)
+      try {
+        const sshTest = await modsecApi.testConnection()
+        setSshStatus({
+          connected: sshTest.status === 'ok',
+          message: sshTest.message || ''
+        })
+      } catch {
+        setSshStatus({ connected: false, message: 'SSH not configured' })
       }
 
       // Fetch D2B status separately (requires auth, may fail)
@@ -144,6 +161,24 @@ export function Header() {
               <span>Syslog Off</span>
             </>
           )}
+        </div>
+
+        {/* SSH status */}
+        <div
+          className={cn(
+            'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm cursor-help',
+            sshStatus?.connected
+              ? 'bg-green-500/10 text-green-500'
+              : 'bg-red-500/10 text-red-500'
+          )}
+          title={sshStatus?.message || 'SSH status unknown'}
+        >
+          {sshStatus?.connected ? (
+            <Terminal className="w-4 h-4" />
+          ) : (
+            <TerminalSquare className="w-4 h-4" />
+          )}
+          <span>SSH</span>
         </div>
 
         {/* Detect2Ban status */}

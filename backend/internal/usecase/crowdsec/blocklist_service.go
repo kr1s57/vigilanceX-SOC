@@ -24,9 +24,7 @@ const (
 
 // BlocklistService manages CrowdSec blocklist download, storage and XGS sync
 type BlocklistService struct {
-	client         crowdsec.BlocklistProvider   // Interface - can be direct or proxy
-	directClient   *crowdsec.BlocklistClient    // Direct CrowdSec client
-	proxyClient    *crowdsec.VigilanceKeyClient // VigilanceKey proxy client
+	client         *crowdsec.BlocklistClient // Direct CrowdSec API client
 	repo           BlocklistRepository
 	geoIP          GeoIPLookup
 	xgs            XGSClient
@@ -42,9 +40,7 @@ type BlocklistService struct {
 // BlocklistConfig holds the service configuration
 type BlocklistConfig struct {
 	Enabled             bool      `json:"enabled"`
-	APIKey              string    `json:"api_key"`          // CrowdSec API key (only for direct mode)
-	UseProxy            bool      `json:"use_proxy"`        // Use VigilanceKey as proxy
-	ProxyServerURL      string    `json:"proxy_server_url"` // VigilanceKey server URL
+	APIKey              string    `json:"api_key"` // CrowdSec API key
 	SyncIntervalMinutes int       `json:"sync_interval_minutes"`
 	LastSync            time.Time `json:"last_sync"`
 	TotalIPs            int       `json:"total_ips"`
@@ -134,13 +130,11 @@ type syncWorker struct {
 // NewBlocklistService creates a new blocklist service
 func NewBlocklistService(client *crowdsec.BlocklistClient, repo BlocklistRepository) *BlocklistService {
 	s := &BlocklistService{
-		directClient: client,
-		client:       client, // Default to direct client
-		repo:         repo,
-		stopChan:     make(chan struct{}),
+		client:   client,
+		repo:     repo,
+		stopChan: make(chan struct{}),
 		config: &BlocklistConfig{
 			Enabled:             false,
-			UseProxy:            false,
 			SyncIntervalMinutes: 120, // 2 hours
 		},
 	}
@@ -151,37 +145,6 @@ func NewBlocklistService(client *crowdsec.BlocklistClient, repo BlocklistReposit
 	}
 
 	return s
-}
-
-// SetProxyClient sets the VigilanceKey proxy client
-func (s *BlocklistService) SetProxyClient(client *crowdsec.VigilanceKeyClient) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.proxyClient = client
-	slog.Info("[CROWDSEC_BL] Proxy client configured")
-}
-
-// UseProxyMode switches to using VigilanceKey as proxy
-func (s *BlocklistService) UseProxyMode(enabled bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if enabled && s.proxyClient != nil {
-		s.client = s.proxyClient
-		s.config.UseProxy = true
-		slog.Info("[CROWDSEC_BL] Switched to proxy mode (VigilanceKey)")
-	} else {
-		s.client = s.directClient
-		s.config.UseProxy = false
-		slog.Info("[CROWDSEC_BL] Switched to direct mode (CrowdSec API)")
-	}
-}
-
-// IsUsingProxy returns true if proxy mode is active
-func (s *BlocklistService) IsUsingProxy() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.config.UseProxy && s.proxyClient != nil
 }
 
 // SetGeoIPClient sets the GeoIP client for country enrichment
@@ -312,18 +275,12 @@ func (s *BlocklistService) Initialize(ctx context.Context) error {
 	s.config = config
 	s.mu.Unlock()
 
-	// Configure the appropriate client based on mode
-	if config.UseProxy && s.proxyClient != nil {
-		s.UseProxyMode(true)
-		slog.Info("[CROWDSEC_BL] Initialized in proxy mode (VigilanceKey)")
-	} else {
-		// Direct mode - update client API key
-		if config.APIKey != "" {
-			s.directClient.SetAPIKey(config.APIKey)
-		}
-		s.UseProxyMode(false)
-		slog.Info("[CROWDSEC_BL] Initialized in direct mode (CrowdSec API)")
+	// Configure client API key
+	if config.APIKey != "" {
+		s.client.SetAPIKey(config.APIKey)
 	}
+
+	slog.Info("[CROWDSEC_BL] Initialized (direct CrowdSec API mode)")
 
 	// Check retention on startup - cleanup stale data if > 30 days since last sync
 	s.CheckRetention(ctx)
@@ -361,25 +318,18 @@ func (s *BlocklistService) GetConfig(ctx context.Context) (*BlocklistConfig, err
 func (s *BlocklistService) UpdateConfig(ctx context.Context, config *BlocklistConfig) error {
 	s.mu.Lock()
 	wasEnabled := s.config.Enabled
-	wasProxy := s.config.UseProxy
 	s.config = config
 	s.mu.Unlock()
 
-	// Handle proxy mode change
-	if config.UseProxy != wasProxy {
-		s.UseProxyMode(config.UseProxy)
-	}
-
-	// Update direct client API key if not in proxy mode
-	if !config.UseProxy && config.APIKey != "" {
-		s.directClient.SetAPIKey(config.APIKey)
+	// Update client API key
+	if config.APIKey != "" {
+		s.client.SetAPIKey(config.APIKey)
 	}
 
 	// Handle enable/disable transitions
 	if config.Enabled && !wasEnabled {
 		// Just enabled - start worker and trigger initial sync
-		slog.Info("[CROWDSEC_BL] Service enabled, starting worker",
-			"proxy_mode", config.UseProxy)
+		slog.Info("[CROWDSEC_BL] Service enabled, starting worker")
 		s.StartWorker()
 		go func() {
 			if _, err := s.SyncAll(context.Background()); err != nil {
@@ -392,7 +342,6 @@ func (s *BlocklistService) UpdateConfig(ctx context.Context, config *BlocklistCo
 		// The retention check will clean up after 30 days of no sync
 		slog.Info("[CROWDSEC_BL] Service disabled, worker stopped. Data retained for 30 days.")
 		s.StopWorker()
-		// Note: Cleanup is NOT called here anymore - data is retained for 30 days
 	}
 
 	if s.repo != nil {
@@ -490,10 +439,13 @@ func (s *BlocklistService) ListBlocklists(ctx context.Context) (available []crow
 // SyncAll syncs all subscribed blocklists
 // Uses existing blocklist IDs from DB (instead of querying CrowdSec API which may return 403)
 func (s *BlocklistService) SyncAll(ctx context.Context) ([]*SyncResult, error) {
+	slog.Info("[CROWDSEC_BL] SyncAll called")
+
 	// Check if sync already in progress
 	s.syncMu.Lock()
 	if s.syncInProgress {
 		s.syncMu.Unlock()
+		slog.Warn("[CROWDSEC_BL] SyncAll rejected - sync already in progress")
 		return nil, fmt.Errorf("sync already in progress")
 	}
 	s.syncInProgress = true
@@ -505,11 +457,19 @@ func (s *BlocklistService) SyncAll(ctx context.Context) ([]*SyncResult, error) {
 	}()
 
 	s.mu.RLock()
-	if !s.config.Enabled {
-		s.mu.RUnlock()
+	enabled := s.config.Enabled
+	apiKeyLen := len(s.config.APIKey)
+	s.mu.RUnlock()
+
+	slog.Info("[CROWDSEC_BL] SyncAll config check",
+		"enabled", enabled,
+		"api_key_length", apiKeyLen,
+		"client_configured", s.client.IsConfigured())
+
+	if !enabled {
+		slog.Warn("[CROWDSEC_BL] SyncAll rejected - service is disabled")
 		return nil, fmt.Errorf("service is disabled")
 	}
-	s.mu.RUnlock()
 
 	// Get existing blocklist IDs from DB (instead of CrowdSec API)
 	blocklists, err := s.repo.GetExistingBlocklistIDs(ctx)
@@ -942,45 +902,35 @@ func (s *BlocklistService) GetStatus(ctx context.Context) map[string]interface{}
 	s.syncMu.Unlock()
 
 	// Get XGS group IP count if available
+	// Always try to get the count - group may already exist on XGS even if not synced yet
 	xgsIPCount := 0
 	xgsConfigured := s.xgs != nil
-	if xgsConfigured && s.xgsGroupReady {
+	if xgsConfigured {
 		if ips, err := s.xgs.GetGroupIPs(XGSGroupName); err == nil {
 			xgsIPCount = len(ips)
 		}
-	}
-
-	// Determine source mode
-	sourceMode := "direct"
-	if s.config.UseProxy {
-		sourceMode = "proxy"
 	}
 
 	// Get retention status
 	retentionStatus := s.GetRetentionStatus()
 
 	return map[string]interface{}{
-		"configured":        s.client.IsConfigured(),
-		"enabled":           s.config.Enabled,
-		"use_proxy":         s.config.UseProxy,
-		"source_mode":       sourceMode,              // "direct" or "proxy"
-		"proxy_server_url":  s.config.ProxyServerURL, // VigilanceKey URL if proxy mode
-		"worker_running":    workerRunning,
-		"sync_in_progress":  syncInProgress,
-		"sync_running":      syncInProgress, // Alias for frontend compatibility
-		"last_sync":         s.config.LastSync,
-		"total_ips":         s.config.TotalIPs,
-		"total_blocklists":  s.config.TotalBlocklists,
-		"sync_interval":     fmt.Sprintf("%dm", s.config.SyncIntervalMinutes),
-		"data_dir":          BlocklistDataDir,
-		"group_name":        XGSGroupName,
-		"xgs_configured":    xgsConfigured,
-		"xgs_group_ready":   s.xgsGroupReady,
-		"xgs_ip_count":      xgsIPCount,
-		"proxy_configured":  s.proxyClient != nil,
-		"direct_configured": s.directClient != nil && s.directClient.IsConfigured(),
-		"retention_days":    int(RetentionDuration.Hours() / 24),
-		"retention_status":  retentionStatus,
+		"configured":       s.client.IsConfigured(),
+		"enabled":          s.config.Enabled,
+		"worker_running":   workerRunning,
+		"sync_in_progress": syncInProgress,
+		"sync_running":     syncInProgress, // Alias for frontend compatibility
+		"last_sync":        s.config.LastSync,
+		"total_ips":        s.config.TotalIPs,
+		"total_blocklists": s.config.TotalBlocklists,
+		"sync_interval":    fmt.Sprintf("%dm", s.config.SyncIntervalMinutes),
+		"data_dir":         BlocklistDataDir,
+		"group_name":       XGSGroupName,
+		"xgs_configured":   xgsConfigured,
+		"xgs_group_ready":  s.xgsGroupReady,
+		"xgs_ip_count":     xgsIPCount,
+		"retention_days":   int(RetentionDuration.Hours() / 24),
+		"retention_status": retentionStatus,
 	}
 }
 

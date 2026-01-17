@@ -79,7 +79,7 @@ const categories: NavCategory[] = [
     icon: ShieldAlert,
     colorClass: 'text-red-500',
     items: [
-      { name: 'Active Bans', href: '/bans', icon: Ban, colorClass: 'text-red-600' },
+      { name: 'Active2Ban', href: '/bans', icon: Ban, colorClass: 'text-red-600' },
       { name: 'Geoblocking', href: '/geoblocking', icon: Globe, colorClass: 'text-cyan-500' },
       { name: 'Whitelist', href: '/whitelist', icon: ShieldCheck, colorClass: 'text-green-500' },
     ]

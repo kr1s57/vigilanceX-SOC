@@ -89,6 +89,7 @@ func main() {
 	apiUsageRepo := clickhouse.NewAPIUsageRepository(chConn)                   // v3.53: API Usage Tracking
 	vigimailRepo := clickhouse.NewVigimailRepository(chConn)                   // v3.54: Vigimail Checker
 	trackIPRepo := clickhouse.NewTrackIPRepository(chConn.Conn())              // v3.56: TrackIP forensic search
+	wafServersRepo := clickhouse.NewWAFServersRepository(chConn)               // v3.57: WAF Monitored Servers
 
 	// v3.53: API Usage Tracking Service
 	apiUsageService := apiusage.NewService(apiUsageRepo)
@@ -338,6 +339,7 @@ func main() {
 	eventsService.SetGeoProvider(&geoProviderAdapter{geoService: geoService})
 	threatsService := threats.NewService(threatsRepo, threatAggregator)
 	bansService := bans.NewService(bansRepo, sophosClient)
+	bansService.SetGeoEnricher(geoService) // v3.57.101: Enrich IPs with GeoIP at ban time
 
 	// v3.51: Initialize Detect2Ban engine
 	detect2banEngine := detect2ban.NewEngine(
@@ -354,6 +356,13 @@ func main() {
 			logger.Info("Detect2Ban engine initialized", "scenarios_dir", scenariosDir)
 		}
 	}
+
+	// v3.57: Wire WAF servers repo and GeoIP for country policy enforcement
+	detect2banEngine.SetWAFServersRepo(wafServersRepo)
+	detect2banEngine.SetGeoIPProvider(geoIPClient)
+	// v3.57.101: Wire GeoZone repo for global settings fallback (WAF server > Global GeoZone)
+	detect2banEngine.SetGeoZoneRepo(geozoneRepo)
+	logger.Info("Detect2Ban engine: Country policy support enabled (WAF server > Global GeoZone)")
 
 	reportsService := reports.NewService(statsRepo, logger)
 	blocklistsService := blocklists.NewService(feedIngester)
@@ -393,6 +402,32 @@ func main() {
 	detect2banHandler.SetAutoStarted(detect2banCtx, detect2banCancel)
 	logger.Info("Detect2Ban engine auto-started", "interval", "30s")
 
+	// v3.57.101: Background GeoIP enrichment for banned IPs
+	// Runs at startup and every hour to ensure all banned IPs have country flags
+	go func() {
+		// Initial enrichment at startup (after 30s delay to let system stabilize)
+		time.Sleep(30 * time.Second)
+		enriched, err := bansService.EnrichBannedIPsWithGeoIP(context.Background(), 100)
+		if err != nil {
+			logger.Error("[GEO] Initial ban GeoIP enrichment failed", "error", err)
+		} else if enriched > 0 {
+			logger.Info("[GEO] Initial ban GeoIP enrichment completed", "enriched", enriched)
+		}
+
+		// Periodic enrichment every hour
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			enriched, err := bansService.EnrichBannedIPsWithGeoIP(context.Background(), 100)
+			if err != nil {
+				logger.Error("[GEO] Periodic ban GeoIP enrichment failed", "error", err)
+			} else if enriched > 0 {
+				logger.Info("[GEO] Periodic ban GeoIP enrichment completed", "enriched", enriched)
+			}
+		}
+	}()
+	logger.Info("GeoIP enrichment for bans enabled", "interval", "1h")
+
 	modsecHandler := handlers.NewModSecHandler(modsecService, modsecRepo)
 	// v3.51.101: Wire WAF watcher for status endpoint
 	if wafWatcherService != nil {
@@ -425,20 +460,8 @@ func main() {
 		logger.Info("CrowdSec Blocklist: XGS sync enabled", "group", "grp_VGX-CrowdSBlockL")
 	}
 
-	// v3.53.104: VigilanceKey Proxy client for centralized blocklist access
-	// When UseProxy is enabled, VGX fetches blocklists from VigilanceKey instead of CrowdSec directly
-	if licenseClient != nil && cfg.License.ServerURL != "" {
-		vkProxyClient := crowdsecext.NewVigilanceKeyClient(crowdsecext.VigilanceKeyConfig{
-			ServerURL:  cfg.License.ServerURL,
-			LicenseKey: licenseClient.GetLicenseKey(),
-			HardwareID: licenseClient.GetHardwareID(),
-		})
-		crowdsecBlocklistService.SetProxyClient(vkProxyClient)
-		logger.Info("CrowdSec Blocklist: VigilanceKey proxy client configured",
-			"server", cfg.License.ServerURL)
-	}
-
 	// Initialize service (loads config and starts worker if enabled)
+	// Note: CrowdSec Blocklist uses direct API connection (each VGX has its own API key)
 	if err := crowdsecBlocklistService.Initialize(context.Background()); err != nil {
 		logger.Warn("CrowdSec Blocklist initialization failed", "error", err)
 	} else {
@@ -476,6 +499,10 @@ func main() {
 	trackIPService.SetGeoIPProvider(geoIPClient) // Reuse existing GeoIP client
 	trackIPHandler := handlers.NewTrackIPHandler(trackIPService)
 	logger.Info("TrackIP forensic search service initialized")
+
+	// v3.57: WAF Monitored Servers - Country Access Zero Trust
+	wafServersHandler := handlers.NewWAFServersHandler(wafServersRepo, modsecRepo)
+	logger.Info("WAF Monitored Servers handler initialized")
 
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
@@ -808,6 +835,17 @@ func main() {
 				r.Get("/attacks", handlers.NotImplemented)
 				r.Get("/rules", handlers.NotImplemented)
 				r.Get("/payloads", handlers.NotImplemented)
+			})
+
+			// WAF Servers (v3.57 - WAF Monitored Servers with Country Access Zero Trust)
+			r.Route("/waf-servers", func(r chi.Router) {
+				r.Get("/", wafServersHandler.List)
+				r.Get("/hostnames", wafServersHandler.GetHostnames)
+				r.Post("/", wafServersHandler.Create)
+				r.Get("/{hostname}", wafServersHandler.Get)
+				r.Put("/{hostname}", wafServersHandler.Update)
+				r.Delete("/{hostname}", wafServersHandler.Delete)
+				r.Get("/{hostname}/check-policy", wafServersHandler.CheckPolicy)
 			})
 
 			// ModSec

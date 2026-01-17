@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -96,12 +97,13 @@ type Remove struct {
 
 // IPHost represents an IP host object
 type IPHost struct {
-	TransactionID string         `xml:"transactionid,attr,omitempty"`
-	Name          string         `xml:"Name"`
-	IPFamily      string         `xml:"IPFamily,omitempty"`
-	HostType      string         `xml:"HostType,omitempty"`
-	IPAddress     string         `xml:"IPAddress,omitempty"`
-	HostGroupList *HostGroupList `xml:"HostGroupList,omitempty"`
+	TransactionID     string         `xml:"transactionid,attr,omitempty"`
+	Name              string         `xml:"Name"`
+	IPFamily          string         `xml:"IPFamily,omitempty"`
+	HostType          string         `xml:"HostType,omitempty"`
+	IPAddress         string         `xml:"IPAddress,omitempty"`
+	ListOfIPAddresses string         `xml:"ListOfIPAddresses,omitempty"` // For IPList type (comma-separated IPs)
+	HostGroupList     *HostGroupList `xml:"HostGroupList,omitempty"`
 }
 
 // IPHostGroup represents an IP host group
@@ -171,7 +173,8 @@ type LoginResponse struct {
 	Status string `xml:"status,attr"`
 }
 
-// sendRequest sends an XML request to Sophos API using URL query parameter
+// sendRequest sends an XML request to Sophos API using POST body
+// Uses POST with form-encoded body to support large payloads (e.g., IPList with 1000+ IPs)
 func (c *Client) sendRequest(req *APIRequest) (*APIResponse, error) {
 	// Set login credentials
 	req.Login = Login{
@@ -185,15 +188,19 @@ func (c *Client) sendRequest(req *APIRequest) (*APIResponse, error) {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Build URL with reqxml parameter (Sophos expects this format)
+	// Build XML payload with header
 	xmlPayload := xml.Header + string(xmlData)
-	reqURL := fmt.Sprintf("%s?reqxml=%s", c.baseURL, url.QueryEscape(xmlPayload))
 
-	// Create HTTP request
-	httpReq, err := http.NewRequest("GET", reqURL, nil)
+	// Use POST with form-encoded body (supports large payloads unlike URL query params)
+	formData := url.Values{}
+	formData.Set("reqxml", xmlPayload)
+
+	// Create HTTP POST request with body
+	httpReq, err := http.NewRequest("POST", c.baseURL, strings.NewReader(formData.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// Send request
 	resp, err := c.httpClient.Do(httpReq)
@@ -568,8 +575,16 @@ func (c *Client) GetGroupIPs(groupName string) ([]string, error) {
 		return nil, fmt.Errorf("failed to get group: %w", err)
 	}
 
+	slog.Info("[XGS] GetGroupIPs response",
+		"requested_group", groupName,
+		"groups_in_response", len(resp.IPHostGroup))
+
 	var ips []string
 	for _, group := range resp.IPHostGroup {
+		slog.Info("[XGS] Processing group",
+			"group_name", group.Name,
+			"hosts_count", len(group.HostList.Host))
+
 		if group.Name != groupName {
 			continue
 		}
@@ -579,12 +594,19 @@ func (c *Client) GetGroupIPs(groupName string) ([]string, error) {
 				ips = append(ips, strings.TrimPrefix(hostName, "bannedIP_"))
 			} else if strings.HasPrefix(hostName, "crowdsec_") {
 				ips = append(ips, strings.TrimPrefix(hostName, "crowdsec_"))
+			} else if strings.HasPrefix(hostName, "CS_") {
+				// CrowdSec Blocklist hosts use CS_ prefix
+				ips = append(ips, strings.TrimPrefix(hostName, "CS_"))
 			} else {
-				// Fallback: check if it looks like an IP
+				// Fallback: return as-is
 				ips = append(ips, hostName)
 			}
 		}
 	}
+
+	slog.Info("[XGS] GetGroupIPs result",
+		"group", groupName,
+		"total_ips", len(ips))
 
 	return ips, nil
 }
@@ -750,9 +772,153 @@ func (c *Client) RemoveIPFromGroup(ip, groupName, hostPrefix string) error {
 	return nil
 }
 
+// CreateIPListObject creates an IPHost object of type "IPList" containing multiple IPs
+// This is much more efficient than creating individual host objects
+// Uses the Sophos XGS IPList format with ListOfIPAddresses field
+func (c *Client) CreateIPListObject(name string, ips []string) error {
+	// Join IPs with commas for the IPList type
+	ipList := strings.Join(ips, ",")
+
+	createReq := &APIRequest{
+		Set: &Set{
+			Operation: "add",
+			IPHost: &IPHost{
+				Name:              name,
+				IPFamily:          "IPv4",
+				HostType:          "IPList",
+				ListOfIPAddresses: ipList,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(createReq)
+	if err != nil {
+		return fmt.Errorf("failed to create IP list object: %w", err)
+	}
+
+	// Check for errors - Status is inside IPHost response, not at root level
+	// 502 = already exists, which is OK for update scenarios
+	if len(resp.IPHost) > 0 {
+		status := resp.IPHost[0].Status
+		if status.Code != 200 && status.Code != 502 {
+			return fmt.Errorf("API error creating IP list: %s (code: %d)", status.Message, status.Code)
+		}
+	}
+
+	slog.Info("[XGS] Created IPList object", "name", name, "ip_count", len(ips))
+	return nil
+}
+
+// UpdateIPListObject updates an existing IPHost IPList object with new IPs
+func (c *Client) UpdateIPListObject(name string, ips []string) error {
+	// Join IPs with commas for the IPList type
+	ipList := strings.Join(ips, ",")
+
+	updateReq := &APIRequest{
+		Set: &Set{
+			Operation: "update",
+			IPHost: &IPHost{
+				Name:              name,
+				IPFamily:          "IPv4",
+				HostType:          "IPList",
+				ListOfIPAddresses: ipList,
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(updateReq)
+	if err != nil {
+		return fmt.Errorf("failed to update IP list object: %w", err)
+	}
+
+	// Check for errors - Status is inside IPHost response, not at root level
+	if len(resp.IPHost) > 0 {
+		status := resp.IPHost[0].Status
+		if status.Code != 200 {
+			return fmt.Errorf("API error updating IP list: %s (code: %d)", status.Message, status.Code)
+		}
+	}
+
+	slog.Info("[XGS] Updated IPList object", "name", name, "ip_count", len(ips))
+	return nil
+}
+
+// SyncGroupIPsWithList synchronizes using IP List objects (efficient for large lists)
+// Creates/updates IP List objects that can be referenced directly in firewall rules
+// Note: IPList objects cannot be added to IPHostGroups in Sophos XGS
+// chunkSize determines how many IPs per List object (recommended: 1000-5000)
+func (c *Client) SyncGroupIPsWithList(groupName, listPrefix string, targetIPs []string, chunkSize int) (int, error) {
+	if chunkSize <= 0 {
+		chunkSize = 1000 // Default chunk size
+	}
+
+	slog.Info("[XGS] Starting bulk IP sync with List objects",
+		"group", groupName,
+		"total_ips", len(targetIPs),
+		"chunk_size", chunkSize)
+
+	// Split IPs into chunks
+	var chunks [][]string
+	for i := 0; i < len(targetIPs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(targetIPs) {
+			end = len(targetIPs)
+		}
+		chunks = append(chunks, targetIPs[i:end])
+	}
+
+	slog.Info("[XGS] Split into chunks", "chunk_count", len(chunks))
+
+	// Create/update IP List objects for each chunk
+	var listNames []string
+	successCount := 0
+	for i, chunk := range chunks {
+		listName := fmt.Sprintf("%s_List_%d", listPrefix, i+1)
+		listNames = append(listNames, listName)
+
+		// Try to update first, if fails try to create
+		err := c.UpdateIPListObject(listName, chunk)
+		if err != nil {
+			// Try create instead
+			err = c.CreateIPListObject(listName, chunk)
+			if err != nil {
+				slog.Error("[XGS] Failed to create IP list object",
+					"name", listName,
+					"error", err)
+				continue
+			}
+		}
+		successCount++
+		slog.Info("[XGS] Created/updated IP list object",
+			"name", listName,
+			"ip_count", len(chunk))
+	}
+
+	// Note: IPList objects cannot be members of IPHostGroup in Sophos XGS
+	// The created objects (CS_List_1, CS_List_2, etc.) should be referenced
+	// directly in firewall rules for blocking
+	slog.Info("[XGS] Bulk IP sync completed - IPList objects created",
+		"list_prefix", listPrefix,
+		"total_ips", len(targetIPs),
+		"list_objects_created", successCount,
+		"list_names", listNames,
+		"note", "Add these IPList objects to your firewall rules for blocking")
+
+	return len(targetIPs), nil
+}
+
 // SyncGroupIPs synchronizes a group to contain exactly the given IPs
 // Returns: (added count, removed count, error)
+// NOTE: For large lists (>100 IPs), consider using SyncGroupIPsWithList instead
 func (c *Client) SyncGroupIPs(groupName, hostPrefix string, targetIPs []string) (int, int, error) {
+	// For large lists, use the efficient List-based method
+	if len(targetIPs) > 100 {
+		slog.Info("[XGS] Large IP list detected, using bulk sync method",
+			"count", len(targetIPs))
+		added, err := c.SyncGroupIPsWithList(groupName, hostPrefix, targetIPs, 1000)
+		return added, 0, err
+	}
+
 	// Get current IPs in group
 	currentIPs, err := c.GetGroupIPs(groupName)
 	if err != nil {

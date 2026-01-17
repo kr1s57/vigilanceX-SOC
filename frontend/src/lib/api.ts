@@ -1507,3 +1507,97 @@ export const trackIPApi = {
   },
 }
 
+// ==============================================
+// WAF Servers API (v3.57 - WAF Monitored Servers with Country Access Zero Trust)
+// ==============================================
+
+export interface WAFMonitoredServer {
+  id: string
+  hostname: string
+  display_name: string
+  description: string
+  policy_enabled: boolean
+  policy_mode: 'none' | 'whitecountry' | 'blockcountry'
+  white_countries: string[]
+  block_countries: string[]
+  waf_threshold: number
+  custom_ban_reason: string
+  enabled: boolean
+  created_at: string
+  created_by: string
+  updated_at: string
+}
+
+export interface WAFServerRequest {
+  hostname: string
+  display_name?: string
+  description?: string
+  policy_enabled?: boolean
+  policy_mode?: 'none' | 'whitecountry' | 'blockcountry'
+  white_countries?: string[]
+  block_countries?: string[]
+  waf_threshold?: number
+  custom_ban_reason?: string
+  enabled?: boolean
+}
+
+export interface PolicyCheckResult {
+  should_ban: boolean
+  ban_reason: string
+  policy_hit: string
+}
+
+export const wafServersApi = {
+  // List all configured WAF servers
+  list: async (): Promise<{ data: WAFMonitoredServer[]; total: number }> => {
+    const response = await api.get<{ data: WAFMonitoredServer[]; total: number }>('/waf-servers')
+    return response.data
+  },
+
+  // Get server by hostname
+  get: async (hostname: string): Promise<{ data: WAFMonitoredServer }> => {
+    const response = await api.get<{ data: WAFMonitoredServer }>(`/waf-servers/${encodeURIComponent(hostname)}`)
+    return response.data
+  },
+
+  // Create a new WAF server
+  create: async (server: WAFServerRequest): Promise<{ success: boolean; message: string; data: WAFMonitoredServer }> => {
+    const response = await api.post<{ success: boolean; message: string; data: WAFMonitoredServer }>('/waf-servers', server)
+    return response.data
+  },
+
+  // Update an existing WAF server
+  update: async (hostname: string, server: Partial<WAFServerRequest>): Promise<{ success: boolean; message: string; data: WAFMonitoredServer }> => {
+    const response = await api.put<{ success: boolean; message: string; data: WAFMonitoredServer }>(`/waf-servers/${encodeURIComponent(hostname)}`, server)
+    return response.data
+  },
+
+  // Delete a WAF server
+  delete: async (hostname: string, deleteLogs: boolean = false): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete<{ success: boolean; message: string }>(
+      `/waf-servers/${encodeURIComponent(hostname)}?delete_logs=${deleteLogs}`
+    )
+    return response.data
+  },
+
+  // Get list of configured hostnames only
+  getHostnames: async (): Promise<{ data: string[]; total: number }> => {
+    const response = await api.get<{ data: string[]; total: number }>('/waf-servers/hostnames')
+    return response.data
+  },
+
+  // Check country policy for a hostname
+  checkPolicy: async (hostname: string, country: string): Promise<{
+    hostname: string
+    country: string
+    policy_enabled: boolean
+    policy_mode: string
+    result: PolicyCheckResult
+  }> => {
+    const response = await api.get(`/waf-servers/${encodeURIComponent(hostname)}/check-policy`, {
+      params: { country }
+    })
+    return response.data
+  },
+}
+

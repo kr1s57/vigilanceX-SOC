@@ -112,6 +112,7 @@ func GetProtectionReason(ipStr string) string {
 type BansRepository interface {
 	GetActiveBans(ctx context.Context) ([]entity.BanStatus, error)
 	GetBanByIP(ctx context.Context, ip string) (*entity.BanStatus, error)
+	GetBannedIPsWithoutGeoIP(ctx context.Context, limit int) ([]string, error) // v3.57.101
 	UpsertBan(ctx context.Context, ban *entity.BanStatus) error
 	UpdateSyncStatus(ctx context.Context, ip string, synced bool) error
 	RecordBanHistory(ctx context.Context, history *entity.BanHistory) error
@@ -140,11 +141,18 @@ type SophosClient interface {
 	GetSyncStatus() (*sophos.SyncStatus, error)
 }
 
+// GeoEnricher interface for IP geolocation enrichment
+// v3.57.101: Added to enrich IPs at ban time for consistent flag display
+type GeoEnricher interface {
+	EnrichNewIPs(ctx context.Context, ips []string) error
+}
+
 // Service handles ban business logic with recidivism and XGS sync
 type Service struct {
-	repo   BansRepository
-	sophos SophosClient
-	mu     sync.Mutex
+	repo        BansRepository
+	sophos      SophosClient
+	geoEnricher GeoEnricher
+	mu          sync.Mutex
 }
 
 // NewService creates a new bans service
@@ -161,6 +169,12 @@ func NewServiceWithInterfaces(repo BansRepository, sophosClient SophosClient) *S
 		repo:   repo,
 		sophos: sophosClient,
 	}
+}
+
+// SetGeoEnricher sets the GeoIP enricher for the bans service
+// v3.57.101: Added to enrich IPs at ban time for consistent flag display
+func (s *Service) SetGeoEnricher(enricher GeoEnricher) {
+	s.geoEnricher = enricher
 }
 
 // ListActiveBans returns all active bans
@@ -293,6 +307,18 @@ func (s *Service) BanIP(ctx context.Context, req *entity.BanRequest) (*entity.Ba
 	// Save to database
 	if err := s.repo.UpsertBan(ctx, ban); err != nil {
 		return nil, fmt.Errorf("save ban: %w", err)
+	}
+
+	// v3.57.101: Enrich IP with geolocation data (async, non-blocking)
+	// This ensures consistent flag display in Active Bans list
+	if s.geoEnricher != nil {
+		go func(ip string) {
+			enrichCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := s.geoEnricher.EnrichNewIPs(enrichCtx, []string{ip}); err != nil {
+				log.Printf("[GEO] Failed to enrich IP %s: %v", ip, err)
+			}
+		}(req.IP)
 	}
 
 	// Record history
@@ -860,4 +886,50 @@ func (s *Service) ApplyWhitelistScoreModifier(ctx context.Context, ip string, or
 		ip, originalScore, modifiedScore, result.ScoreModifier, result.EffectiveType)
 
 	return modifiedScore, result, nil
+}
+
+// EnrichBannedIPsWithGeoIP finds banned IPs without GeoIP data and enriches them
+// v3.57.101: Background routine to ensure all banned IPs have country flags
+func (s *Service) EnrichBannedIPsWithGeoIP(ctx context.Context, limit int) (int, error) {
+	if s.geoEnricher == nil {
+		return 0, nil
+	}
+
+	// Get banned IPs without GeoIP data
+	ips, err := s.repo.GetBannedIPsWithoutGeoIP(ctx, limit)
+	if err != nil {
+		return 0, fmt.Errorf("get banned IPs without GeoIP: %w", err)
+	}
+
+	if len(ips) == 0 {
+		return 0, nil
+	}
+
+	log.Printf("[GEO] Enriching %d banned IPs without GeoIP data", len(ips))
+
+	// Enrich IPs in batches to avoid rate limiting (ip-api.com: 45 req/min)
+	batchSize := 40
+	enriched := 0
+
+	for i := 0; i < len(ips); i += batchSize {
+		end := i + batchSize
+		if end > len(ips) {
+			end = len(ips)
+		}
+		batch := ips[i:end]
+
+		if err := s.geoEnricher.EnrichNewIPs(ctx, batch); err != nil {
+			log.Printf("[GEO] Batch enrichment error: %v", err)
+			continue
+		}
+		enriched += len(batch)
+
+		// Wait between batches to respect rate limits
+		if end < len(ips) {
+			time.Sleep(65 * time.Second) // Wait ~1 minute between batches
+		}
+	}
+
+	log.Printf("[GEO] Enriched %d/%d banned IPs with GeoIP data", enriched, len(ips))
+	return enriched, nil
 }

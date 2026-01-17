@@ -73,6 +73,7 @@ interface SyncStatus {
   total_ips: number
   group_name: string
   enabled_lists?: string[]
+  xgs_ip_count?: number
 }
 
 export function CrowdSecBL() {
@@ -140,8 +141,8 @@ export function CrowdSecBL() {
           break
         }
 
-        // Small delay to avoid hammering the API
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        // Wait 90 seconds (1.5 minutes) between batches to respect ip-api.com rate limit (45/min)
+        await new Promise(resolve => setTimeout(resolve, 90000))
 
         // Refresh countries list periodically
         await loadCountries()
@@ -407,7 +408,10 @@ export function CrowdSecBL() {
             </div>
             <div>
               <p className="text-gray-400 text-sm">XGS Group</p>
-              <p className="text-sm font-medium text-white truncate" title={status?.group_name}>
+              <p className="text-2xl font-bold text-white">
+                {status?.xgs_ip_count !== undefined ? status.xgs_ip_count.toLocaleString() : '—'}
+              </p>
+              <p className="text-xs text-gray-500 truncate" title={status?.group_name}>
                 {status?.group_name || 'Not configured'}
               </p>
             </div>
@@ -450,7 +454,7 @@ export function CrowdSecBL() {
                 <button
                   onClick={startAutoEnrichment}
                   className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors shadow-lg shadow-green-500/20"
-                  title="Start automatic country enrichment (40 IPs/min due to API rate limit)"
+                  title="Start automatic country enrichment (45 IPs every 1.5 minutes)"
                 >
                   <Globe className="h-5 w-5" />
                   Start Country Enrichment
@@ -460,7 +464,7 @@ export function CrowdSecBL() {
           </div>
           {autoEnriching && (
             <div className="mt-3 text-xs text-gray-500">
-              ⚡ Rate limited to ~40 IPs/minute (ip-api.com free tier). This runs in background.
+              ⚡ Enriching 45 IPs every 1.5 minutes (ip-api.com rate limit). This runs in background until complete.
             </div>
           )}
         </div>

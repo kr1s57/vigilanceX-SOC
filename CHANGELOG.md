@@ -7,6 +7,40 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.102] - 2026-01-17
+
+### Fixed
+- **CrowdSec Blocklist XGS Sync**: Correction majeure du sync vers Sophos XGS pour les grandes listes d'IPs
+  - Fix: Passage de GET à POST pour les payloads XML volumineux (limite URL dépassée)
+  - Fix: Format IPList corrigé (`HostType: "IPList"` + `ListOfIPAddresses`)
+  - Fix: Vérification d'erreurs sur `resp.IPHost[0].Status` au lieu de `resp.Status`
+  - Note: Les objets IPList ne peuvent pas être membres d'un IPHostGroup dans Sophos XGS
+  - Les objets CS_List_1 à CS_List_32 sont créés et disponibles pour les règles firewall
+
+### Technical
+- `backend/internal/adapter/external/sophos/client.go`:
+  - `sendRequest()`: POST avec body form-encoded au lieu de GET avec query params
+  - `CreateIPListObject()`: Utilise `HostType: "IPList"` et `ListOfIPAddresses`
+  - `UpdateIPListObject()`: Même correction de format
+  - `SyncGroupIPsWithList()`: Crée les objets IPList sans tenter de les ajouter à un groupe
+- `frontend/nginx.conf`: Timeout API augmenté à 300s pour les opérations de sync longues
+
+---
+
+## [3.57.101] - 2026-01-16
+
+### Added
+- **WAF Monitored Servers**: Nouvelle fonctionnalité de suivi des serveurs WAF
+- **Country Selector Component**: Sélecteur de pays amélioré pour le geoblocking
+
+### Technical
+- Nouveau handler `waf_servers.go` pour la gestion des serveurs WAF
+- Repository ClickHouse `waf_servers_repo.go`
+- Migration `014_waf_monitored_servers.sql`
+- Composants frontend: `WAFServerModal.tsx`, `WAFServersCard.tsx`, `CountrySelector.tsx`
+
+---
+
 ## [3.55.116] - 2026-01-16
 
 ### Added

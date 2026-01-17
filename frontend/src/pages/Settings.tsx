@@ -43,11 +43,12 @@ import {
   Database,
   Brain,
   Sparkles,
+  Copy,
 } from 'lucide-react'
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, retentionApi, integrationsApi, crowdsecBlocklistApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig, type RetentionSettings, type StorageStats, type APIProviderStatus, type CrowdSecBlocklistConfig } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, copyToClipboard } from '@/lib/utils'
 
 interface ThreatProvider {
   name: string
@@ -208,6 +209,7 @@ export function Settings() {
   // License status state
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [loadingLicense, setLoadingLicense] = useState(true)
+  const [copiedHardwareId, setCopiedHardwareId] = useState(false)
 
   // Email notification settings state
   const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null)
@@ -711,7 +713,7 @@ export function Settings() {
     try {
       // v3.53.105: Special case for CrowdSec Blocklist - stored in ClickHouse
       if (editingPlugin.id === 'crowdsec_blocklist') {
-        const apiKey = pluginFormData['api_key'] || ''
+        const apiKey = pluginFormData['CROWDSEC_BLOCKLIST_API_KEY'] || ''
         // Skip if masked (no change)
         if (apiKey.includes('****')) {
           setSaveResult({ success: true, message: 'No changes to save' })
@@ -2052,9 +2054,29 @@ export function Settings() {
                     <p className="text-sm text-muted-foreground">Machine identifier (for support)</p>
                   </div>
                 </div>
-                <p className="font-mono text-xs text-muted-foreground">
-                  {licenseStatus.hardware_id.substring(0, 16)}...
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="font-mono text-xs text-muted-foreground">
+                    {licenseStatus.hardware_id.substring(0, 16)}...
+                  </p>
+                  <button
+                    onClick={async () => {
+                      const success = await copyToClipboard(licenseStatus.hardware_id || '')
+                      if (success) {
+                        setCopiedHardwareId(true)
+                        setTimeout(() => setCopiedHardwareId(false), 2000)
+                      }
+                    }}
+                    className={cn(
+                      "p-1.5 rounded-md transition-colors",
+                      copiedHardwareId
+                        ? "bg-green-500/10 text-green-500"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    )}
+                    title={copiedHardwareId ? "Copied!" : "Copy Hardware ID"}
+                  >
+                    {copiedHardwareId ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
             )}
           </>
@@ -2356,7 +2378,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.55.116</p>
+        <p>VIGILANCE X v3.57.102</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

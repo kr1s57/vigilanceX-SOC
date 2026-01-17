@@ -101,18 +101,42 @@ type NotificationLog struct {
 }
 
 // ReportData holds data for scheduled reports
+// v3.57.101: Enhanced with more fields for detailed admin reports
 type ReportData struct {
-	Period         string          `json:"period"` // daily, weekly, monthly
-	StartDate      time.Time       `json:"start_date"`
-	EndDate        time.Time       `json:"end_date"`
-	TotalEvents    uint64          `json:"total_events"`
-	BlockedEvents  uint64          `json:"blocked_events"`
-	CriticalEvents uint64          `json:"critical_events"`
-	HighEvents     uint64          `json:"high_events"`
-	NewBans        uint64          `json:"new_bans"`
-	UniqueIPs      uint64          `json:"unique_ips"`
-	TopAttackers   []TopAttacker   `json:"top_attackers"`
-	CriticalAlerts []CriticalAlert `json:"critical_alerts"`
+	Period         string            `json:"period"` // daily, weekly, monthly
+	StartDate      time.Time         `json:"start_date"`
+	EndDate        time.Time         `json:"end_date"`
+	TotalEvents    int               `json:"total_events"`
+	BlockedEvents  int               `json:"blocked_events"`
+	CriticalEvents int               `json:"critical_events"`
+	HighEvents     int               `json:"high_events"`
+	MediumEvents   int               `json:"medium_events"`
+	LowEvents      int               `json:"low_events"`
+	NewBans        int               `json:"new_bans"`
+	UniqueIPs      int               `json:"unique_ips"`
+	ActiveBans     int               `json:"active_bans"`
+	TopAttackers   []TopAttacker     `json:"top_attackers"`
+	TopTargets     []TopTarget       `json:"top_targets"`
+	TopCountries   []CountryStats    `json:"top_countries"`
+	TopAttackTypes []AttackTypeStats `json:"top_attack_types"`
+	PeakHour       string            `json:"peak_hour"`
+	CriticalAlerts []CriticalAlert   `json:"critical_alerts"`
+}
+
+// CountryStats holds country-level statistics for reports
+type CountryStats struct {
+	Country          string `json:"country"`
+	Count            int    `json:"count"`
+	Percentage       int    `json:"percentage"`
+	PercentFormatted string `json:"percent_formatted"`
+}
+
+// AttackTypeStats holds attack type statistics for reports
+type AttackTypeStats struct {
+	Type             string `json:"type"`
+	Count            int    `json:"count"`
+	Percentage       int    `json:"percentage"`
+	PercentFormatted string `json:"percent_formatted"`
 }
 
 // AlertData holds data for real-time alerts

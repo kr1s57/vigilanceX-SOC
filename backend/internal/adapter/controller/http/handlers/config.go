@@ -124,6 +124,47 @@ func (h *ConfigHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// shouldMaskField determines if a config field value should be masked
+// Returns true for sensitive fields like API keys and passwords
+// Returns false for non-sensitive fields like key paths
+func shouldMaskField(key string) bool {
+	lowerKey := strings.ToLower(key)
+
+	// Explicit non-sensitive fields (file paths, etc.)
+	nonSensitivePatterns := []string{
+		"_path", // SSH_KEY_PATH, etc.
+		"_file", // key file locations
+		"_dir",  // directories
+	}
+	for _, pattern := range nonSensitivePatterns {
+		if strings.Contains(lowerKey, pattern) {
+			return false
+		}
+	}
+
+	// Sensitive field patterns
+	sensitivePatterns := []string{
+		"password",
+		"api_key",
+		"apikey",
+		"secret",
+		"token",
+	}
+	for _, pattern := range sensitivePatterns {
+		if strings.Contains(lowerKey, pattern) {
+			return true
+		}
+	}
+
+	// Special case: field named exactly "key" (like CrowdSec CTI key)
+	// but not fields that contain "key" as part of another word like "SSH_KEY_PATH"
+	if lowerKey == "key" || strings.HasSuffix(lowerKey, "_key") {
+		return true
+	}
+
+	return false
+}
+
 // GetConfig retrieves saved configuration
 // GET /api/v1/config/{plugin_id}
 func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
@@ -135,9 +176,7 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	for id, config := range configs {
 		maskedConfigs[id] = make(map[string]string)
 		for key, value := range config.Fields {
-			if strings.Contains(strings.ToLower(key), "password") ||
-				strings.Contains(strings.ToLower(key), "key") ||
-				strings.Contains(strings.ToLower(key), "secret") {
+			if shouldMaskField(key) {
 				if len(value) > 4 {
 					maskedConfigs[id][key] = value[:4] + "****"
 				} else if len(value) > 0 {
@@ -179,10 +218,8 @@ func (h *ConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		for _, envKey := range envKeys {
 			if value := os.Getenv(envKey); value != "" {
 				hasAnyValue = true
-				// Mask sensitive values
-				if strings.Contains(strings.ToLower(envKey), "password") ||
-					strings.Contains(strings.ToLower(envKey), "key") ||
-					strings.Contains(strings.ToLower(envKey), "secret") {
+				// Mask sensitive values using the same logic
+				if shouldMaskField(envKey) {
 					if len(value) > 4 {
 						pluginConfig[envKey] = value[:4] + "****"
 					} else {

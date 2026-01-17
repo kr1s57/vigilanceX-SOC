@@ -114,6 +114,13 @@ func (h *CrowdSecBlocklistHandler) UpdateConfig(w http.ResponseWriter, r *http.R
 		// Only update if not masked
 		if apiKey != "" && !containsMask(apiKey) {
 			config.APIKey = apiKey
+			slog.Info("[CROWDSEC_BL_API] API key updated",
+				"key_length", len(apiKey),
+				"key_prefix", apiKey[:8]+"...")
+		} else {
+			slog.Info("[CROWDSEC_BL_API] API key not updated",
+				"key_empty", apiKey == "",
+				"key_masked", containsMask(apiKey))
 		}
 	}
 	if v, ok := updates["sync_interval_minutes"]; ok {
@@ -465,8 +472,8 @@ func (h *CrowdSecBlocklistHandler) EnrichCountries(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Enrich 40 IPs per call to stay under rate limit (45/min)
-	batchSize := 40
+	// Enrich 45 IPs per call (ip-api.com rate limit is 45/min)
+	batchSize := 45
 
 	ips, err := h.repo.GetIPsWithoutCountry(r.Context(), batchSize)
 	if err != nil {

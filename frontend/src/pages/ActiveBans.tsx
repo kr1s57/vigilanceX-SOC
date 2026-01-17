@@ -53,7 +53,7 @@ export function ActiveBans() {
 
   const getFilterTitle = (): string => {
     switch (statsFilter) {
-      case 'active': return 'Active Bans'
+      case 'active': return 'Active2Ban'
       case 'permanent': return 'Permanent Bans'
       case 'recent': return 'Bans (Last 24h)'
       case 'recidivist': return 'Recidivist IPs'
@@ -188,7 +188,7 @@ export function ActiveBans() {
             <Ban className="w-6 h-6 text-red-500" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Active Bans</h1>
+            <h1 className="text-2xl font-bold">Active2Ban</h1>
             <p className="text-muted-foreground">Manage blocked IP addresses</p>
           </div>
         </div>
@@ -249,7 +249,7 @@ export function ActiveBans() {
           >
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
               <Users className="w-4 h-4" />
-              Active Bans
+              Active2Ban
             </div>
             <p className="text-2xl font-bold">{stats.total_active_bans}</p>
           </button>

@@ -30,9 +30,7 @@ func (r *CrowdSecBlocklistRepository) GetConfig(ctx context.Context) (*crowdsec.
 			sync_interval_minutes,
 			last_sync,
 			total_ips,
-			total_blocklists,
-			use_proxy,
-			proxy_server_url
+			total_blocklists
 		FROM vigilance_x.crowdsec_blocklist_config
 		WHERE id = 1
 		ORDER BY version DESC
@@ -44,8 +42,6 @@ func (r *CrowdSecBlocklistRepository) GetConfig(ctx context.Context) (*crowdsec.
 	var syncInterval uint16
 	var lastSync time.Time
 	var totalIPs, totalBlocklists uint32
-	var useProxy uint8
-	var proxyServerURL string
 
 	row := r.conn.QueryRow(ctx, query)
 	err := row.Scan(
@@ -55,15 +51,12 @@ func (r *CrowdSecBlocklistRepository) GetConfig(ctx context.Context) (*crowdsec.
 		&lastSync,
 		&totalIPs,
 		&totalBlocklists,
-		&useProxy,
-		&proxyServerURL,
 	)
 
 	if err != nil {
 		slog.Warn("[CROWDSEC_REPO] GetConfig query failed, returning default", "error", err)
 		return &crowdsec.BlocklistConfig{
 			Enabled:             false,
-			UseProxy:            false,
 			SyncIntervalMinutes: 120,
 		}, nil
 	}
@@ -71,8 +64,6 @@ func (r *CrowdSecBlocklistRepository) GetConfig(ctx context.Context) (*crowdsec.
 	config := &crowdsec.BlocklistConfig{
 		APIKey:              apiKey,
 		Enabled:             enabled == 1,
-		UseProxy:            useProxy == 1,
-		ProxyServerURL:      proxyServerURL,
 		SyncIntervalMinutes: int(syncInterval),
 		LastSync:            lastSync,
 		TotalIPs:            int(totalIPs),
@@ -96,11 +87,6 @@ func (r *CrowdSecBlocklistRepository) SaveConfig(ctx context.Context, config *cr
 		enabled = 1
 	}
 
-	useProxy := uint8(0)
-	if config.UseProxy {
-		useProxy = 1
-	}
-
 	query := `
 		INSERT INTO vigilance_x.crowdsec_blocklist_config (
 			id,
@@ -110,11 +96,9 @@ func (r *CrowdSecBlocklistRepository) SaveConfig(ctx context.Context, config *cr
 			last_sync,
 			total_ips,
 			total_blocklists,
-			use_proxy,
-			proxy_server_url,
 			updated_at,
 			version
-		) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, now(), ?)
+		) VALUES (1, ?, ?, ?, ?, ?, ?, now(), ?)
 	`
 
 	err := r.conn.Exec(ctx, query,
@@ -124,8 +108,6 @@ func (r *CrowdSecBlocklistRepository) SaveConfig(ctx context.Context, config *cr
 		config.LastSync,
 		config.TotalIPs,
 		config.TotalBlocklists,
-		useProxy,
-		config.ProxyServerURL,
 		currentVersion+1,
 	)
 
@@ -233,19 +215,42 @@ func (r *CrowdSecBlocklistRepository) AddIPs(ctx context.Context, ips []crowdsec
 	return nil
 }
 
-// RemoveIPs removes IPs from a blocklist using lightweight delete
+// RemoveIPs removes IPs from a blocklist using batch delete
 func (r *CrowdSecBlocklistRepository) RemoveIPs(ctx context.Context, blocklistID string, ips []string) error {
 	if len(ips) == 0 {
 		return nil
 	}
 
-	// Use ALTER TABLE DELETE for lightweight delete
-	// Build the IN clause
-	for _, ip := range ips {
-		query := `ALTER TABLE vigilance_x.crowdsec_blocklist_ips DELETE WHERE blocklist_id = ? AND ip = ?`
-		if err := r.conn.Exec(ctx, query, blocklistID, ip); err != nil {
-			slog.Warn("[CROWDSEC_REPO] Failed to delete IP", "ip", ip, "error", err)
+	// Use batch DELETE with IN clause for efficiency
+	// Process in batches of 1000 to avoid query size limits
+	batchSize := 1000
+	for i := 0; i < len(ips); i += batchSize {
+		end := i + batchSize
+		if end > len(ips) {
+			end = len(ips)
 		}
+		batch := ips[i:end]
+
+		// Build placeholders for IN clause
+		placeholders := make([]string, len(batch))
+		args := make([]interface{}, len(batch)+1)
+		args[0] = blocklistID
+		for j, ip := range batch {
+			placeholders[j] = "?"
+			args[j+1] = ip
+		}
+
+		query := fmt.Sprintf(
+			`ALTER TABLE vigilance_x.crowdsec_blocklist_ips DELETE WHERE blocklist_id = ? AND ip IN (%s) SETTINGS mutations_sync = 1`,
+			strings.Join(placeholders, ","),
+		)
+
+		if err := r.conn.Exec(ctx, query, args...); err != nil {
+			slog.Error("[CROWDSEC_REPO] Failed to delete batch", "batch_size", len(batch), "error", err)
+			return fmt.Errorf("delete batch: %w", err)
+		}
+
+		slog.Debug("[CROWDSEC_REPO] Deleted IP batch", "batch", len(batch), "total_progress", end)
 	}
 
 	slog.Info("[CROWDSEC_REPO] Removed IPs", "blocklist_id", blocklistID, "count", len(ips))

@@ -113,12 +113,31 @@ func GetProtectionReason(ipStr string) string {
 	return ""
 }
 
+// WAFServersRepository interface for country policy lookup
+type WAFServersRepository interface {
+	GetByHostname(ctx context.Context, hostname string) (*entity.WAFMonitoredServer, error)
+}
+
+// GeoIPProvider interface for IP country lookup
+type GeoIPProvider interface {
+	Lookup(ctx context.Context, ip string) (*entity.GeoLocation, error)
+}
+
+// GeoZoneRepository interface for global GeoZone settings
+// v3.57.101: Added for fallback when WAF server has no specific policy
+type GeoZoneRepository interface {
+	GetGeoZoneConfig() (*entity.GeoZoneConfig, error)
+}
+
 // Engine is the Detect2Ban detection engine
 type Engine struct {
 	scenarios      []*Scenario
 	eventsRepo     *clickhouse.EventsRepository
 	bansService    *bans.Service
 	threatsService *threats.Service
+	wafServersRepo WAFServersRepository // v3.57: WAF server country policy
+	geoZoneRepo    GeoZoneRepository    // v3.57.101: Global GeoZone settings fallback
+	geoIPProvider  GeoIPProvider        // v3.57: GeoIP for country lookup
 	mu             sync.RWMutex
 	running        bool
 	stopCh         chan struct{}
@@ -174,6 +193,21 @@ func NewEngine(cfg Config, eventsRepo *clickhouse.EventsRepository, bansService 
 		threatsService: threatsService,
 		stopCh:         make(chan struct{}),
 	}
+}
+
+// SetWAFServersRepo sets the WAF servers repository for country policy lookup (v3.57)
+func (e *Engine) SetWAFServersRepo(repo WAFServersRepository) {
+	e.wafServersRepo = repo
+}
+
+// SetGeoIPProvider sets the GeoIP provider for country lookup (v3.57)
+func (e *Engine) SetGeoIPProvider(provider GeoIPProvider) {
+	e.geoIPProvider = provider
+}
+
+// SetGeoZoneRepo sets the GeoZone repository for global settings fallback (v3.57.101)
+func (e *Engine) SetGeoZoneRepo(repo GeoZoneRepository) {
+	e.geoZoneRepo = repo
 }
 
 // LoadScenarios loads all YAML scenarios from directory
@@ -282,6 +316,7 @@ func (e *Engine) runDetectionCycle(ctx context.Context) {
 // ScenarioMatch represents an IP that matched a scenario
 type ScenarioMatch struct {
 	IP         string
+	Hostname   string // v3.57: Target hostname for country policy
 	EventCount uint64
 	FirstEvent time.Time
 	LastEvent  time.Time
@@ -311,7 +346,8 @@ func (e *Engine) evaluateScenario(ctx context.Context, scenario *Scenario) ([]Sc
 	var matches []ScenarioMatch
 	for rows.Next() {
 		var match ScenarioMatch
-		if err := rows.Scan(&match.IP, &match.EventCount, &match.FirstEvent, &match.LastEvent); err != nil {
+		// v3.57: Also scan hostname for country policy
+		if err := rows.Scan(&match.IP, &match.Hostname, &match.EventCount, &match.FirstEvent, &match.LastEvent); err != nil {
 			continue
 		}
 
@@ -340,9 +376,12 @@ func (e *Engine) buildQuery(scenario *Scenario, window time.Duration) string {
 		groupBy = "src_ip"
 	}
 
+	// v3.57: Include hostname for country policy lookup
+	// anyLast gets the most recent hostname for each IP
 	query := fmt.Sprintf(`
 		SELECT
 			%s as ip,
+			anyLast(hostname) as target_hostname,
 			count() as event_count,
 			min(timestamp) as first_event,
 			max(timestamp) as last_event
@@ -404,6 +443,50 @@ func (e *Engine) handleMatch(ctx context.Context, scenario *Scenario, match Scen
 		log.Printf("[DETECT2BAN] PROTECTED IP %s - %s (scenario: %s, events: %d) - SKIPPING BAN",
 			match.IP, reason, scenario.Name, match.EventCount)
 		return
+	}
+
+	// v3.57.101: Check country policy - WAF server rules override global settings
+	// Priority: WAF server policy > Global GeoZone settings
+	if e.geoIPProvider != nil {
+		// First, try WAF server-specific policy (if server has policy enabled)
+		var useGlobalSettings = true
+		if e.wafServersRepo != nil && match.Hostname != "" {
+			server, err := e.wafServersRepo.GetByHostname(ctx, match.Hostname)
+			if err == nil && server != nil && server.PolicyEnabled {
+				// Server has its own policy - use it exclusively (no fallback to global)
+				useGlobalSettings = false
+				geoInfo, err := e.geoIPProvider.Lookup(ctx, match.IP)
+				if err == nil && geoInfo != nil && geoInfo.CountryCode != "" {
+					policyResult := server.CheckCountryPolicy(geoInfo.CountryCode)
+					if policyResult.ShouldBan {
+						log.Printf("[DETECT2BAN] Server policy triggered for IP %s (country: %s, hostname: %s, policy: %s)",
+							match.IP, geoInfo.CountryCode, match.Hostname, policyResult.PolicyHit)
+						e.executeCountryPolicyBan(ctx, match, policyResult.BanReason)
+						return
+					}
+				}
+			}
+		}
+
+		// Fallback to global GeoZone settings if no server-specific policy
+		if useGlobalSettings && e.geoZoneRepo != nil {
+			geoZoneConfig, err := e.geoZoneRepo.GetGeoZoneConfig()
+			if err == nil && geoZoneConfig != nil && geoZoneConfig.Enabled {
+				geoInfo, err := e.geoIPProvider.Lookup(ctx, match.IP)
+				if err == nil && geoInfo != nil && geoInfo.CountryCode != "" {
+					zone := geoZoneConfig.ClassifyCountry(geoInfo.CountryCode)
+					if zone == entity.GeoZoneHostile {
+						// Hostile country - immediate ban
+						banReason := fmt.Sprintf("GeoZone: Country %s is in hostile list", geoInfo.CountryCode)
+						log.Printf("[DETECT2BAN] Global GeoZone hostile country triggered for IP %s (country: %s)",
+							match.IP, geoInfo.CountryCode)
+						e.executeCountryPolicyBan(ctx, match, banReason)
+						return
+					}
+					// For authorized/neutral zones, let normal D2B flow continue
+				}
+			}
+		}
 	}
 
 	// Check if already banned
@@ -520,6 +603,30 @@ func (e *Engine) executeAlert(scenario *Scenario, match ScenarioMatch) {
 	log.Printf("[DETECT2BAN] ALERT: %s triggered for IP %s (%d events)",
 		scenario.Name, match.IP, match.EventCount)
 	// TODO: Implement webhook notifications
+}
+
+// executeCountryPolicyBan bans an IP based on country policy (v3.57)
+func (e *Engine) executeCountryPolicyBan(ctx context.Context, match ScenarioMatch, banReason string) {
+	// Country policy bans are 24h by default
+	durationDays := 1
+
+	req := &entity.BanRequest{
+		IP:           match.IP,
+		Reason:       banReason,
+		DurationDays: &durationDays,
+		Permanent:    false,
+		TriggerRule:  "country_policy",
+		PerformedBy:  "detect2ban",
+	}
+
+	ban, err := e.bansService.BanIP(ctx, req)
+	if err != nil {
+		log.Printf("[DETECT2BAN] Failed to ban %s (country policy): %v", match.IP, err)
+		return
+	}
+
+	log.Printf("[DETECT2BAN] Banned IP %s via country policy (status: %s, expires: %v)",
+		match.IP, ban.Status, ban.ExpiresAt)
 }
 
 // GetScenarios returns loaded scenarios

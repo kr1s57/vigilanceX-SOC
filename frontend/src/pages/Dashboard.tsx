@@ -13,15 +13,15 @@ import {
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
 import { SeverityChart } from '@/components/charts/SeverityChart'
-import { ZoneTrafficCard } from '@/components/dashboard/ZoneTrafficCard'
+import { WAFServersCard } from '@/components/dashboard/WAFServersCard'
 import { statsApi, eventsApi, alertsApi } from '@/lib/api'
 import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
 
-// v3.55.116: Current installed version
-const INSTALLED_VERSION = '3.55.116'
+// v3.57.101: Current installed version
+const INSTALLED_VERSION = '3.57.101'
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
@@ -238,8 +238,8 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Zone Traffic Flow (v3.1) */}
-        <ZoneTrafficCard period={period} refreshInterval={settings.refreshInterval} />
+        {/* WAF Servers Status (v3.57.101) */}
+        <WAFServersCard refreshInterval={settings.refreshInterval} />
       </div>
 
       {/* Critical Alerts Modal */}

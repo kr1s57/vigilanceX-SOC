@@ -822,13 +822,15 @@ export interface DomainDNSCheck {
 }
 
 export interface VigimailStatus {
-  is_running: boolean
-  worker_active: boolean
+  enabled: boolean
+  worker_running: boolean
   last_check: string
   next_check: string
-  domains_count: number
-  emails_count: number
-  leaks_count: number
+  total_domains: number
+  total_emails: number
+  total_leaks: number
+  emails_with_leaks: number
+  domains_at_risk: number
   hibp_configured: boolean
   leakcheck_configured: boolean
 }
