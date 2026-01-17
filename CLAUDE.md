@@ -174,10 +174,21 @@ src/
 - Major (rare): `3.59.115` -> `4.0.100`
 
 **A chaque release, mettre a jour:**
-- `CHANGELOG.md`
-- `frontend/src/pages/Settings.tsx` (ligne ~2129)
-- `CLAUDE.md` header (version + date)
+- `CHANGELOG.md` - Ajouter entree pour la nouvelle version
+- `CLAUDE.md` header - Version + date de mise a jour
 - Tags git sur les 4 repos
+
+**FICHIERS VERSION FRONTEND (CRITIQUE - tous a mettre a jour):**
+
+| Fichier | Ligne | Variable/Texte |
+|---------|-------|----------------|
+| `frontend/src/pages/Dashboard.tsx` | ~24 | `INSTALLED_VERSION = 'X.YY.Z'` |
+| `frontend/src/pages/Settings.tsx` | ~2381 | `VIGILANCE X vX.YY.Z` |
+| `frontend/src/pages/Login.tsx` | ~192 | `VIGILANCE X vX.YY.Z` |
+| `frontend/src/pages/LicenseActivation.tsx` | ~450 | `VIGILANCE X vX.YY.Z` |
+
+> **IMPORTANT**: Le badge version du Dashboard utilise `INSTALLED_VERSION` dans Dashboard.tsx.
+> Ne pas oublier de mettre a jour TOUS ces fichiers sinon le badge affichera une mauvaise version!
 
 ---
 
@@ -186,9 +197,9 @@ src/
 Quand l'utilisateur dit "gitgo":
 
 **Etape 0 - Version (OBLIGATOIRE):**
-1. Verifier version dans Settings.tsx (ligne ~2129)
-2. Incrementer selon regles X.YY.Z
-3. Mettre a jour header CLAUDE.md
+1. Chercher TOUS les fichiers avec la version: `grep -rn "X.YY.Z" frontend/src/pages/`
+2. Incrementer selon regles X.YY.Z dans TOUS les fichiers listes ci-dessus
+3. Mettre a jour header CLAUDE.md (version + date)
 
 **Etape 1 - Commit et Push Private:**
 ```bash

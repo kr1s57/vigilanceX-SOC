@@ -20,8 +20,8 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
 
-// v3.57.101: Current installed version
-const INSTALLED_VERSION = '3.57.101'
+// v3.57.102: Current installed version
+const INSTALLED_VERSION = '3.57.102'
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
