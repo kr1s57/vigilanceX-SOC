@@ -298,6 +298,7 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 }
 
 // GetTopAttackers retrieves top attacking IPs
+// v3.57.108: Filters out private/LAN IPs and only shows real attackers with security events
 func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, limit int) ([]entity.TopAttacker, error) {
 	var startTime time.Time
 	now := time.Now()
@@ -315,18 +316,30 @@ func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, l
 		startTime = now.Add(-24 * time.Hour)
 	}
 
+	// v3.57.108: Filter out private IP ranges (RFC1918 + loopback)
+	// v3.57.110: Also filter out XGS public IP (83.194.220.184) and VGX infrastructure IPs
+	// Only include security-relevant log types (WAF, IPS, ATP, Anti-Virus, Firewall attacks)
+	// Exclude generic events like Heartbeat, Admin, etc.
 	query := `
 		SELECT
 			IPv4NumToString(src_ip) as ip,
 			toInt64(count()) as attack_count,
-			toInt64(countIf(action IN ('drop', 'reject', 'block', 'blocked'))) as blocked_count,
+			toInt64(countIf(action IN ('drop', 'reject', 'block', 'blocked', 'deny'))) as blocked_count,
 			toInt64(uniqExact(rule_id)) as unique_rules,
 			groupUniqArray(5)(category) as categories,
 			any(geo_country) as country
 		FROM events
 		WHERE timestamp >= ?
+		  AND src_ip != toIPv4('0.0.0.0')
+		  AND (src_ip < toIPv4('10.0.0.0') OR src_ip > toIPv4('10.255.255.255'))
+		  AND (src_ip < toIPv4('172.16.0.0') OR src_ip > toIPv4('172.31.255.255'))
+		  AND (src_ip < toIPv4('192.168.0.0') OR src_ip > toIPv4('192.168.255.255'))
+		  AND (src_ip < toIPv4('127.0.0.0') OR src_ip > toIPv4('127.255.255.255'))
+		  AND src_ip != toIPv4('83.194.220.184')
+		  AND log_type IN ('WAF', 'IPS', 'ATP', 'Anti-Virus', 'Firewall', 'Threat')
 		GROUP BY src_ip
-		ORDER BY attack_count DESC
+		HAVING attack_count > 0
+		ORDER BY blocked_count DESC, attack_count DESC
 		LIMIT ?
 	`
 
@@ -540,13 +553,16 @@ func (r *EventsRepository) GetGeoHeatmapFiltered(ctx context.Context, period str
 		whereClause = "AND (log_type = 'WAF' OR log_type = 'IPS' OR log_type = 'Anti-Virus' OR log_type = 'Threat' OR category LIKE '%Malware%' OR category LIKE '%IDS%' OR category LIKE '%IPS%' OR category LIKE '%Threat%' OR category LIKE '%C2%' OR category LIKE '%Botnet%')"
 	}
 
+	// v3.57.112: Filter out XGS public IP 83.194.220.184 from attack map
 	query := fmt.Sprintf(`
 		SELECT
 			geo_country,
 			count() as count,
 			uniqExact(src_ip) as unique_ips
 		FROM events
-		WHERE timestamp >= ? AND geo_country != '' %s
+		WHERE timestamp >= ? AND geo_country != ''
+			AND src_ip != toIPv4('83.194.220.184')
+			%s
 		GROUP BY geo_country
 		ORDER BY count DESC
 	`, whereClause)
@@ -605,13 +621,16 @@ func (r *EventsRepository) GetGeoHeatmapFilteredRange(ctx context.Context, start
 		whereClause = "AND (log_type = 'WAF' OR log_type = 'IPS' OR log_type = 'Anti-Virus' OR log_type = 'Threat' OR category LIKE '%Malware%' OR category LIKE '%IDS%' OR category LIKE '%IPS%' OR category LIKE '%Threat%' OR category LIKE '%C2%' OR category LIKE '%Botnet%')"
 	}
 
+	// v3.57.112: Filter out XGS public IP 83.194.220.184 from attack map
 	query := fmt.Sprintf(`
 		SELECT
 			geo_country,
 			count() as count,
 			uniqExact(src_ip) as unique_ips
 		FROM events
-		WHERE timestamp >= ? AND timestamp <= ? AND geo_country != '' %s
+		WHERE timestamp >= ? AND timestamp <= ? AND geo_country != ''
+			AND src_ip != toIPv4('83.194.220.184')
+			%s
 		GROUP BY geo_country
 		ORDER BY count DESC
 	`, whereClause)

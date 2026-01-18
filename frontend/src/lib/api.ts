@@ -1601,3 +1601,45 @@ export const wafServersApi = {
   },
 }
 
+// v3.57.107: Admin Console API - Terminal commands and logs viewer
+export interface ConsoleCommandResponse {
+  success: boolean
+  output: string
+  error?: string
+  lines?: string[]
+}
+
+export interface ConsoleService {
+  name: string
+  container: string
+}
+
+export const consoleApi = {
+  // Execute a console command
+  execute: async (command: string, args?: string[]): Promise<ConsoleCommandResponse> => {
+    const response = await api.post<ConsoleCommandResponse>('/console/execute', { command, args })
+    return response.data
+  },
+
+  // Get logs for a service
+  getLogs: async (service: string = 'api', lines: number = 100, since?: string): Promise<ConsoleCommandResponse> => {
+    const params = new URLSearchParams({ service, lines: String(lines) })
+    if (since) params.append('since', since)
+    const response = await api.get<ConsoleCommandResponse>(`/console/logs?${params}`)
+    return response.data
+  },
+
+  // Get list of available services
+  getServices: async (): Promise<ConsoleService[]> => {
+    const response = await api.get<ConsoleService[]>('/console/services')
+    return response.data
+  },
+
+  // Create EventSource for streaming logs
+  streamLogs: (service: string = 'api'): EventSource => {
+    const token = localStorage.getItem('auth_token')
+    const baseUrl = import.meta.env.VITE_API_URL || '/api'
+    return new EventSource(`${baseUrl}/v1/console/logs/stream?service=${service}&token=${token}`)
+  },
+}
+

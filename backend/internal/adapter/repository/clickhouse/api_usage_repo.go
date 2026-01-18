@@ -383,3 +383,72 @@ func (r *APIUsageRepository) IsProviderConfigured(ctx context.Context, providerI
 	apiKey, err := r.GetProviderAPIKey(ctx, providerID)
 	return err == nil && apiKey != ""
 }
+
+// DefaultProviderQuotas contains the default daily quotas for each TI provider
+// v3.57.111: Initialize providers with correct quotas
+var DefaultProviderQuotas = map[string]struct {
+	DisplayName string
+	DailyQuota  int // -1 = unlimited
+}{
+	"crowdsec_cti": {"CrowdSec CTI", 50},      // Free tier: 50/day
+	"abuseipdb":    {"AbuseIPDB", 1000},       // Free tier: 1000/day
+	"greynoise":    {"GreyNoise", 50},         // Community: 50/day
+	"virustotal":   {"VirusTotal", 500},       // Public API: 500/day
+	"criminalip":   {"Criminal IP", 500},      // Free tier: 500/day
+	"pulsedive":    {"Pulsedive", 30},         // Free tier: 30/day
+	"alienvault":   {"AlienVault OTX", -1},    // Unlimited (OTX)
+	"ipsum":        {"IPsum", -1},             // Free list
+	"threatfox":    {"ThreatFox", -1},         // Free API
+	"urlhaus":      {"URLhaus", -1},           // Free API
+	"shodan":       {"Shodan InternetDB", -1}, // Free InternetDB
+}
+
+// EnsureDefaultProviders creates provider configs with default quotas if they don't exist
+// Also fixes existing providers that have incorrect quotas (e.g., -1 instead of 50)
+// v3.57.111: Called at startup to ensure all providers have correct quota settings
+func (r *APIUsageRepository) EnsureDefaultProviders(ctx context.Context) error {
+	for providerID, info := range DefaultProviderQuotas {
+		// Check if provider already exists
+		existing, err := r.GetProviderConfig(ctx, providerID)
+		if err == nil {
+			// Provider exists - check if quota needs fixing
+			// Only update if current quota is -1 (unlimited) but should have a limit
+			if existing.DailyQuota == -1 && info.DailyQuota > 0 {
+				existing.DailyQuota = info.DailyQuota
+				existing.DisplayName = info.DisplayName
+				existing.UpdatedAt = time.Now()
+				if err := r.UpdateProviderConfig(ctx, existing); err != nil {
+					slog.Warn("[API_USAGE] Failed to fix provider quota",
+						"provider", providerID,
+						"error", err)
+				} else {
+					slog.Info("[API_USAGE] Fixed provider quota",
+						"provider", providerID,
+						"quota", info.DailyQuota)
+				}
+			}
+			continue
+		}
+
+		// Create provider with default quota
+		config := &APIProviderConfig{
+			ProviderID:  providerID,
+			DisplayName: info.DisplayName,
+			DailyQuota:  info.DailyQuota,
+			Enabled:     true,
+			UpdatedAt:   time.Now(),
+		}
+
+		if err := r.UpdateProviderConfig(ctx, config); err != nil {
+			slog.Warn("[API_USAGE] Failed to create default provider config",
+				"provider", providerID,
+				"error", err)
+		} else {
+			slog.Info("[API_USAGE] Created default provider config",
+				"provider", providerID,
+				"quota", info.DailyQuota)
+		}
+	}
+
+	return nil
+}

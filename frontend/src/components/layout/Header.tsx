@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, RefreshCw, Wifi, WifiOff, Server, ServerOff, AlertTriangle, X, Shield, ShieldOff, Terminal, TerminalSquare } from 'lucide-react'
+import { Bell, RefreshCw, Wifi, WifiOff, Server, ServerOff, AlertTriangle, X, Shield, ShieldOff, Terminal, TerminalSquare, Monitor } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWebSocket, useRealtimeEvents } from '@/hooks/useWebSocket'
 import { statusApi, alertsApi, detect2banApi, modsecApi, type Detect2BanStatus } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
+import { TerminalConsole } from '@/components/TerminalConsole'
 import type { SyslogStatus, CriticalAlert } from '@/types'
 
 interface SSHStatus {
@@ -13,6 +15,7 @@ interface SSHStatus {
 
 export function Header() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { isConnected } = useWebSocket()
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const [syslogStatus, setSyslogStatus] = useState<SyslogStatus | null>(null)
@@ -21,6 +24,7 @@ export function Header() {
   const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlert[]>([])
   const [readAlertIds, setReadAlertIds] = useState<Set<string>>(new Set())
   const [showNotifications, setShowNotifications] = useState(false)
+  const [showTerminal, setShowTerminal] = useState(false) // v3.57.107: Admin Console
   const notificationRef = useRef<HTMLDivElement>(null)
 
   // Update timestamp when new events arrive
@@ -205,6 +209,17 @@ export function Header() {
           <span>Updated {formatTimeAgo(lastUpdate)}</span>
         </div>
 
+        {/* v3.57.107: Admin Console button - only for admin users */}
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => setShowTerminal(true)}
+            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            title="Admin Console"
+          >
+            <Monitor className="w-5 h-5" />
+          </button>
+        )}
+
         {/* Notifications */}
         <div className="relative" ref={notificationRef}>
           <button
@@ -282,9 +297,12 @@ export function Header() {
 
         {/* User menu placeholder */}
         <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-sm font-medium">
-          A
+          {user?.username?.[0]?.toUpperCase() || 'A'}
         </div>
       </div>
+
+      {/* v3.57.107: Admin Console Modal */}
+      <TerminalConsole isOpen={showTerminal} onClose={() => setShowTerminal(false)} />
     </header>
   )
 }

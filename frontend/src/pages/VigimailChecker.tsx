@@ -298,16 +298,29 @@ export function VigimailChecker() {
     }
   }
 
+  // v3.57.111: Helper to check if date is valid/real (not zero time or epoch)
+  const isValidDate = (dateStr: string): boolean => {
+    if (!dateStr) return false
+    // Check for Go zero time and Unix epoch
+    if (dateStr.startsWith('0001-01-01') || dateStr.startsWith('1970-01-01')) return false
+    const date = new Date(dateStr)
+    // Check for invalid date
+    if (isNaN(date.getTime())) return false
+    // Check if date is before year 2000 (likely invalid for this system)
+    if (date.getFullYear() < 2000) return false
+    return true
+  }
+
   // Format date
   const formatDate = (dateStr: string) => {
-    if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return 'Never'
+    if (!isValidDate(dateStr)) return 'Never'
     const date = new Date(dateStr)
     return date.toLocaleString()
   }
 
   // Format relative time
   const formatRelative = (dateStr: string) => {
-    if (!dateStr || dateStr === '0001-01-01T00:00:00Z') return 'Never'
+    if (!isValidDate(dateStr)) return 'Never'
     const date = new Date(dateStr)
     const now = new Date()
     const diff = now.getTime() - date.getTime()

@@ -9,20 +9,22 @@ import {
   Clock,
   ArrowUp,
   CheckCircle2,
+  Search,
 } from 'lucide-react'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
 import { SeverityChart } from '@/components/charts/SeverityChart'
 import { WAFServersCard } from '@/components/dashboard/WAFServersCard'
 import { XGSLoginCard } from '@/components/dashboard/XGSLoginCard'
+import { IPThreatModal } from '@/components/IPThreatModal'
 import { statsApi, eventsApi, alertsApi } from '@/lib/api'
 import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
 
-// v3.57.106: Current installed version
-const INSTALLED_VERSION = '3.57.106'
+// v3.57.111: Current installed version
+const INSTALLED_VERSION = '3.57.112'
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
@@ -40,6 +42,8 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAlertsModal, setShowAlertsModal] = useState(false)
+  // v3.57.108: IP Threat Modal state
+  const [threatModalIP, setThreatModalIP] = useState<string | null>(null)
 
   // Save period to sessionStorage when it changes
   useEffect(() => {
@@ -209,7 +213,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Bottom Row - 2x2 grid */}
+      {/* Bottom Row - v3.57.107: Layout Top Attackers | WAF | Events | XGS Logins */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Top Attackers - 5 visible with scroll */}
         <div className="bg-card rounded-xl border p-6">
@@ -223,7 +227,12 @@ export function Dashboard() {
           </div>
           <div className="space-y-2 max-h-[320px] overflow-y-auto pr-2 scrollbar-thin">
             {overview?.top_attackers.slice(0, settings.topAttackersCount).map((attacker, index) => (
-              <TopAttackerRow key={attacker.ip} attacker={attacker} rank={index + 1} />
+              <TopAttackerRow
+                key={attacker.ip}
+                attacker={attacker}
+                rank={index + 1}
+                onViewThreat={setThreatModalIP}
+              />
             ))}
             {(!overview?.top_attackers || overview.top_attackers.length === 0) && (
               <p className="text-muted-foreground text-center py-4">No data available</p>
@@ -231,10 +240,13 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Log Type Distribution - very compact */}
+        {/* WAF Servers Status - Position 2 */}
+        <WAFServersCard refreshInterval={settings.refreshInterval} />
+
+        {/* Log Type Distribution - v3.57.107: Increased height */}
         <div className="bg-card rounded-xl border p-6">
           <h3 className="text-lg font-semibold mb-3">Events by Type</h3>
-          <div className="space-y-1.5 max-h-[100px] overflow-y-auto pr-2 scrollbar-thin">
+          <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-2 scrollbar-thin">
             {overview?.by_log_type && Object.entries(overview.by_log_type)
               .sort(([, a], [, b]) => b - a)
               .map(([logType, count]) => (
@@ -246,11 +258,8 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* XGS Login Activity */}
+        {/* XGS Login Activity - Position 4 */}
         <XGSLoginCard refreshInterval={settings.refreshInterval} />
-
-        {/* WAF Servers Status (v3.57.101) */}
-        <WAFServersCard refreshInterval={settings.refreshInterval} />
       </div>
 
       {/* Critical Alerts Modal */}
@@ -258,18 +267,28 @@ export function Dashboard() {
         <CriticalAlertsModal
           alerts={criticalAlerts}
           onClose={() => setShowAlertsModal(false)}
+          onViewThreat={setThreatModalIP}
         />
       )}
+
+      {/* v3.57.108: IP Threat Modal */}
+      <IPThreatModal
+        ip={threatModalIP}
+        isOpen={threatModalIP !== null}
+        onClose={() => setThreatModalIP(null)}
+      />
     </div>
   )
 }
 
 function CriticalAlertsModal({
   alerts,
-  onClose
+  onClose,
+  onViewThreat,
 }: {
   alerts: CriticalAlert[]
   onClose: () => void
+  onViewThreat: (ip: string) => void
 }) {
   const criticalCount = alerts.filter(a => a.severity === 'critical').length
   const highCount = alerts.filter(a => a.severity === 'high').length
@@ -306,7 +325,7 @@ function CriticalAlertsModal({
           ) : (
             <div className="space-y-3">
               {alerts.map((alert) => (
-                <AlertRow key={alert.event_id} alert={alert} />
+                <AlertRow key={alert.event_id} alert={alert} onViewThreat={onViewThreat} />
               ))}
             </div>
           )}
@@ -316,7 +335,7 @@ function CriticalAlertsModal({
   )
 }
 
-function AlertRow({ alert }: { alert: CriticalAlert }) {
+function AlertRow({ alert, onViewThreat }: { alert: CriticalAlert; onViewThreat: (ip: string) => void }) {
   const severityColors = {
     critical: 'border-l-red-500 bg-red-500/5',
     high: 'border-l-orange-500 bg-orange-500/5',
@@ -347,7 +366,17 @@ function AlertRow({ alert }: { alert: CriticalAlert }) {
             {alert.rule_name || alert.message || `Rule ${alert.rule_id}`}
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span className="font-mono">{alert.src_ip}</span>
+            {/* v3.57.108: Add magnifying glass to view IP threat details */}
+            <span className="flex items-center gap-1">
+              <span className="font-mono">{alert.src_ip}</span>
+              <button
+                onClick={() => onViewThreat(alert.src_ip)}
+                className="p-0.5 hover:bg-muted rounded transition-colors"
+                title="View threat details"
+              >
+                <Search className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+              </button>
+            </span>
             {alert.dst_ip && (
               <>
                 <span>→</span>
@@ -390,10 +419,16 @@ function AlertRow({ alert }: { alert: CriticalAlert }) {
   )
 }
 
-function TopAttackerRow({ attacker, rank }: { attacker: TopAttacker; rank: number }) {
-  const percentage = attacker.attack_count > 0
-    ? (attacker.blocked_count / attacker.attack_count) * 100
-    : 0
+function TopAttackerRow({
+  attacker,
+  rank,
+  onViewThreat,
+}: {
+  attacker: TopAttacker
+  rank: number
+  onViewThreat: (ip: string) => void
+}) {
+  const detectedCount = attacker.attack_count - attacker.blocked_count
 
   return (
     <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
@@ -403,22 +438,35 @@ function TopAttackerRow({ attacker, rank }: { attacker: TopAttacker; rank: numbe
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm">{attacker.ip}</span>
+          {/* v3.57.108: Magnifying glass to view threat details */}
+          <button
+            onClick={() => onViewThreat(attacker.ip)}
+            className="p-0.5 hover:bg-background rounded transition-colors"
+            title="View threat details"
+          >
+            <Search className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+          </button>
           {attacker.country && (
             <span className="text-lg">{getCountryFlag(attacker.country)}</span>
           )}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{formatNumber(attacker.attack_count)} attacks</span>
-          <span>•</span>
           <span>{attacker.unique_rules} rules triggered</span>
         </div>
       </div>
-      <div className="text-right">
-        <div className="text-sm font-medium text-red-500">
-          {formatNumber(attacker.blocked_count)} blocked
+      {/* v3.57.108: Show blocked (red) and detected (orange) counts */}
+      <div className="text-right flex items-center gap-3">
+        <div>
+          <div className="text-sm font-medium text-red-500">
+            {formatNumber(attacker.blocked_count)}
+          </div>
+          <div className="text-xs text-muted-foreground">blocked</div>
         </div>
-        <div className="text-xs text-muted-foreground">
-          {formatPercent(percentage)}
+        <div>
+          <div className="text-sm font-medium text-orange-500">
+            {formatNumber(detectedCount)}
+          </div>
+          <div className="text-xs text-muted-foreground">detected</div>
         </div>
       </div>
     </div>

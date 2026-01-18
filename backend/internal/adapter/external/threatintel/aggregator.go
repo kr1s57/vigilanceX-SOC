@@ -73,9 +73,10 @@ type Aggregator struct {
 
 // CascadeConfig defines thresholds for tiered API querying
 type CascadeConfig struct {
-	Tier2Threshold int  // Score threshold to query Tier 2 (default: 30)
-	Tier3Threshold int  // Score threshold to query Tier 3 (default: 60)
-	EnableCascade  bool // Enable cascade mode (default: true)
+	Tier2Threshold   int  // Score threshold to query Tier 2 (default: 30)
+	Tier3Threshold   int  // Score threshold to query Tier 3 (default: 60)
+	EnableCascade    bool // Enable cascade mode (default: true)
+	PriorityCrowdSec bool // v3.57.107: Always query CrowdSec regardless of tier threshold
 }
 
 // AggregationWeights defines the weight of each source in final score
@@ -99,18 +100,19 @@ type AggregationWeights struct {
 
 // DefaultWeights returns the default aggregation weights
 // v2.9.6: 11 providers, weights rebalanced
+// v3.57.112: Increased CrowdSec weight (best data quality, behaviors, MITRE, subnet reputation)
 func DefaultWeights() AggregationWeights {
 	return AggregationWeights{
 		// Tier 1 - Always queried, moderate weight each
-		IPSum:     0.11,
-		OTX:       0.09,
+		IPSum:     0.10,
+		OTX:       0.08,
 		ThreatFox: 0.11, // High value for C2/malware detection
-		URLhaus:   0.09,
-		ShodanIDB: 0.07, // Contextual data
+		URLhaus:   0.08,
+		ShodanIDB: 0.06, // Contextual data
 		// Tier 2 - Queried on suspicion
-		AbuseIPDB: 0.14, // Strong behavioral signal
-		GreyNoise: 0.11, // Important for FP reduction
-		CrowdSec:  0.10, // v2.9.6: Community data, subnet reputation (unique)
+		AbuseIPDB: 0.13, // Strong behavioral signal
+		GreyNoise: 0.10, // Important for FP reduction
+		CrowdSec:  0.16, // v3.57.112: Increased weight - best data quality (behaviors, MITRE, subnet rep)
 		// Tier 3 - Queried on high suspicion
 		VirusTotal: 0.09,
 		CriminalIP: 0.05,
@@ -121,9 +123,10 @@ func DefaultWeights() AggregationWeights {
 // DefaultCascadeConfig returns default cascade thresholds
 func DefaultCascadeConfig() CascadeConfig {
 	return CascadeConfig{
-		Tier2Threshold: 30, // Query Tier 2 if Tier 1 score >= 30
-		Tier3Threshold: 60, // Query Tier 3 if Tier 2 score >= 60
-		EnableCascade:  true,
+		Tier2Threshold:   30, // Query Tier 2 if Tier 1 score >= 30
+		Tier3Threshold:   60, // Query Tier 3 if Tier 2 score >= 60
+		EnableCascade:    true,
+		PriorityCrowdSec: true, // v3.57.107: Always query CrowdSec (best data quality)
 	}
 }
 
@@ -343,6 +346,7 @@ func (a *Aggregator) CheckIP(ctx context.Context, ip string) (*AggregatedResult,
 
 // checkIPLocally queries threat intel providers using cascade tiers
 // v2.9.5: Implements tiered cascade to save API quotas
+// v3.57.107: Added PriorityCrowdSec for always querying CrowdSec
 func (a *Aggregator) checkIPLocally(ctx context.Context, ip string) *AggregatedResult {
 	result := &AggregatedResult{
 		IP:           ip,
@@ -352,13 +356,25 @@ func (a *Aggregator) checkIPLocally(ctx context.Context, ip string) *AggregatedR
 	}
 
 	var mu sync.Mutex
+	crowdSecQueried := false // v3.57.107: Track if CrowdSec was already queried
 
 	// =========================================================================
 	// TIER 1: Unlimited providers (always query in parallel)
 	// =========================================================================
 	a.queryTier1(ctx, ip, result, &mu)
 
-	// Calculate intermediate score after Tier 1
+	// =========================================================================
+	// v3.57.107: PRIORITY CROWDSEC - Query immediately after Tier 1
+	// CrowdSec has unique data (behaviors, MITRE, subnet reputation) that
+	// free Tier 1 providers don't have. Query it regardless of cascade threshold.
+	// =========================================================================
+	if a.cascadeConfig.PriorityCrowdSec && a.crowdSec != nil && a.crowdSec.IsConfigured() {
+		a.queryCrowdSecPriority(ctx, ip, result, &mu)
+		crowdSecQueried = true
+		log.Printf("[CASCADE] %s: CrowdSec queried via priority mode", ip)
+	}
+
+	// Calculate intermediate score after Tier 1 (+CrowdSec if priority)
 	tier1Score := a.calculateIntermediateScore(result)
 	hasCriticalIndicators := a.hasCriticalIndicators(result)
 
@@ -373,7 +389,7 @@ func (a *Aggregator) checkIPLocally(ctx context.Context, ip string) *AggregatedR
 
 	if shouldQueryTier2 {
 		result.TiersQueried = append(result.TiersQueried, 2)
-		a.queryTier2(ctx, ip, result, &mu)
+		a.queryTier2WithFlags(ctx, ip, result, &mu, crowdSecQueried)
 
 		// Recalculate score after Tier 2
 		tier2Score := a.calculateIntermediateScore(result)
@@ -755,6 +771,173 @@ func (a *Aggregator) queryTier3(ctx context.Context, ip string, result *Aggregat
 				result.Adversaries = append(result.Adversaries, pdResult.ThreatActors...)
 				result.MalwareFamilies = append(result.MalwareFamilies, pdResult.MalwareFamilies...)
 				result.Campaigns = append(result.Campaigns, pdResult.Campaigns...)
+			}
+			result.Sources = append(result.Sources, source)
+		}()
+	}
+
+	wg.Wait()
+}
+
+// queryCrowdSecPriority queries CrowdSec immediately (v3.57.107: priority mode)
+// This allows CrowdSec data to be available before cascade decisions
+func (a *Aggregator) queryCrowdSecPriority(ctx context.Context, ip string, result *AggregatedResult, mu *sync.Mutex) {
+	if a.crowdSec == nil || !a.crowdSec.IsConfigured() {
+		return
+	}
+
+	csResult, err := a.crowdSec.CheckIP(ctx, ip)
+	a.trackAPICall("CrowdSec", err)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	source := SourceResult{Provider: "CrowdSec", Weight: a.weights.CrowdSec, Available: err == nil, Tier: 2}
+	if err != nil {
+		source.Error = err.Error()
+	} else {
+		result.CrowdSec = csResult
+		source.Score = csResult.NormalizedScore
+		source.WeightedScore = float64(csResult.NormalizedScore) * a.weights.CrowdSec
+		if csResult.Found {
+			// Unique CrowdSec data
+			result.BackgroundNoise = csResult.BackgroundNoiseScore
+			result.SubnetScore = csResult.IPRangeScore
+			result.MitreTechniques = append(result.MitreTechniques, csResult.MitreTechniques...)
+			result.Behaviors = append(result.Behaviors, csResult.Behaviors...)
+			// Country from CrowdSec if not already set
+			if result.Country == "" && csResult.Country != "" {
+				result.Country = csResult.Country
+			}
+			// ASN from CrowdSec if not already set
+			if result.ASN == "" && csResult.ASName != "" {
+				result.ASN = csResult.ASName
+			}
+			// Tags based on reputation
+			if csResult.Reputation == "malicious" {
+				result.Tags = append(result.Tags, "crowdsec_malicious")
+			} else if csResult.Reputation == "suspicious" {
+				result.Tags = append(result.Tags, "crowdsec_suspicious")
+			}
+			// High background noise is notable
+			if csResult.BackgroundNoiseScore >= 7 {
+				result.Tags = append(result.Tags, "high_background_noise")
+			}
+			// Add behaviors as tags
+			for _, b := range csResult.Behaviors {
+				result.Tags = append(result.Tags, "behavior:"+b)
+			}
+		}
+	}
+	result.Sources = append(result.Sources, source)
+}
+
+// queryTier2WithFlags queries Tier 2 providers with skip flags (v3.57.107)
+func (a *Aggregator) queryTier2WithFlags(ctx context.Context, ip string, result *AggregatedResult, mu *sync.Mutex, skipCrowdSec bool) {
+	var wg sync.WaitGroup
+
+	// AbuseIPDB
+	if a.abuseIPDB != nil && a.abuseIPDB.IsConfigured() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			abuseResult, err := a.abuseIPDB.CheckIP(ctx, ip)
+			a.trackAPICall("AbuseIPDB", err)
+			mu.Lock()
+			defer mu.Unlock()
+			source := SourceResult{Provider: "AbuseIPDB", Weight: a.weights.AbuseIPDB, Available: err == nil, Tier: 2}
+			if err != nil {
+				source.Error = err.Error()
+			} else {
+				result.AbuseIPDB = abuseResult
+				source.Score = abuseResult.NormalizedScore
+				source.WeightedScore = float64(abuseResult.NormalizedScore) * a.weights.AbuseIPDB
+				if result.Country == "" && abuseResult.CountryCode != "" {
+					result.Country = abuseResult.CountryCode
+				}
+				if result.ISP == "" && abuseResult.ISP != "" {
+					result.ISP = abuseResult.ISP
+				}
+				if abuseResult.IsTor {
+					result.IsTor = true
+					result.Tags = append(result.Tags, "tor_exit_node")
+				}
+			}
+			result.Sources = append(result.Sources, source)
+		}()
+	}
+
+	// GreyNoise
+	if a.greyNoise != nil && a.greyNoise.IsConfigured() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			gnResult, err := a.greyNoise.CheckIP(ctx, ip)
+			a.trackAPICall("GreyNoise", err)
+			mu.Lock()
+			defer mu.Unlock()
+			source := SourceResult{Provider: "GreyNoise", Weight: a.weights.GreyNoise, Available: err == nil, Tier: 2}
+			if err != nil {
+				source.Error = err.Error()
+			} else {
+				result.GreyNoise = gnResult
+				source.Score = gnResult.NormalizedScore
+				source.WeightedScore = float64(gnResult.NormalizedScore) * a.weights.GreyNoise
+				source.IsBenignSource = gnResult.IsBenign
+				if gnResult.IsBenign {
+					result.IsBenign = true
+					result.Tags = append(result.Tags, "greynoise_benign")
+					if gnResult.Name != "" {
+						result.Tags = append(result.Tags, "service:"+gnResult.Name)
+					}
+				}
+				if gnResult.Classification == "malicious" {
+					result.Tags = append(result.Tags, "greynoise_malicious")
+				}
+			}
+			result.Sources = append(result.Sources, source)
+		}()
+	}
+
+	// CrowdSec CTI - skip if already queried via priority mode
+	if !skipCrowdSec && a.crowdSec != nil && a.crowdSec.IsConfigured() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			csResult, err := a.crowdSec.CheckIP(ctx, ip)
+			a.trackAPICall("CrowdSec", err)
+			mu.Lock()
+			defer mu.Unlock()
+			source := SourceResult{Provider: "CrowdSec", Weight: a.weights.CrowdSec, Available: err == nil, Tier: 2}
+			if err != nil {
+				source.Error = err.Error()
+			} else {
+				result.CrowdSec = csResult
+				source.Score = csResult.NormalizedScore
+				source.WeightedScore = float64(csResult.NormalizedScore) * a.weights.CrowdSec
+				if csResult.Found {
+					result.BackgroundNoise = csResult.BackgroundNoiseScore
+					result.SubnetScore = csResult.IPRangeScore
+					result.MitreTechniques = append(result.MitreTechniques, csResult.MitreTechniques...)
+					result.Behaviors = append(result.Behaviors, csResult.Behaviors...)
+					if result.Country == "" && csResult.Country != "" {
+						result.Country = csResult.Country
+					}
+					if result.ASN == "" && csResult.ASName != "" {
+						result.ASN = csResult.ASName
+					}
+					if csResult.Reputation == "malicious" {
+						result.Tags = append(result.Tags, "crowdsec_malicious")
+					} else if csResult.Reputation == "suspicious" {
+						result.Tags = append(result.Tags, "crowdsec_suspicious")
+					}
+					if csResult.BackgroundNoiseScore >= 7 {
+						result.Tags = append(result.Tags, "high_background_noise")
+					}
+					for _, b := range csResult.Behaviors {
+						result.Tags = append(result.Tags, "behavior:"+b)
+					}
+				}
 			}
 			result.Sources = append(result.Sources, source)
 		}()

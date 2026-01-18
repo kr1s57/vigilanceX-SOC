@@ -13,7 +13,9 @@ import {
   XCircle,
   Globe,
   Zap,
-  Loader2
+  Loader2,
+  X,
+  ExternalLink
 } from 'lucide-react'
 import { crowdsecBlocklistApi } from '@/lib/api'
 
@@ -64,6 +66,12 @@ interface BlocklistSummary {
   ip_count: number
 }
 
+// v3.57.111: XGS group info for per-blocklist display
+interface XGSGroup {
+  name: string
+  ip_count: number
+}
+
 interface SyncStatus {
   configured: boolean
   enabled: boolean
@@ -74,6 +82,9 @@ interface SyncStatus {
   group_name: string
   enabled_lists?: string[]
   xgs_ip_count?: number
+  // v3.57.111: Per-blocklist groups
+  xgs_groups?: XGSGroup[]
+  xgs_total_ips?: number
 }
 
 export function CrowdSecBL() {
@@ -103,6 +114,8 @@ export function CrowdSecBL() {
   const [enrichedCount, setEnrichedCount] = useState(0)
   const [autoEnriching, setAutoEnriching] = useState(false)
   const autoEnrichRef = useRef(false)
+  // v3.57.112: Modal for XGS groups
+  const [showXGSGroupsModal, setShowXGSGroupsModal] = useState(false)
 
   // Load blocklist summary, status, and countries on mount
   useEffect(() => {
@@ -400,21 +413,29 @@ export function CrowdSecBL() {
           </div>
         </div>
 
-        {/* XGS Group */}
-        <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+        {/* XGS Groups - v3.57.112: Clickable card, shows modal with group details */}
+        <div
+          className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50 cursor-pointer hover:bg-gray-700/50 hover:border-orange-500/30 transition-all"
+          onClick={() => status?.xgs_groups?.length && setShowXGSGroupsModal(true)}
+          title={status?.xgs_groups?.length ? 'Click to view group details' : 'No groups synced'}
+        >
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-orange-500/20">
               <Shield className="h-5 w-5 text-orange-400" />
             </div>
-            <div>
-              <p className="text-gray-400 text-sm">XGS Group</p>
+            <div className="flex-1">
+              <p className="text-gray-400 text-sm">XGS Groups</p>
               <p className="text-2xl font-bold text-white">
-                {status?.xgs_ip_count !== undefined ? status.xgs_ip_count.toLocaleString() : '—'}
+                {status?.xgs_total_ips !== undefined ? status.xgs_total_ips.toLocaleString() : '—'}
               </p>
-              <p className="text-xs text-gray-500 truncate" title={status?.group_name}>
-                {status?.group_name || 'Not configured'}
+              <p className="text-xs text-gray-500">
+                {status?.xgs_groups?.length || 0} groups synced
+                {status?.xgs_groups?.length ? ' • Click for details' : ''}
               </p>
             </div>
+            {status?.xgs_groups?.length ? (
+              <ExternalLink className="h-4 w-4 text-gray-500" />
+            ) : null}
           </div>
         </div>
       </div>
@@ -682,6 +703,59 @@ export function CrowdSecBL() {
           </div>
         )}
       </div>
+
+      {/* XGS Groups Modal - v3.57.112 */}
+      {showXGSGroupsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-gray-900 rounded-xl border border-gray-700 shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-orange-500/20">
+                  <Shield className="h-5 w-5 text-orange-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white">XGS Firewall Groups</h2>
+                  <p className="text-sm text-gray-400">
+                    {status?.xgs_groups?.length || 0} groups • {status?.xgs_total_ips?.toLocaleString() || 0} total IPs
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowXGSGroupsModal(false)}
+                className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              <div className="grid gap-2">
+                {status?.xgs_groups?.map((group) => (
+                  <div
+                    key={group.name}
+                    className="flex items-center justify-between p-3 rounded-lg bg-gray-800/50 border border-gray-700/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-orange-400"></div>
+                      <span className="font-mono text-sm text-gray-300">{group.name}</span>
+                    </div>
+                    <span className="text-orange-400 font-semibold">{group.ip_count.toLocaleString()} IPs</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-700 bg-gray-800/30">
+              <p className="text-xs text-gray-500 text-center">
+                These groups are automatically created and synced to Sophos XGS firewall
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

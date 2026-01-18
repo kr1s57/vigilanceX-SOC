@@ -90,6 +90,7 @@ services:
       - backend_data:/app/data
       - backend_config:/app/config
       - /etc/machine-id:/etc/machine-id:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # v3.57.108: Admin console docker access
     environment:
       APP_ENV: ${APP_ENV:-production}
       APP_PORT: 8080

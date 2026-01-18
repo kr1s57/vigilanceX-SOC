@@ -32,11 +32,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # Final stage
 FROM alpine:3.19
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata wget
+# Install runtime dependencies (v3.57.108: add docker-cli for admin console)
+RUN apk add --no-cache ca-certificates tzdata wget docker-cli
 
-# Create non-root user
-RUN adduser -D -g '' vigilance
+# Create non-root user and add to docker group
+RUN adduser -D -g '' vigilance && \
+    addgroup vigilance docker 2>/dev/null || true
 
 # Set working directory
 WORKDIR /app

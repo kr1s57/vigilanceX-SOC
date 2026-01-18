@@ -39,11 +39,10 @@ export function XGSLoginCard({ refreshInterval = 0 }: XGSLoginCardProps) {
     try {
       setError(null)
 
-      // Query events for XGS admin logins
-      // These come through as log_type=Event with category containing authentication info
+      // v3.57.107: Query events for authentication (XGS logins, VPN, admin)
+      // Search broader to catch all authentication events
       const response = await eventsApi.list({
         log_type: 'Event',
-        search: 'admin',
         limit: MAX_ENTRIES,
         offset: 0
       })
@@ -51,17 +50,24 @@ export function XGSLoginCard({ refreshInterval = 0 }: XGSLoginCardProps) {
       const events = response.data || []
 
       // Transform events to login format
+      // v3.57.107: Improved filter to catch more auth events
       const loginEvents: XGSLogin[] = events
         .filter((e: Event) => {
           // Filter for authentication-related events
           const msg = (e.message || '').toLowerCase()
           const cat = (e.category || '').toLowerCase()
+          const subcat = (e.sub_category || '').toLowerCase()
           return msg.includes('login') ||
                  msg.includes('authentication') ||
                  msg.includes('admin') ||
                  msg.includes('logon') ||
+                 msg.includes('logged') ||
+                 msg.includes('sign') ||
                  cat.includes('admin') ||
-                 cat.includes('auth')
+                 cat.includes('auth') ||
+                 cat.includes('login') ||
+                 subcat.includes('auth') ||
+                 subcat.includes('login')
         })
         .map((e: Event) => {
           const msg = (e.message || '').toLowerCase()

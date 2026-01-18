@@ -7,6 +7,171 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.112] - 2026-01-18
+
+### Fixed
+- **CrowdSec CTI API Key Loading**: Critical fix - `loadIntegrationsConfig()` now called BEFORE `config.Load()`
+  - API keys from integrations.json were not being loaded because config was parsed first
+  - CrowdSec CTI now properly queries with saved API key (50/day quota active)
+
+- **Attack Map XGS IP Filter**: Filter out lines FROM public IP 83.194.220.184
+  - Added `src_ip != toIPv4('83.194.220.184')` to `GetGeoHeatmapFiltered()` and `GetGeoHeatmapFilteredRange()`
+  - XGS firewall public IP no longer appears as attack source on map
+
+- **Cyber Theme Admin Console**: Header not showing properly with futuristic theme
+  - Added `.admin-console-modal` and `.admin-console-header` CSS classes
+  - Added futuristic theme specific styling with solid backgrounds and neon accents
+
+### Changed
+- **CrowdSec BL XGS Groups**: Moved from inline section to modal popup
+  - Groups only shown when clicking XGS Groups card (cleaner UI)
+  - Added hover effects and "Click to view" indication
+
+- **TI Cascade CrowdSec Weight**: Increased from 0.10 to 0.16 (60% increase)
+  - CrowdSec now highest weighted provider in aggregation
+  - Better reflects CrowdSec's superior data quality (behaviors, MITRE, subnet reputation)
+
+### Technical
+- `backend/cmd/api/main.go`: Reordered initialization - integrations loaded before config
+- `backend/internal/adapter/repository/clickhouse/events_repo.go`: XGS IP filter in heatmap queries
+- `backend/internal/adapter/external/threatintel/aggregator.go`: CrowdSec weight adjustment
+- `frontend/src/components/TerminalConsole.tsx`: Added CSS class identifiers
+- `frontend/src/index.css`: +45 lines for admin console futuristic styling
+- `frontend/src/pages/CrowdSecBL.tsx`: XGS groups modal implementation
+
+---
+
+## [3.57.109] - 2026-01-18
+
+### Added
+- **Futuristic Theme (Cyberpunk/Neon)**: Nouveau theme UI moderne et immersif
+  - **Palette neon**: Cyan (#06b6d4), Violet (#a855f7), Pink (#ec4899) comme accents
+  - **Glassmorphism avance**: Effets verre depoli avec profondeur et glow
+  - **Animations fluides**: Gradient animated borders, glow pulse, neon flicker
+  - **Selection dans Settings**: Display > Theme > Cyber (icone Sparkles)
+  - **Auto-applied styles**: Transformation automatique de tous les composants
+
+- **CSS Utility Classes**: Nouvelles classes pour styling futuriste
+  - `.neon-text-*`: Texte avec effet neon (cyan, purple, pink)
+  - `.neon-border-*`: Bordures avec glow (cyan, purple, animated)
+  - `.glass-futuristic`: Glassmorphism profond avec teinte cyan
+  - `.cyber-card`: Cartes avec grid pattern cyberpunk
+  - `.holographic`: Gradient anime holographique
+  - `.btn-futuristic`, `.btn-neon-*`: Boutons avec effets neon
+
+- **Tailwind Extensions**: Config Tailwind enrichie
+  - Shadows: `neon-cyan`, `neon-purple`, `neon-pink`, `glass`, `glass-lg`
+  - Animations: `glow-pulse`, `neon-flicker`, `gradient-x`, `border-flow`, `float`
+  - Colors: Palette `neon.*` pour accents
+  - Background: `cyber-grid` pattern
+
+- **Claude Code Skills**: 6 nouveaux skills CSS/UI crees
+  - `css-glassmorphism`: Effets glassmorphism et neumorphism
+  - `css-animations`: Animations CSS et micro-interactions
+  - `css-dark-theme`: Design dark mode pour SOC
+  - `tailwind-patterns`: Patterns Tailwind avances
+  - `framer-motion`: Animations React avec Framer Motion
+  - `color-palette`: Theorie des couleurs pour dashboards
+
+### Changed
+- **SettingsContext**: Ajout du theme 'futuristic' aux options
+  - Theme applique via classes CSS sur `<html>` (.dark + .futuristic)
+  - Variables CSS personnalisees pour couleurs futuristes
+
+### Technical
+- `frontend/src/index.css`: +350 lignes de styles futuristes
+  - Theme variables (.futuristic)
+  - Neon glow effects
+  - Advanced glassmorphism
+  - Auto-applied styles pour cards, buttons, inputs, tables
+  - Futuristic scrollbar, map styling
+- `frontend/tailwind.config.js`: Extended colors, shadows, animations
+- `frontend/src/contexts/SettingsContext.tsx`: theme: 'futuristic' option
+- `frontend/src/pages/Settings.tsx`: Cyber theme dans ToggleGroup
+- `.claude/skills/css-*/SKILL.md`: 6 nouveaux skills documentes
+
+---
+
+## [3.57.108] - 2026-01-18
+
+### Added
+- **IP Threat Modal Shortcuts**: Ajout icones loupe a cote des IPs dans toute l'app
+  - Dashboard > Top Attackers: Loupe pour voir fiche TI de l'IP
+  - Dashboard > Critical Alerts Modal: Loupe sur les IPs source
+  - WAF Servers Modal: Loupe sur Top Attacker IPs et Recent Activity IPs
+  - Permet d'ouvrir IPThreatModal pour consultation rapide de la fiche menace
+
+- **CrowdSec BL Background Enrichment**: Worker backend pour enrichissement automatique
+  - Enrichissement pays execute en arriere-plan (45 IPs/90s pour respecter ip-api.com)
+  - Demarre automatiquement au boot si IPs existent sans country_code
+  - Status visible dans `/api/v1/crowdsec/blocklist/status` (enrichment_running)
+  - Plus besoin de rester sur la page CrowdSecBL pour enrichir
+
+### Changed
+- **Attack Map Improvements v3.57.108**: Map plus immersive avec flux colores par type
+  - **Couleurs par type d'attaque**: Orange (WAF), Rouge (IPS), Violet (Malware), Vert (Threat)
+  - Chaque pays colore selon son type d'attaque dominant
+  - **Animations ameliorees**: Effet comet trail, particules plus brillantes
+  - Impact flash multi-ring au point d'arrivee
+  - Flux avec glow externe plus prononce
+
+- **Top Attackers Dashboard**: Filtre IP externes uniquement + metriques ameliorees
+  - Exclusion automatique des IP LAN (10.x, 172.16-31.x, 192.168.x, 127.x)
+  - Focus sur les log types securite (WAF, IPS, ATP, Anti-Virus, Firewall, Threat)
+  - Affichage "blocked" (rouge) et "detected" (orange) separes
+
+### Fixed
+- **Terminal Console Logs**: Docker CLI maintenant disponible dans le container backend
+  - `docker-cli` ajoute dans backend/Dockerfile
+  - `/var/run/docker.sock` monte en lecture seule
+  - Logs services accessibles via Terminal Console > Logs
+
+- **CrowdSec API Usage Counter**: PriorityCrowdSec maintenant actif dans CascadeConfig
+  - Bug: CascadeConfig custom n'incluait pas PriorityCrowdSec (default false)
+  - Fix: `PriorityCrowdSec: true` explicite dans main.go
+
+### Technical
+- `backend/Dockerfile`: +docker-cli, user vigilance dans groupe docker
+- `docker/docker-compose.yml`: Mount /var/run/docker.sock:ro
+- `backend/cmd/api/main.go`: PriorityCrowdSec=true dans CascadeConfig
+- `backend/internal/usecase/crowdsec/blocklist_service.go`: enrichWorker background
+- `backend/internal/adapter/repository/clickhouse/events_repo.go`: Top Attackers query LAN filter
+- `frontend/src/pages/Dashboard.tsx`: IPThreatModal integration, TopAttackerRow avec loupe
+- `frontend/src/components/dashboard/WAFServersCard.tsx`: IPThreatModal + loupes
+- `frontend/src/pages/AttackMap.tsx`: Fetch per-type, couleurs dominantes
+- `frontend/src/components/attackmap/AttackFlowLayer.tsx`: Trail comet, glow ameliore
+
+---
+
+## [3.57.107] - 2026-01-18
+
+### Added
+- **Admin Terminal Console**: Nouvelle interface CLI pour administration Docker
+  - Mode Console: Commandes admin (status, restart, stop, start, health, db-stats, cache-clear, logs)
+  - Mode Logs Viewer: Visualisation temps reel des logs services avec streaming SSE
+  - Accessible via icone Monitor dans le header (admin uniquement)
+  - Backend: `/api/v1/console/execute`, `/api/v1/console/logs`, `/api/v1/console/logs/stream`
+  - Frontend: `TerminalConsole.tsx` modal avec tabs Console/Logs
+
+### Fixed
+- **ThreatIntel CrowdSec Priority**: CrowdSec est maintenant toujours interroge (PriorityCrowdSec=true)
+  - Ajout option `PriorityCrowdSec` dans `CascadeConfig`
+  - CrowdSec query immediatement apres Tier 1, independamment du seuil de cascade
+  - Nouvelles fonctions: `queryCrowdSecPriority()`, `queryTier2WithFlags()`
+
+- **Dashboard Layout Fixes**:
+  - XGS Logins (authentification) deplace en position 2 pour visibilite
+  - Events by Type hauteur augmentee (180px vs 100px)
+  - Filtre auth ameliore: inclut login, logged, sign, sub_category
+
+### Technical
+- `backend/internal/adapter/controller/http/handlers/console.go`: Handler console admin
+- `backend/internal/adapter/external/threatintel/aggregator.go`: CrowdSec priority mode
+- `frontend/src/components/TerminalConsole.tsx`: Modal console admin
+- `frontend/src/lib/api.ts`: consoleApi pour commandes terminal
+
+---
+
 ## [3.57.106] - 2026-01-18
 
 ### Security

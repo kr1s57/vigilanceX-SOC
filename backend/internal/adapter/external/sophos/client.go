@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -151,12 +152,13 @@ type Status struct {
 
 // IPHostResponse for IP host query results
 type IPHostResponse struct {
-	TransactionID string `xml:"transactionid,attr"`
-	Status        Status `xml:"Status"`
-	Name          string `xml:"Name"`
-	IPFamily      string `xml:"IPFamily"`
-	HostType      string `xml:"HostType"`
-	IPAddress     string `xml:"IPAddress"`
+	TransactionID     string `xml:"transactionid,attr"`
+	Status            Status `xml:"Status"`
+	Name              string `xml:"Name"`
+	IPFamily          string `xml:"IPFamily"`
+	HostType          string `xml:"HostType"`
+	IPAddress         string `xml:"IPAddress"`
+	ListOfIPAddresses string `xml:"ListOfIPAddresses"` // v3.57.111: For IPList type hosts
 }
 
 // IPHostGroupResponse for IP host group query results
@@ -1082,6 +1084,57 @@ func (c *Client) GetBlocklistIPLists(blocklistName string) ([]string, error) {
 	}
 
 	return lists, nil
+}
+
+// GetAllCrowdSecGroups returns all grp_CS_* IPHost groups with their IP counts
+// v3.57.111: Added to display per-blocklist XGS groups
+// Returns slice of maps with "name" and "ip_count" keys for interface compatibility
+func (c *Client) GetAllCrowdSecGroups() ([]map[string]interface{}, error) {
+	// Get all IPHosts that start with grp_CS_
+	getReq := &APIRequest{
+		Get: &Get{
+			IPHost: &IPHostFilter{
+				// Empty filter to get all
+			},
+		},
+	}
+
+	resp, err := c.sendRequest(getReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IP hosts: %w", err)
+	}
+
+	var groups []map[string]interface{}
+	for _, host := range resp.IPHost {
+		// Only include grp_CS_* groups
+		if strings.HasPrefix(host.Name, "grp_CS_") {
+			ipCount := 0
+			// Count IPs in the ListOfIPAddresses field
+			if host.ListOfIPAddresses != "" {
+				// IPs are comma-separated
+				ips := strings.Split(host.ListOfIPAddresses, ",")
+				for _, ip := range ips {
+					if strings.TrimSpace(ip) != "" {
+						ipCount++
+					}
+				}
+			}
+			groups = append(groups, map[string]interface{}{
+				"name":     host.Name,
+				"ip_count": ipCount,
+			})
+		}
+	}
+
+	// Sort by name for consistent display
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i]["name"].(string) < groups[j]["name"].(string)
+	})
+
+	slog.Info("[XGS] GetAllCrowdSecGroups result",
+		"count", len(groups))
+
+	return groups, nil
 }
 
 // SyncGroupIPs synchronizes a group to contain exactly the given IPs

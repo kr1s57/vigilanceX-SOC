@@ -947,6 +947,7 @@ export function Settings() {
             options={[
               { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
               { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
+              { value: 'futuristic', label: 'Cyber', icon: <Sparkles className="w-4 h-4" /> },
               { value: 'system', label: 'System', icon: <Laptop className="w-4 h-4" /> },
             ]}
           />
@@ -2378,7 +2379,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.57.106</p>
+        <p>VIGILANCE X v3.57.112</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

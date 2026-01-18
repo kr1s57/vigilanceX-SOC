@@ -330,16 +330,8 @@ export function AttackMap() {
     setSelectedCountryDetails,
   } = useAttackMapStore()
 
-  // Get flow color based on active attack types
-  const getFlowColor = useCallback(() => {
-    const activeTypes = Array.from(activeAttackTypes)
-    if (activeTypes.length === 0) return 'rgba(107, 114, 128, 0.6)'
-    if (activeTypes.length === 1) return ATTACK_TYPE_CONFIG[activeTypes[0]].color
-    // Mix colors for multiple types - use the first active type's color
-    return ATTACK_TYPE_CONFIG[activeTypes[0]].color
-  }, [activeAttackTypes])
-
   // Fetch attack data
+  // v3.57.108: Enhanced to fetch per-type data for proper color-coding
   const fetchData = useCallback(async () => {
     const attackTypesArray = Array.from(activeAttackTypes)
 
@@ -361,48 +353,94 @@ export function AttackMap() {
         end: `${customDate}T23:59:59Z`,
       } : undefined
 
-      const [heatmapData] = await Promise.all([
-        geoApi.heatmap(apiPeriod, attackTypesArray, dateRange),
-        statsApi.topAttackers(apiPeriod, 50),
-      ])
+      // v3.57.108: Fetch data per attack type for proper color-coding
+      const typeDataPromises = attackTypesArray.map(type =>
+        geoApi.heatmap(apiPeriod, [type], dateRange).then(data => ({ type, data }))
+      )
 
-      // Transform heatmap data to country stats (convert alpha-3 to alpha-2)
-      const maxCount = Math.max(...(heatmapData || []).map(d => d.count), 1)
-      const stats: CountryAttackStats[] = (heatmapData || [])
-        .map(d => {
+      const typeResults = await Promise.all(typeDataPromises)
+
+      // Build country stats with dominant type tracking
+      const countryTypeMap: Record<string, { count: number; type: AttackType }[]> = {}
+      const countryStatsMap: Record<string, { count: number; uniqueIps: number; dominantType: AttackType }> = {}
+
+      typeResults.forEach(({ type, data }) => {
+        (data || []).forEach((d: { country: string; count: number; unique_ips: number }) => {
           const code = toAlpha2(d.country)
-          return {
-            countryCode: code,
-            countryName: COUNTRY_NAMES[code] || d.country,
-            count: d.count,
-            uniqueIps: d.unique_ips,
-            threatLevel: getThreatLevel(d.count, maxCount),
-            centroid: COUNTRY_CENTROIDS[code] || COUNTRY_CENTROIDS['XX'],
+          if (code === 'XX') return
+
+          if (!countryTypeMap[code]) {
+            countryTypeMap[code] = []
           }
+          countryTypeMap[code].push({ count: d.count, type })
+
+          if (!countryStatsMap[code]) {
+            countryStatsMap[code] = { count: 0, uniqueIps: 0, dominantType: type }
+          }
+          countryStatsMap[code].count += d.count
+          countryStatsMap[code].uniqueIps = Math.max(countryStatsMap[code].uniqueIps, d.unique_ips)
         })
-        .filter(d => d.countryCode !== 'XX') // Filter out unknown/private ranges
+      })
+
+      // v3.57.110: Determine dominant type for each country using PRIORITY (not count)
+      // Priority order: threat > malware > ips > waf (rare attacks take precedence)
+      const TYPE_PRIORITY: Record<AttackType, number> = {
+        threat: 4,   // Highest priority - most critical
+        malware: 3,  // High priority - dangerous
+        ips: 2,      // Medium priority - intrusion attempts
+        waf: 1,      // Lowest priority - most common
+      }
+
+      Object.keys(countryTypeMap).forEach(code => {
+        const types = countryTypeMap[code]
+        // Sort by priority (highest first), then by count as tiebreaker
+        const dominant = types.reduce((prev, curr) => {
+          const prevPriority = TYPE_PRIORITY[prev.type] || 0
+          const currPriority = TYPE_PRIORITY[curr.type] || 0
+          if (currPriority > prevPriority) return curr
+          if (currPriority === prevPriority && curr.count > prev.count) return curr
+          return prev
+        })
+        if (countryStatsMap[code]) {
+          countryStatsMap[code].dominantType = dominant.type
+        }
+      })
+
+      // Transform to CountryAttackStats array
+      const maxCount = Math.max(...Object.values(countryStatsMap).map(d => d.count), 1)
+      const stats: CountryAttackStats[] = Object.entries(countryStatsMap)
+        .map(([code, data]) => ({
+          countryCode: code,
+          countryName: COUNTRY_NAMES[code] || code,
+          count: data.count,
+          uniqueIps: data.uniqueIps,
+          threatLevel: getThreatLevel(data.count, maxCount),
+          centroid: COUNTRY_CENTROIDS[code] || COUNTRY_CENTROIDS['XX'],
+        }))
+        .filter(d => COUNTRY_CENTROIDS[d.countryCode])
+        .sort((a, b) => b.count - a.count)
 
       setCountryStats(stats)
       setTotalAttacks(stats.reduce((sum, s) => sum + s.count, 0))
 
-      // Determine flow color based on active types
-      const flowColor = getFlowColor()
-
-      // Generate attack flows from top countries
+      // v3.57.108: Generate flows with attack-type-specific colors (orange=WAF, red=IPS)
       const flows: AttackFlow[] = stats
         .filter(s => s.count > 0 && COUNTRY_CENTROIDS[s.countryCode])
         .slice(0, 30)
-        .map(s => ({
-          id: `${s.countryCode}-${Date.now()}-${Math.random()}`,
-          sourceCountry: s.countryCode,
-          sourceLat: s.centroid[0],
-          sourceLng: s.centroid[1],
-          targetLat: TARGET_LOCATION.lat,
-          targetLng: TARGET_LOCATION.lng,
-          timestamp: new Date(),
-          intensity: getFlowIntensity(s.count, maxCount),
-          color: flowColor,
-        }))
+        .map(s => {
+          const dominantType = countryStatsMap[s.countryCode]?.dominantType || 'waf'
+          return {
+            id: `${s.countryCode}-${Date.now()}-${Math.random()}`,
+            sourceCountry: s.countryCode,
+            sourceLat: s.centroid[0],
+            sourceLng: s.centroid[1],
+            targetLat: TARGET_LOCATION.lat,
+            targetLng: TARGET_LOCATION.lng,
+            timestamp: new Date(),
+            intensity: getFlowIntensity(s.count, maxCount),
+            color: ATTACK_TYPE_CONFIG[dominantType].color, // Use attack-type-specific color
+          }
+        })
 
       setAttackFlows(flows)
       setIsConnected(true)
@@ -412,7 +450,7 @@ export function AttackMap() {
     } finally {
       setLoading(false)
     }
-  }, [period, customDate, activeAttackTypes, getFlowColor, setCountryStats, setAttackFlows, setLoading, setIsConnected, setTotalAttacks])
+  }, [period, customDate, activeAttackTypes, setCountryStats, setAttackFlows, setLoading, setIsConnected, setTotalAttacks])
 
   // Initial fetch and periodic refresh
   useEffect(() => {

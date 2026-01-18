@@ -4,7 +4,7 @@ import { configApi, SystemWhitelistEntry } from '@/lib/api'
 // Settings types
 export interface AppSettings {
   // Display
-  theme: 'dark' | 'light' | 'system'
+  theme: 'dark' | 'light' | 'system' | 'futuristic' // v3.57.109: Added futuristic theme
   language: 'fr' | 'en'
   dateFormat: '24h' | '12h'
   numberFormat: 'fr' | 'en'
@@ -132,13 +132,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement
 
+    // v3.57.109: Clear all theme classes first
+    root.classList.remove('dark', 'light', 'futuristic')
+
     if (settings.theme === 'system') {
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      root.classList.toggle('dark', isDark)
-      root.classList.toggle('light', !isDark)
+      root.classList.add(isDark ? 'dark' : 'light')
+    } else if (settings.theme === 'futuristic') {
+      // v3.57.109: Futuristic theme - also needs dark base styles
+      root.classList.add('dark', 'futuristic')
     } else {
-      root.classList.toggle('dark', settings.theme === 'dark')
-      root.classList.toggle('light', settings.theme === 'light')
+      root.classList.add(settings.theme)
     }
   }, [settings.theme])
 

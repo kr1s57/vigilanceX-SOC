@@ -1,4 +1,4 @@
-// v3.57.101: WAF Servers overview card for Dashboard with detail modal
+// v3.57.108: WAF Servers overview card for Dashboard with detail modal + IP threat lookup
 import { useState, useEffect } from 'react'
 import {
   Server,
@@ -17,9 +17,11 @@ import {
   Zap,
   TrendingUp,
   Shield,
-  Loader2
+  Loader2,
+  Search,
 } from 'lucide-react'
 import { wafServersApi, modsecApi, type WAFMonitoredServer } from '@/lib/api'
+import { IPThreatModal } from '@/components/IPThreatModal'
 import type { ModSecRequestGroup } from '@/types'
 import { cn, getCountryFlag, formatNumber } from '@/lib/utils'
 
@@ -324,6 +326,8 @@ function ServerRow({ server, onClick }: { server: ServerWithStats; onClick: () =
 function ServerDetailModal({ server, onClose }: { server: ServerWithStats; onClose: () => void }) {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ServerDetailData | null>(null)
+  // v3.57.108: IP Threat Modal state
+  const [threatModalIP, setThreatModalIP] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchDetails() {
@@ -515,6 +519,14 @@ function ServerDetailModal({ server, onClose }: { server: ServerWithStats; onClo
                                 <span className="text-base">{getCountryFlag(attacker.country)}</span>
                               )}
                               <span className="font-mono text-sm truncate">{attacker.ip}</span>
+                              {/* v3.57.108: Magnifying glass to view IP threat details */}
+                              <button
+                                onClick={() => setThreatModalIP(attacker.ip)}
+                                className="p-0.5 hover:bg-muted rounded transition-colors"
+                                title="View threat details"
+                              >
+                                <Search className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+                              </button>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-sm">{attacker.count}</span>
@@ -558,8 +570,15 @@ function ServerDetailModal({ server, onClose }: { server: ServerWithStats; onClo
                         <span className="font-mono text-xs text-muted-foreground shrink-0">
                           {new Date(log.timestamp).toLocaleTimeString()}
                         </span>
-                        <span className="font-mono text-xs shrink-0">
+                        <span className="font-mono text-xs shrink-0 flex items-center gap-1">
                           {log.geo_country && getCountryFlag(log.geo_country)} {log.src_ip}
+                          <button
+                            onClick={() => setThreatModalIP(log.src_ip)}
+                            className="p-0.5 hover:bg-muted rounded transition-colors"
+                            title="View threat details"
+                          >
+                            <Search className="w-3 h-3 text-muted-foreground hover:text-primary" />
+                          </button>
                         </span>
                         <span className="truncate text-muted-foreground" title={log.uri}>
                           {log.uri}
@@ -585,6 +604,13 @@ function ServerDetailModal({ server, onClose }: { server: ServerWithStats; onClo
             </div>
           )}
         </div>
+
+        {/* v3.57.108: IP Threat Modal */}
+        <IPThreatModal
+          ip={threatModalIP}
+          isOpen={threatModalIP !== null}
+          onClose={() => setThreatModalIP(null)}
+        />
       </div>
     </div>
   )

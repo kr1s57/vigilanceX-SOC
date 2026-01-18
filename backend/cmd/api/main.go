@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -50,8 +51,57 @@ import (
 	"github.com/go-chi/httprate"
 )
 
+// IntegrationConfig represents a saved integration configuration
+// v3.57.112: Used to load integrations.json at startup
+type IntegrationConfig struct {
+	ID        string            `json:"id"`
+	Fields    map[string]string `json:"fields"`
+	UpdatedAt string            `json:"updated_at,omitempty"`
+}
+
+// loadIntegrationsConfig loads integrations.json and applies configs to env vars
+// v3.57.112: This ensures API keys configured via Settings persist across restarts
+func loadIntegrationsConfig() {
+	configPath := "/app/config/integrations.json"
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		// File doesn't exist yet - this is normal for fresh installs
+		return
+	}
+
+	var configs map[string]IntegrationConfig
+	if err := json.Unmarshal(data, &configs); err != nil {
+		slog.Warn("[STARTUP] Failed to parse integrations.json", "error", err)
+		return
+	}
+
+	// Apply all saved configs to environment variables
+	applied := 0
+	for _, config := range configs {
+		for key, value := range config.Fields {
+			if value != "" {
+				// Only set if not already set (env vars take precedence)
+				if os.Getenv(key) == "" {
+					os.Setenv(key, value)
+					applied++
+				}
+			}
+		}
+	}
+
+	if applied > 0 {
+		slog.Info("[STARTUP] Loaded integrations from config file",
+			"configs", len(configs),
+			"env_vars_applied", applied)
+	}
+}
+
 func main() {
-	// Load configuration
+	// v3.57.112: Load integrations.json FIRST to apply saved API keys to env vars
+	// MUST be called BEFORE config.Load() so env vars are available when config loads
+	loadIntegrationsConfig()
+
+	// Load configuration (reads env vars including those just set above)
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("Failed to load configuration", "error", err)
@@ -94,6 +144,11 @@ func main() {
 	// v3.53: API Usage Tracking Service
 	apiUsageService := apiusage.NewService(apiUsageRepo)
 	apiUsageHandler := handlers.NewAPIUsageHandler(apiUsageService)
+
+	// v3.57.111: Initialize default provider configs with correct quotas
+	if err := apiUsageRepo.EnsureDefaultProviders(context.Background()); err != nil {
+		logger.Warn("Failed to initialize default provider configs", "error", err)
+	}
 
 	// v3.0: Initialize License Client with Firewall Binding
 	var licenseClient *license.Client
@@ -176,10 +231,12 @@ func main() {
 			// Cache settings
 			CacheTTL: cfg.ThreatIntel.CacheTTL,
 			// v2.9.5: Cascade configuration
+			// v3.57.108: Added PriorityCrowdSec to always query CrowdSec
 			CascadeConfig: &threatintel.CascadeConfig{
-				EnableCascade:  cfg.ThreatIntel.CascadeEnabled,
-				Tier2Threshold: cfg.ThreatIntel.Tier2Threshold,
-				Tier3Threshold: cfg.ThreatIntel.Tier3Threshold,
+				EnableCascade:    cfg.ThreatIntel.CascadeEnabled,
+				Tier2Threshold:   cfg.ThreatIntel.Tier2Threshold,
+				Tier3Threshold:   cfg.ThreatIntel.Tier3Threshold,
+				PriorityCrowdSec: true, // v3.57.108: Always query CrowdSec (best data quality)
 			},
 		})
 	}
@@ -504,6 +561,13 @@ func main() {
 	wafServersHandler := handlers.NewWAFServersHandler(wafServersRepo, modsecRepo)
 	logger.Info("WAF Monitored Servers handler initialized")
 
+	// v3.57.107: Admin Console - Terminal commands and logs viewer
+	consoleHandler := handlers.NewConsoleHandler(
+		"/opt/vigilanceX/docker/docker-compose.yml",
+		"/opt/vigilanceX/docker",
+	)
+	logger.Info("Admin Console handler initialized")
+
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
 	go wsHub.Run()
@@ -646,6 +710,14 @@ func main() {
 				})
 				// v2.9: License admin routes (info only - validate moved to free routes)
 				r.Get("/license/info", licenseHandler.GetInfo)
+
+				// v3.57.107: Admin Console - Terminal commands and logs viewer
+				r.Route("/console", func(r chi.Router) {
+					r.Post("/execute", consoleHandler.ExecuteCommand)
+					r.Get("/logs", consoleHandler.GetLogs)
+					r.Get("/logs/stream", consoleHandler.StreamLogs)
+					r.Get("/services", consoleHandler.GetServices)
+				})
 			})
 
 			// Geo (licensed - heatmap and geo features)

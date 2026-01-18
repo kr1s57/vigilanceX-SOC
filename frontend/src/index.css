@@ -217,3 +217,831 @@
 .card-glow:hover::before {
   @apply opacity-100;
 }
+
+/* =============================================================================
+   v3.57.109: FUTURISTIC THEME - Cyberpunk/Neon Aesthetic
+   ============================================================================= */
+
+/* Futuristic theme color variables */
+.futuristic {
+  /* Base colors - Deep space black with subtle blue tint */
+  --background: 230 25% 3%;
+  --foreground: 210 40% 98%;
+
+  /* Card surfaces - Slightly elevated from background */
+  --card: 230 20% 6%;
+  --card-foreground: 210 40% 98%;
+
+  /* Popover/Modal - Glass effect base */
+  --popover: 230 20% 8%;
+  --popover-foreground: 210 40% 98%;
+
+  /* Primary - Cyan neon */
+  --primary: 188 95% 43%;
+  --primary-foreground: 230 25% 3%;
+
+  /* Secondary - Purple accent */
+  --secondary: 270 60% 40%;
+  --secondary-foreground: 210 40% 98%;
+
+  /* Muted - Subtle backgrounds */
+  --muted: 230 15% 12%;
+  --muted-foreground: 215 20% 55%;
+
+  /* Accent - Pink neon */
+  --accent: 330 80% 55%;
+  --accent-foreground: 210 40% 98%;
+
+  /* Destructive - Neon red */
+  --destructive: 0 85% 55%;
+  --destructive-foreground: 210 40% 98%;
+
+  /* Borders - Subtle glow */
+  --border: 230 20% 15%;
+  --input: 230 20% 12%;
+  --ring: 188 95% 43%;
+
+  /* Extended futuristic palette */
+  --neon-cyan: 188 95% 43%;
+  --neon-purple: 270 91% 65%;
+  --neon-pink: 330 80% 55%;
+  --neon-blue: 217 91% 60%;
+  --neon-green: 160 84% 39%;
+  --neon-orange: 25 95% 53%;
+
+  /* Glass effects */
+  --glass-bg: rgba(15, 23, 42, 0.6);
+  --glass-border: rgba(6, 182, 212, 0.15);
+  --glass-highlight: rgba(255, 255, 255, 0.05);
+}
+
+/* Futuristic body enhancements */
+.futuristic body {
+  background-image:
+    radial-gradient(ellipse at top, rgba(6, 182, 212, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(168, 85, 247, 0.03) 0%, transparent 50%);
+}
+
+/* =============================================================================
+   NEON GLOW EFFECTS
+   ============================================================================= */
+
+/* Neon text effects */
+.neon-text-cyan {
+  color: #06b6d4;
+  text-shadow:
+    0 0 7px rgba(6, 182, 212, 0.8),
+    0 0 10px rgba(6, 182, 212, 0.6),
+    0 0 21px rgba(6, 182, 212, 0.4),
+    0 0 42px rgba(6, 182, 212, 0.2);
+}
+
+.neon-text-purple {
+  color: #a855f7;
+  text-shadow:
+    0 0 7px rgba(168, 85, 247, 0.8),
+    0 0 10px rgba(168, 85, 247, 0.6),
+    0 0 21px rgba(168, 85, 247, 0.4),
+    0 0 42px rgba(168, 85, 247, 0.2);
+}
+
+.neon-text-pink {
+  color: #ec4899;
+  text-shadow:
+    0 0 7px rgba(236, 72, 153, 0.8),
+    0 0 10px rgba(236, 72, 153, 0.6),
+    0 0 21px rgba(236, 72, 153, 0.4);
+}
+
+/* Neon border effects */
+.neon-border-cyan {
+  border: 1px solid rgba(6, 182, 212, 0.5);
+  box-shadow:
+    0 0 5px rgba(6, 182, 212, 0.3),
+    inset 0 0 5px rgba(6, 182, 212, 0.1);
+}
+
+.neon-border-purple {
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  box-shadow:
+    0 0 5px rgba(168, 85, 247, 0.3),
+    inset 0 0 5px rgba(168, 85, 247, 0.1);
+}
+
+/* Animated neon border */
+.neon-border-animated {
+  position: relative;
+  overflow: hidden;
+}
+
+.neon-border-animated::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    #06b6d4,
+    #a855f7,
+    #ec4899,
+    #06b6d4
+  );
+  background-size: 200% 100%;
+  animation: border-flow 3s linear infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* =============================================================================
+   FUTURISTIC GLASSMORPHISM
+   ============================================================================= */
+
+/* Deep glass effect */
+.glass-futuristic {
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.8) 0%,
+    rgba(15, 23, 42, 0.4) 100%
+  );
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(6, 182, 212, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 20px rgba(6, 182, 212, 0.02);
+}
+
+/* Elevated glass with glow */
+.glass-elevated-futuristic {
+  background: linear-gradient(
+    135deg,
+    rgba(20, 30, 50, 0.9) 0%,
+    rgba(15, 23, 42, 0.7) 50%,
+    rgba(20, 30, 50, 0.9) 100%
+  );
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(6, 182, 212, 0.05);
+}
+
+/* Card with cyber grid pattern */
+.cyber-card {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.95) 0%,
+    rgba(15, 23, 42, 0.8) 100%
+  );
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(6, 182, 212, 0.1);
+  overflow: hidden;
+}
+
+.cyber-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+}
+
+/* Top edge highlight */
+.cyber-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(6, 182, 212, 0.5) 50%,
+    transparent 100%
+  );
+}
+
+/* =============================================================================
+   FUTURISTIC BUTTONS
+   ============================================================================= */
+
+.btn-futuristic {
+  @apply relative px-6 py-2.5 font-medium rounded-lg overflow-hidden;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: #06b6d4;
+  transition: all 0.3s ease;
+}
+
+.btn-futuristic:hover {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.3) 0%, rgba(168, 85, 247, 0.3) 100%);
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+  transform: translateY(-2px);
+}
+
+.btn-futuristic:active {
+  transform: translateY(0);
+}
+
+/* Primary neon button */
+.btn-neon-primary {
+  @apply relative px-6 py-2.5 font-semibold rounded-lg overflow-hidden;
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+  color: #0f172a;
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+  transition: all 0.3s ease;
+}
+
+.btn-neon-primary:hover {
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.6), 0 0 60px rgba(6, 182, 212, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Danger neon button */
+.btn-neon-danger {
+  @apply relative px-6 py-2.5 font-semibold rounded-lg overflow-hidden;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+  transition: all 0.3s ease;
+}
+
+.btn-neon-danger:hover {
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.6), 0 0 60px rgba(239, 68, 68, 0.3);
+  transform: translateY(-2px);
+}
+
+/* =============================================================================
+   FUTURISTIC SEVERITY BADGES
+   ============================================================================= */
+
+.futuristic .severity-critical {
+  @apply bg-red-500/15 text-red-400 border border-red-500/40;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+}
+
+.futuristic .severity-high {
+  @apply bg-orange-500/15 text-orange-400 border border-orange-500/40;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.2);
+}
+
+.futuristic .severity-medium {
+  @apply bg-yellow-500/15 text-yellow-400 border border-yellow-500/40;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.2);
+}
+
+.futuristic .severity-low {
+  @apply bg-cyan-500/15 text-cyan-400 border border-cyan-500/40;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+}
+
+/* =============================================================================
+   FUTURISTIC STATUS INDICATORS
+   ============================================================================= */
+
+.status-dot-futuristic {
+  @apply w-2.5 h-2.5 rounded-full;
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.status-dot-futuristic.online {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.status-dot-futuristic.offline {
+  background: #6b7280;
+  box-shadow: none;
+  animation: none;
+}
+
+.status-dot-futuristic.warning {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+.status-dot-futuristic.error {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  animation: neon-flicker 3s linear infinite;
+}
+
+/* =============================================================================
+   FUTURISTIC DATA TABLE
+   ============================================================================= */
+
+.futuristic .data-table {
+  @apply w-full text-sm;
+}
+
+.futuristic .data-table th {
+  @apply px-4 py-3 text-left font-medium text-cyan-400/80 bg-cyan-500/5;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.1);
+}
+
+.futuristic .data-table td {
+  @apply px-4 py-3;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.05);
+}
+
+.futuristic .data-table tr {
+  transition: all 0.2s ease;
+}
+
+.futuristic .data-table tr:hover td {
+  background: rgba(6, 182, 212, 0.05);
+}
+
+/* =============================================================================
+   SCAN LINE EFFECT (Optional - for headers/decorative)
+   ============================================================================= */
+
+.scan-line-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.scan-line-effect::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(6, 182, 212, 0.5) 50%,
+    transparent 100%
+  );
+  animation: scan-line 3s linear infinite;
+  pointer-events: none;
+}
+
+/* =============================================================================
+   HOLOGRAPHIC GRADIENT
+   ============================================================================= */
+
+.holographic {
+  background: linear-gradient(
+    135deg,
+    rgba(6, 182, 212, 0.1) 0%,
+    rgba(168, 85, 247, 0.1) 25%,
+    rgba(236, 72, 153, 0.1) 50%,
+    rgba(6, 182, 212, 0.1) 75%,
+    rgba(168, 85, 247, 0.1) 100%
+  );
+  background-size: 200% 200%;
+  animation: gradient-x 8s ease infinite;
+}
+
+/* Holographic text */
+.holographic-text {
+  background: linear-gradient(
+    90deg,
+    #06b6d4 0%,
+    #a855f7 25%,
+    #ec4899 50%,
+    #a855f7 75%,
+    #06b6d4 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-x 3s ease infinite;
+}
+
+/* =============================================================================
+   FUTURISTIC CARDS
+   ============================================================================= */
+
+.card-futuristic {
+  @apply rounded-xl p-6;
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.9) 0%,
+    rgba(15, 23, 42, 0.7) 100%
+  );
+  border: 1px solid rgba(6, 182, 212, 0.1);
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: all 0.3s ease;
+}
+
+.card-futuristic:hover {
+  border-color: rgba(6, 182, 212, 0.25);
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(6, 182, 212, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+}
+
+/* Corner accents for cards */
+.card-corner-accent {
+  position: relative;
+}
+
+.card-corner-accent::before,
+.card-corner-accent::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: rgba(6, 182, 212, 0.4);
+  border-style: solid;
+  pointer-events: none;
+}
+
+.card-corner-accent::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+  border-radius: 8px 0 0 0;
+}
+
+.card-corner-accent::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+  border-radius: 0 0 8px 0;
+}
+
+/* =============================================================================
+   FUTURISTIC INPUTS
+   ============================================================================= */
+
+.input-futuristic {
+  @apply w-full px-4 py-2.5 rounded-lg text-white placeholder:text-zinc-500;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  transition: all 0.2s ease;
+}
+
+.input-futuristic:focus {
+  outline: none;
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1), 0 0 20px rgba(6, 182, 212, 0.1);
+}
+
+/* =============================================================================
+   FUTURISTIC SCROLLBAR
+   ============================================================================= */
+
+.futuristic ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.futuristic ::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.futuristic ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(6, 182, 212, 0.4), rgba(168, 85, 247, 0.4));
+  border-radius: 3px;
+}
+
+.futuristic ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(6, 182, 212, 0.6), rgba(168, 85, 247, 0.6));
+}
+
+/* =============================================================================
+   ANIMATION UTILITIES
+   ============================================================================= */
+
+/* Stagger animation delay utilities */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
+
+/* Initial hidden state for animations */
+.animate-on-load {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fade-slide-up 0.5s ease forwards;
+}
+
+@keyframes fade-slide-up {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .animate-glow-pulse,
+  .animate-neon-flicker,
+  .animate-gradient-x,
+  .animate-border-flow,
+  .animate-float,
+  .animate-scan-line,
+  .holographic,
+  .holographic-text,
+  .scan-line-effect::after {
+    animation: none !important;
+  }
+}
+
+/* =============================================================================
+   FUTURISTIC THEME - AUTO-APPLIED STYLES
+   These styles automatically transform the UI when .futuristic class is active
+   ============================================================================= */
+
+/* Header enhancement */
+.futuristic header {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border-bottom: 1px solid rgba(6, 182, 212, 0.15);
+  backdrop-filter: blur(12px);
+}
+
+.futuristic header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.5) 50%, transparent 100%);
+}
+
+/* Sidebar enhancement */
+.futuristic aside,
+.futuristic nav[class*="sidebar"],
+.futuristic div[class*="sidebar"] {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(10, 15, 30, 0.95) 100%);
+  border-right: 1px solid rgba(6, 182, 212, 0.1);
+}
+
+/* Card enhancements - Apply to common card patterns */
+.futuristic [class*="rounded-xl"][class*="border"][class*="bg-card"],
+.futuristic [class*="rounded-lg"][class*="border"][class*="bg-card"] {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.7) 100%);
+  border-color: rgba(6, 182, 212, 0.1);
+  transition: all 0.3s ease;
+}
+
+.futuristic [class*="rounded-xl"][class*="border"][class*="bg-card"]:hover,
+.futuristic [class*="rounded-lg"][class*="border"][class*="bg-card"]:hover {
+  border-color: rgba(6, 182, 212, 0.25);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.08);
+}
+
+/* Status badges with glow */
+.futuristic [class*="bg-green-500/10"] {
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+}
+
+.futuristic [class*="bg-red-500/10"] {
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+.futuristic [class*="bg-orange-500/10"] {
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.3);
+}
+
+.futuristic [class*="bg-cyan-500/10"],
+.futuristic [class*="bg-blue-500/10"] {
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.3);
+}
+
+/* Enhanced buttons */
+.futuristic button[class*="bg-primary"],
+.futuristic button[class*="bg-blue"] {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.9) 0%, rgba(8, 145, 178, 0.9) 100%);
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+  transition: all 0.3s ease;
+}
+
+.futuristic button[class*="bg-primary"]:hover,
+.futuristic button[class*="bg-blue"]:hover {
+  box-shadow: 0 0 25px rgba(6, 182, 212, 0.6);
+  transform: translateY(-1px);
+}
+
+/* Input fields */
+.futuristic input:not([type="checkbox"]):not([type="radio"]),
+.futuristic textarea,
+.futuristic select {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  transition: all 0.2s ease;
+}
+
+.futuristic input:not([type="checkbox"]):not([type="radio"]):focus,
+.futuristic textarea:focus,
+.futuristic select:focus {
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.1), 0 0 15px rgba(6, 182, 212, 0.1);
+}
+
+/* Modal/Dialog enhancements */
+.futuristic [role="dialog"],
+.futuristic [class*="modal"],
+.futuristic [class*="Dialog"] {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(10, 15, 30, 0.95) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(6, 182, 212, 0.1),
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(6, 182, 212, 0.05);
+}
+
+/* Dropdown menus */
+.futuristic [role="menu"],
+.futuristic [class*="dropdown"],
+.futuristic [class*="popover"] {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.98) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Tabs styling */
+.futuristic [role="tablist"] button[data-state="active"] {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(168, 85, 247, 0.1) 100%);
+  border-color: rgba(6, 182, 212, 0.4);
+  color: #06b6d4;
+}
+
+/* Progress bars */
+.futuristic [role="progressbar"] > div,
+.futuristic [class*="progress"] > div {
+  background: linear-gradient(90deg, #06b6d4, #a855f7);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}
+
+/* Table header enhancement */
+.futuristic th,
+.futuristic thead tr {
+  background: rgba(6, 182, 212, 0.05);
+  border-bottom: 1px solid rgba(6, 182, 212, 0.1);
+}
+
+.futuristic th {
+  color: rgba(6, 182, 212, 0.8);
+  font-weight: 500;
+}
+
+/* Table row hover */
+.futuristic tbody tr:hover {
+  background: rgba(6, 182, 212, 0.05);
+}
+
+/* Charts - Recharts customization */
+.futuristic .recharts-cartesian-grid line {
+  stroke: rgba(6, 182, 212, 0.1);
+}
+
+.futuristic .recharts-text {
+  fill: rgba(148, 163, 184, 0.8);
+}
+
+/* Tooltip styling */
+.futuristic .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(6, 182, 212, 0.2) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Badge with pulse effect */
+.futuristic .relative span[class*="rounded-full"][class*="bg-red"] {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Navigation links */
+.futuristic a[class*="text-muted"]:hover {
+  color: #06b6d4;
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
+}
+
+/* Active navigation item */
+.futuristic a[class*="bg-primary/10"],
+.futuristic [class*="active"][class*="bg"] {
+  background: linear-gradient(90deg, rgba(6, 182, 212, 0.15) 0%, transparent 100%);
+  border-left: 2px solid #06b6d4;
+}
+
+/* Select dropdown trigger */
+.futuristic [class*="SelectTrigger"],
+.futuristic button[role="combobox"] {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.futuristic [class*="SelectTrigger"]:hover,
+.futuristic button[role="combobox"]:hover {
+  border-color: rgba(6, 182, 212, 0.4);
+}
+
+/* Code/Pre elements */
+.futuristic pre,
+.futuristic code {
+  background: rgba(10, 15, 30, 0.8);
+  border: 1px solid rgba(6, 182, 212, 0.1);
+}
+
+/* Leaflet map styling for futuristic theme */
+.futuristic .leaflet-container {
+  background: #0a0a14;
+}
+
+.futuristic .leaflet-tile-pane {
+  filter: brightness(0.6) saturate(1.2) hue-rotate(180deg);
+}
+
+.futuristic .leaflet-popup-content-wrapper {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(10, 15, 30, 0.9) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.futuristic .leaflet-popup-tip {
+  background: rgba(15, 23, 42, 0.95);
+}
+
+/* Separator lines */
+.futuristic hr,
+.futuristic [class*="separator"],
+.futuristic [class*="border-b"] {
+  border-color: rgba(6, 182, 212, 0.1);
+}
+
+/* Logo/Brand text enhancement */
+.futuristic h1[class*="font-bold"],
+.futuristic [class*="logo"] {
+  background: linear-gradient(135deg, #06b6d4, #a855f7);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Stat numbers enhancement */
+.futuristic [class*="text-3xl"][class*="font-bold"],
+.futuristic [class*="text-4xl"][class*="font-bold"] {
+  color: #06b6d4;
+  text-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+}
+
+/* =============================================================================
+   v3.57.112: ADMIN CONSOLE STYLING FOR FUTURISTIC THEME
+   ============================================================================= */
+
+/* Admin Console Modal - ensure solid background and proper z-index stacking */
+.futuristic .admin-console-modal {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(10, 15, 30, 0.98) 100%) !important;
+  border: 1px solid rgba(6, 182, 212, 0.2) !important;
+  box-shadow:
+    0 0 0 1px rgba(6, 182, 212, 0.1),
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(6, 182, 212, 0.1);
+}
+
+/* Admin Console Header - ensure visibility */
+.futuristic .admin-console-header {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.98) 0%, rgba(15, 23, 42, 0.95) 100%) !important;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.15) !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* Add neon accent line under header */
+.futuristic .admin-console-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(6, 182, 212, 0.5) 50%, transparent 100%);
+}
+
+/* Terminal text styling */
+.futuristic .admin-console-modal .text-green-500 {
+  color: #10b981 !important;
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+/* Console output area */
+.futuristic .admin-console-modal .bg-zinc-950 {
+  background: rgba(5, 10, 20, 0.95) !important;
+}

@@ -31,10 +31,13 @@ type BlocklistService struct {
 	mu             sync.RWMutex
 	config         *BlocklistConfig
 	worker         *syncWorker
+	enricher       *enrichWorker // v3.57.108: Background enrichment worker
 	stopChan       chan struct{}
 	syncInProgress bool
 	syncMu         sync.Mutex
 	xgsGroupReady  bool // Track if XGS group has been verified/created
+	enrichRunning  bool // v3.57.108: Track if enrichment is running
+	enrichMu       sync.Mutex
 }
 
 // BlocklistConfig holds the service configuration
@@ -61,6 +64,9 @@ type BlocklistRepository interface {
 	SaveSyncHistory(ctx context.Context, entry *SyncHistoryEntry) error
 	GetStats(ctx context.Context) (totalIPs int, totalBlocklists int, err error)
 	GetExistingBlocklistIDs(ctx context.Context) ([]struct{ ID, Label string }, error)
+	// v3.57.108: For background enrichment
+	GetIPsWithoutCountry(ctx context.Context, limit int) ([]string, error)
+	UpdateIPCountry(ctx context.Context, ip string, country string) error
 }
 
 // GeoIPLookup interface for country enrichment
@@ -74,6 +80,8 @@ type XGSClient interface {
 	GetGroupIPs(groupName string) ([]string, error)
 	SyncGroupIPs(groupName, hostPrefix string, targetIPs []string) (int, int, error)
 	SyncBlocklistIPLists(blocklistName string, ips []string) (int, int, error)
+	// v3.57.111: Get all CrowdSec groups with IP counts - returns slice of {Name, IPCount}
+	GetAllCrowdSecGroups() ([]map[string]interface{}, error)
 }
 
 // XGS Group configuration
@@ -123,6 +131,16 @@ type SyncResult struct {
 type syncWorker struct {
 	service  *BlocklistService
 	interval time.Duration
+	stopChan chan struct{}
+	running  bool
+	mu       sync.Mutex
+}
+
+// enrichWorker handles background country enrichment
+// v3.57.108: New background worker for country enrichment
+type enrichWorker struct {
+	service  *BlocklistService
+	interval time.Duration // 90 seconds between batches (ip-api.com rate limit)
 	stopChan chan struct{}
 	running  bool
 	mu       sync.Mutex
@@ -317,6 +335,11 @@ func (s *BlocklistService) Initialize(ctx context.Context) error {
 		s.StartWorker()
 	}
 
+	// v3.57.108: Start background enrichment worker if we have IPs
+	if config.TotalIPs > 0 && s.geoIP != nil {
+		s.StartEnrichWorker()
+	}
+
 	return nil
 }
 
@@ -440,6 +463,136 @@ func (w *syncWorker) run() {
 }
 
 func (w *syncWorker) stop() {
+	w.mu.Lock()
+	if w.running {
+		close(w.stopChan)
+	}
+	w.mu.Unlock()
+}
+
+// StartEnrichWorker starts the background country enrichment worker
+// v3.57.108: Enriches IPs with country codes automatically
+func (s *BlocklistService) StartEnrichWorker() {
+	if s.enricher != nil {
+		s.enricher.mu.Lock()
+		if s.enricher.running {
+			s.enricher.mu.Unlock()
+			return
+		}
+		s.enricher.mu.Unlock()
+	}
+
+	s.enricher = &enrichWorker{
+		service:  s,
+		interval: 90 * time.Second, // 1.5 minutes between batches (ip-api.com limit)
+		stopChan: make(chan struct{}),
+	}
+
+	go s.enricher.run()
+	slog.Info("[CROWDSEC_BL] Enrichment worker started", "interval", s.enricher.interval)
+}
+
+// StopEnrichWorker stops the background enrichment worker
+func (s *BlocklistService) StopEnrichWorker() {
+	if s.enricher != nil {
+		s.enricher.stop()
+		s.enricher = nil
+	}
+}
+
+// IsEnrichmentRunning returns true if enrichment worker is active
+func (s *BlocklistService) IsEnrichmentRunning() bool {
+	if s.enricher == nil {
+		return false
+	}
+	s.enricher.mu.Lock()
+	defer s.enricher.mu.Unlock()
+	return s.enricher.running
+}
+
+func (w *enrichWorker) run() {
+	w.mu.Lock()
+	w.running = true
+	w.mu.Unlock()
+
+	slog.Info("[CROWDSEC_BL_ENRICH] Starting background enrichment")
+
+	// Do initial enrichment immediately
+	w.doEnrichBatch()
+
+	ticker := time.NewTicker(w.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if !w.doEnrichBatch() {
+				// No more IPs to enrich - stop worker
+				slog.Info("[CROWDSEC_BL_ENRICH] All IPs enriched, stopping worker")
+				w.mu.Lock()
+				w.running = false
+				w.mu.Unlock()
+				return
+			}
+		case <-w.stopChan:
+			w.mu.Lock()
+			w.running = false
+			w.mu.Unlock()
+			slog.Info("[CROWDSEC_BL_ENRICH] Worker stopped by request")
+			return
+		}
+	}
+}
+
+// doEnrichBatch enriches up to 45 IPs in a batch
+// Returns true if there are more IPs to enrich, false if done
+func (w *enrichWorker) doEnrichBatch() bool {
+	if w.service.repo == nil || w.service.geoIP == nil {
+		return false
+	}
+
+	ctx := context.Background()
+	batchSize := 45 // ip-api.com rate limit
+
+	// Get IPs without country code
+	ips, err := w.service.repo.GetIPsWithoutCountry(ctx, batchSize)
+	if err != nil {
+		slog.Error("[CROWDSEC_BL_ENRICH] Failed to get IPs", "error", err)
+		return true // Retry next tick
+	}
+
+	if len(ips) == 0 {
+		return false // All done
+	}
+
+	enriched := 0
+	for _, ip := range ips {
+		country, err := w.service.geoIP.LookupCountry(ctx, ip)
+		if err != nil {
+			slog.Debug("[CROWDSEC_BL_ENRICH] GeoIP lookup failed", "ip", ip, "error", err)
+			continue
+		}
+		if country == "" {
+			continue
+		}
+
+		// Update country in DB
+		if err := w.service.repo.UpdateIPCountry(ctx, ip, country); err != nil {
+			slog.Error("[CROWDSEC_BL_ENRICH] Failed to update country", "ip", ip, "error", err)
+			continue
+		}
+		enriched++
+	}
+
+	slog.Info("[CROWDSEC_BL_ENRICH] Batch completed",
+		"enriched", enriched,
+		"batch_size", len(ips),
+		"remaining", len(ips)-enriched)
+
+	return true // More IPs may remain
+}
+
+func (w *enrichWorker) stop() {
 	w.mu.Lock()
 	if w.running {
 		close(w.stopChan)
@@ -928,34 +1081,48 @@ func (s *BlocklistService) GetStatus(ctx context.Context) map[string]interface{}
 	syncInProgress := s.syncInProgress
 	s.syncMu.Unlock()
 
-	// Get XGS group IP count if available
-	// Always try to get the count - group may already exist on XGS even if not synced yet
-	xgsIPCount := 0
+	// v3.57.111: Get all CrowdSec groups (grp_CS_*) with their IP counts
+	var xgsGroups []map[string]interface{}
 	xgsConfigured := s.xgs != nil
+	totalXGSIPs := 0
 	if xgsConfigured {
-		if ips, err := s.xgs.GetGroupIPs(XGSGroupName); err == nil {
-			xgsIPCount = len(ips)
+		if groups, err := s.xgs.GetAllCrowdSecGroups(); err == nil {
+			xgsGroups = groups
+			// Calculate total IPs
+			for _, g := range groups {
+				if count, ok := g["ip_count"].(int); ok {
+					totalXGSIPs += count
+				}
+			}
 		}
 	}
 
 	// Get retention status
 	retentionStatus := s.GetRetentionStatus()
 
+	// v3.57.108: Check enrichment worker status
+	enrichmentRunning := s.IsEnrichmentRunning()
+
 	return map[string]interface{}{
-		"configured":       s.client.IsConfigured(),
-		"enabled":          s.config.Enabled,
-		"worker_running":   workerRunning,
-		"sync_in_progress": syncInProgress,
-		"sync_running":     syncInProgress, // Alias for frontend compatibility
-		"last_sync":        s.config.LastSync,
-		"total_ips":        s.config.TotalIPs,
-		"total_blocklists": s.config.TotalBlocklists,
-		"sync_interval":    fmt.Sprintf("%dm", s.config.SyncIntervalMinutes),
-		"data_dir":         BlocklistDataDir,
-		"group_name":       XGSGroupName,
-		"xgs_configured":   xgsConfigured,
-		"xgs_group_ready":  s.xgsGroupReady,
-		"xgs_ip_count":     xgsIPCount,
+		"configured":         s.client.IsConfigured(),
+		"enabled":            s.config.Enabled,
+		"worker_running":     workerRunning,
+		"sync_in_progress":   syncInProgress,
+		"sync_running":       syncInProgress,    // Alias for frontend compatibility
+		"enrichment_running": enrichmentRunning, // v3.57.108: Background enrichment status
+		"last_sync":          s.config.LastSync,
+		"total_ips":          s.config.TotalIPs,
+		"total_blocklists":   s.config.TotalBlocklists,
+		"sync_interval":      fmt.Sprintf("%dm", s.config.SyncIntervalMinutes),
+		"data_dir":           BlocklistDataDir,
+		"xgs_configured":     xgsConfigured,
+		"xgs_group_ready":    s.xgsGroupReady,
+		// v3.57.111: New fields for per-blocklist groups
+		"xgs_groups":    xgsGroups,   // All grp_CS_* groups with counts
+		"xgs_total_ips": totalXGSIPs, // Total IPs across all groups
+		// Legacy fields kept for backward compatibility
+		"xgs_ip_count":     totalXGSIPs, // Same as xgs_total_ips
+		"group_name":       "",          // Deprecated - now uses multiple groups
 		"retention_days":   int(RetentionDuration.Hours() / 24),
 		"retention_status": retentionStatus,
 	}
