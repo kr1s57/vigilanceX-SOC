@@ -6,6 +6,12 @@ export interface WebSocketMessage {
   timestamp: string
 }
 
+// v3.57.106: Production-safe logging - only log in development
+const isDev = import.meta.env.DEV
+const wsLog = isDev ? console.log.bind(console) : () => {}
+const wsError = isDev ? console.error.bind(console) : () => {}
+const wsWarn = isDev ? console.warn.bind(console) : () => {}
+
 interface WebSocketOptions {
   url: string
   reconnectInterval?: number
@@ -46,7 +52,7 @@ class WebSocketManager {
       this.ws.onopen = () => {
         this.isConnecting = false
         this.reconnectAttempts = 0
-        console.log('[WebSocket] Connected')
+        wsLog('[WebSocket] Connected')
         this.options.onConnect?.()
 
         // Notify handlers of connection
@@ -59,7 +65,7 @@ class WebSocketManager {
 
       this.ws.onclose = () => {
         this.isConnecting = false
-        console.log('[WebSocket] Disconnected')
+        wsLog('[WebSocket] Disconnected')
         this.options.onDisconnect?.()
 
         // Notify handlers of disconnection
@@ -74,7 +80,7 @@ class WebSocketManager {
 
       this.ws.onerror = (error) => {
         this.isConnecting = false
-        console.error('[WebSocket] Error:', error)
+        wsError('[WebSocket] Error:', error)
         this.options.onError?.(error)
       }
 
@@ -83,12 +89,12 @@ class WebSocketManager {
           const message = JSON.parse(event.data) as WebSocketMessage
           this.emit(message)
         } catch (err) {
-          console.error('[WebSocket] Failed to parse message:', err)
+          wsError('[WebSocket] Failed to parse message:', err)
         }
       }
     } catch (err) {
       this.isConnecting = false
-      console.error('[WebSocket] Connection failed:', err)
+      wsError('[WebSocket] Connection failed:', err)
       this.scheduleReconnect()
     }
   }
@@ -97,7 +103,7 @@ class WebSocketManager {
     if (!this.shouldReconnect) return
 
     if (this.reconnectAttempts >= (this.options.maxReconnectAttempts || 10)) {
-      console.error('[WebSocket] Max reconnect attempts reached')
+      wsError('[WebSocket] Max reconnect attempts reached')
       return
     }
 
@@ -154,7 +160,7 @@ class WebSocketManager {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message))
     } else {
-      console.warn('[WebSocket] Cannot send - not connected')
+      wsWarn('[WebSocket] Cannot send - not connected')
     }
   }
 

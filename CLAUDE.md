@@ -1,6 +1,6 @@
 # VIGILANCE X - Claude Code Memory File
 
-> **Version**: 3.57.104 | **Derniere mise a jour**: 2026-01-17
+> **Version**: 3.57.106 | **Derniere mise a jour**: 2026-01-18
 
 Ce fichier sert de memoire persistante pour Claude Code. Il contient les **regles, conventions et workflows** du projet VIGILANCE X.
 
@@ -31,6 +31,7 @@ Le repo PUBLIC ne doit contenir **QUE**:
 | `docs/` | Documentation interne |
 | `BUGFIXSESSION/`, `FEATURESPROMPT/` | Sessions de debug/features |
 | `.github/` | Workflows CI/CD, secrets |
+| `.claude/` | Configuration Claude Code (skills, settings) |
 | `backups/` | Donnees sensibles |
 
 **INFORMATIONS SENSIBLES A NE JAMAIS REVELER:**
@@ -422,6 +423,26 @@ forgejo-soc -> Forgejo (itsadm/vigilanceX-SOC) - public
 
 ---
 
+## Audit Notes (v3.57.106)
+
+**Points a traiter lors du prochain audit:**
+
+| # | Issue | Priorite | Description |
+|---|-------|----------|-------------|
+| 1 | **TLS InsecureSkipVerify** | Medium | Rendre configurable via env `SOPHOS_TLS_SKIP_VERIFY`. Actuellement requis pour certificats auto-signes XGS. Fichier: `backend/cmd/api/main.go:216` |
+| 2 | **ClickHouse ORDER BY** | Medium | Optimiser avec timestamp en premier pour time-range queries. Fichier: `docker/clickhouse/init-db.sql` |
+| 3 | **32 Endpoints NotImplemented** | Low | Implementer ou supprimer les routes stub retournant 501. Fichiers: `backend/cmd/api/main.go` handlers |
+| 4 | **Framer Motion** | Low | Installer pour animations fluides GlassModal: `npm i framer-motion` |
+
+**Corrections effectuees (v3.57.106):**
+- CORS securise (wildcard supprime)
+- Security headers OWASP ajoutes
+- React lazy loading implemente
+- Console.logs debug supprimes
+- Composants Glassmorphism crees
+
+---
+
 ## Sous-Agents Claude
 
 Tous les sous-agents DOIVENT utiliser le modele **Opus** pour coherence.
@@ -430,6 +451,200 @@ Tous les sous-agents DOIVENT utiliser le modele **Opus** pour coherence.
 # Agents recommandes
 - code-reviewer (security, maintainability)
 - test-writer (coverage, edge-cases)
+```
+
+---
+
+## Claude Code Skills
+
+Les Skills sont des fichiers Markdown qui enseignent a Claude comment effectuer des taches specifiques. Ils sont automatiquement detectes et actives selon le contexte de la conversation.
+
+**Total: 36 Skills** repartis en 9 categories.
+
+### Skills par Categorie
+
+#### 1. Development Workflow (9 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `gitgo` | Workflow complet de release (version, commit, sync repos, tags, releases) |
+| `version-bump` | Mise a jour version dans tous les fichiers requis |
+| `backend-build` | Build et tests Go (API, D2B, utilitaires) |
+| `frontend-build` | Build React/TypeScript (Vite, npm) |
+| `docker-deploy` | Gestion conteneurs Docker Compose |
+| `db-migration` | Migrations ClickHouse (creation tables, colonnes) |
+| `code-review` | Review securite (OWASP, Clean Architecture) |
+| `bugfix` | Investigation et correction de bugs |
+| `feature` | Implementation nouvelle fonctionnalite full-stack |
+
+#### 2. Security Modules (4 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `waf-security` | Analyse WAF, regles ModSecurity, faux positifs |
+| `ips-analyzer` | Analyse IPS, signatures, mapping MITRE ATT&CK |
+| `vpn-security` | Securite VPN, brute force, anomalies geo |
+| `atp-analysis` | ATP, malware, sandboxing, C2 detection |
+
+#### 3. CyberSec / Threat Hunting (3 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `threat-hunting` | Chasse proactive, beaconing, exfiltration, lateral movement |
+| `incident-response` | Playbooks IR, containment, eradication |
+| `forensics` | Investigation forensique, Track IP, attribution |
+
+#### 4. DevOps / Infrastructure (3 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `cicd-pipeline` | GitHub Actions, builds, releases, deployments |
+| `monitoring` | Health checks, metriques, Docker/ClickHouse/Redis |
+| `infrastructure` | (utiliser docker-deploy) |
+
+#### 5. SecOps / SOC (2 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `soc-operations` | Operations SOC, triage, shift handoff, KPIs |
+| `alerting` | Configuration alertes, WebSocket, email, suppression |
+
+#### 6. UI / Frontend (1 skill)
+
+| Skill | Description |
+|-------|-------------|
+| `react-ui-modern` | React 18, Tailwind, Shadcn, performance, accessibility |
+
+#### 7. Data Analysis (2 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `xgs-log-analysis` | Analyse logs Sophos XGS, 104 champs, Vector parser |
+| `anomaly-detection` | Baselines, deviations, ML-ready queries |
+
+#### 8. API Development (2 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `api-design` | Design REST API, Chi router, Clean Architecture |
+| `api-security` | OWASP API Top 10, JWT, RBAC, rate limiting |
+
+#### 9. Detect2Ban (2 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `detect2ban-tuning` | Tuning seuils, tiers, GeoZone, scenarios |
+| `false-positive-analysis` | Detection/prediction FP, whitelist recommandations |
+
+#### 10. Geographic / Maps (3 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `attack-map-viz` | Carte mondiale, Leaflet, animations, clustering |
+| `geoip-enrichment` | MaxMind GeoIP2, enrichissement, caching |
+| `geoblocking-rules` | GeoZones, politiques pays, integration D2B |
+
+#### 11. Threat Intelligence (2 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `threat-intel` | 11 providers TI, cascade scoring, caching |
+| `crowdsec-sync` | Neural-Sync, blocklists, sync XGS |
+
+#### 12. Performance (2 skills)
+
+| Skill | Description |
+|-------|-------------|
+| `performance-backend` | Profiling Go, pools, concurrence |
+| `clickhouse-optimization` | Schemas, partitions, materialized views |
+
+### Structure Complete Skills
+
+```
+.claude/skills/
+├── # Development Workflow
+├── gitgo/
+├── version-bump/
+├── backend-build/
+├── frontend-build/
+├── docker-deploy/
+├── db-migration/
+├── code-review/
+├── bugfix/
+├── feature/
+│
+├── # Security Modules
+├── waf-security/
+├── ips-analyzer/
+├── vpn-security/
+├── atp-analysis/
+│
+├── # CyberSec
+├── threat-hunting/
+├── incident-response/
+├── forensics/
+│
+├── # DevOps
+├── cicd-pipeline/
+├── monitoring/
+│
+├── # SecOps
+├── soc-operations/
+├── alerting/
+│
+├── # UI
+├── react-ui-modern/
+│
+├── # Data Analysis
+├── xgs-log-analysis/
+├── anomaly-detection/
+│
+├── # API
+├── api-design/
+├── api-security/
+│
+├── # D2B
+├── detect2ban-tuning/
+├── false-positive-analysis/
+│
+├── # Geographic
+├── attack-map-viz/
+├── geoip-enrichment/
+├── geoblocking-rules/
+│
+├── # TI
+├── threat-intel/
+├── crowdsec-sync/
+│
+└── # Performance
+    ├── performance-backend/
+    └── clickhouse-optimization/
+```
+
+### Utilisation
+
+Les Skills s'activent automatiquement selon le contexte:
+
+```
+# Exemples d'activation automatique
+"analyse les logs WAF de la semaine"          -> waf-security
+"optimise les requetes ClickHouse"            -> clickhouse-optimization
+"investigate cette IP suspecte"               -> forensics, threat-hunting
+"configure l'alerting email"                  -> alerting
+"reduis les faux positifs D2B"                -> false-positive-analysis
+"ameliore la carte des attaques"              -> attack-map-viz
+```
+
+### Creation de Nouveaux Skills
+
+```yaml
+---
+name: skill-name
+description: Description claire pour detection automatique (max 1024 chars)
+allowed-tools: Read, Bash, Edit, Glob, Grep
+---
+
+# Instructions detaillees en Markdown
 ```
 
 ---

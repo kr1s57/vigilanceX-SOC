@@ -62,9 +62,10 @@ type SophosSSHConfig struct {
 }
 
 type AppConfig struct {
-	Env  string
-	Port int
-	Host string
+	Env         string
+	Port        int
+	Host        string
+	FrontendURL string // v3.57.106: For secure CORS configuration in production
 }
 
 type ClickHouseConfig struct {
@@ -151,9 +152,10 @@ func Load() (*Config, error) {
 
 	config := &Config{
 		App: AppConfig{
-			Env:  viper.GetString("APP_ENV"),
-			Port: viper.GetInt("APP_PORT"),
-			Host: viper.GetString("APP_HOST"),
+			Env:         viper.GetString("APP_ENV"),
+			Port:        viper.GetInt("APP_PORT"),
+			Host:        viper.GetString("APP_HOST"),
+			FrontendURL: viper.GetString("APP_FRONTEND_URL"), // v3.57.106: Secure CORS
 		},
 		ClickHouse: ClickHouseConfig{
 			Host:     viper.GetString("CLICKHOUSE_HOST"),
@@ -248,6 +250,7 @@ func bindEnvVars() {
 	viper.BindEnv("APP_ENV")
 	viper.BindEnv("APP_PORT")
 	viper.BindEnv("APP_HOST")
+	viper.BindEnv("APP_FRONTEND_URL") // v3.57.106: Secure CORS
 
 	// ClickHouse
 	viper.BindEnv("CLICKHOUSE_HOST")

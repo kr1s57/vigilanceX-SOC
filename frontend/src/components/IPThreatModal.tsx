@@ -106,10 +106,7 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
           setWhitelistStatus(whitelistData)
         }
 
-        // v3.55.101: Always set attack history (even if empty) for debugging
-        console.log('[IPThreatModal] Events data for IP', ip, ':', eventsData)
-        console.log('[IPThreatModal] WAF data for IP', ip, ':', wafData)
-
+        // v3.55.101: Always set attack history (even if empty)
         if (eventsData?.data) {
           setAttackHistory(eventsData.data)
         }

@@ -526,10 +526,18 @@ func main() {
 	r.Use(middleware.Logger(logger))
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Compress(5))
+	r.Use(middleware.SecurityHeaders) // v3.57.106: OWASP security headers
 
-	// CORS configuration
+	// CORS configuration - v3.57.106: Secure CORS with env-based origins
+	corsOrigins := []string{"http://localhost:3000", "http://localhost:5173"}
+	if cfg.App.Env == "production" {
+		// In production, only allow configured frontend URL
+		if cfg.App.FrontendURL != "" {
+			corsOrigins = []string{cfg.App.FrontendURL}
+		}
+	}
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173", "https://*"},
+		AllowedOrigins:   corsOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},

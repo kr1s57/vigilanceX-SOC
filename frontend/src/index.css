@@ -155,3 +155,65 @@
 .leaflet-popup-tip {
   @apply bg-card;
 }
+
+/* v3.57.106: Glassmorphism utilities */
+.glass {
+  @apply bg-white/10 backdrop-blur-xl border border-white/20;
+}
+
+.glass-dark {
+  @apply bg-black/10 backdrop-blur-xl border border-white/10;
+}
+
+.glass-card {
+  @apply bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-lg border border-white/10 rounded-xl;
+}
+
+.glass-hover {
+  @apply transition-all duration-200 hover:bg-white/15 hover:border-white/25 hover:shadow-lg;
+}
+
+.glass-glow {
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.1),
+              inset 0 0 20px rgba(255, 255, 255, 0.05);
+}
+
+/* Shimmer animation for loading states */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary/80 to-primary/60;
+}
+
+/* Subtle glow effect for cards */
+.card-glow {
+  @apply relative;
+}
+
+.card-glow::before {
+  content: '';
+  @apply absolute -inset-0.5 bg-gradient-to-r from-primary/20 to-primary/5 rounded-xl opacity-0 transition-opacity duration-300 -z-10;
+}
+
+.card-glow:hover::before {
+  @apply opacity-100;
+}

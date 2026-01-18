@@ -7,6 +7,50 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.106] - 2026-01-18
+
+### Security
+- **CORS Securise**: Remplacement du wildcard `https://*` par configuration env-based (`APP_FRONTEND_URL`)
+- **Security Headers Middleware**: Ajout des headers OWASP (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, CSP, HSTS)
+- **Console Logs Production**: Suppression des logs debug en production (websocket.ts, IPThreatModal.tsx)
+
+### Performance
+- **React Lazy Loading**: Toutes les pages chargees en lazy avec Suspense (~60% reduction bundle initial)
+- Code splitting automatique par route (visible dans build output)
+
+### Added
+- **Glassmorphism UI Components**:
+  - `GlassModal`: Modal moderne avec effet verre depoli et animations CSS
+  - `GlassCard`: Carte avec effet glassmorphism
+  - `GlassButton`: Bouton style verre
+- **CSS Utilities**: Classes `.glass`, `.glass-card`, `.shimmer`, `.card-glow`, `.gradient-text`
+- **Audit Notes Section**: Section CLAUDE.md pour tracker les points futurs
+
+### Technical
+- `backend/internal/adapter/controller/http/middleware/security.go`: Nouveau middleware
+- `backend/internal/config/config.go`: Ajout `FrontendURL` pour CORS production
+- `frontend/src/components/ui/GlassModal.tsx`: Composants glassmorphism
+- `frontend/src/App.tsx`: React.lazy() pour toutes les pages
+- `frontend/src/index.css`: Utilities glassmorphism
+
+---
+
+## [3.57.105] - 2026-01-17
+
+### Changed
+- **Dashboard Layout v2**: Améliorations significatives du layout
+  - **Top Attackers**: Max-height 320px, affiche ~5 items avec scroll, indicateur "X total"
+  - **Events by Type**: Version ultra-compacte (100px) avec indicateurs colorés inline
+  - **XGS Logins**: Pagination complète (10 items/page, nav 1-2-3...) pour 200 entrées max
+  - Format login: `[OK/FAIL] username | IP | date heure`
+
+### Technical
+- `LogTypeRowCompact`: Nouveau composant avec indicateur couleur + barre inline
+- `XGSLoginCard`: Réécrit avec pagination (ChevronLeft/Right, numéros de page)
+- Constantes: `ITEMS_PER_PAGE = 10`, `MAX_ENTRIES = 200`
+
+---
+
 ## [3.57.104] - 2026-01-17
 
 ### Added
