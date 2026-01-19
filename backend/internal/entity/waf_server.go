@@ -51,9 +51,11 @@ type WAFServerRequest struct {
 
 // PolicyCheckResult represents the result of a country policy check
 type PolicyCheckResult struct {
-	ShouldBan bool   `json:"should_ban"`
-	BanReason string `json:"ban_reason"`
-	PolicyHit string `json:"policy_hit"` // whitecountry, blockcountry, or empty
+	ShouldBan           bool   `json:"should_ban"`
+	BanReason           string `json:"ban_reason"`
+	PolicyHit           string `json:"policy_hit"`            // whitecountry, blockcountry, or empty
+	IsAuthorizedCountry bool   `json:"is_authorized_country"` // v3.57.113: Country is in whitelist (FR, LU)
+	RequireApproval     bool   `json:"require_approval"`      // v3.57.113: Ban requires admin approval
 }
 
 // Policy mode constants
@@ -95,6 +97,11 @@ func (s *WAFMonitoredServer) CheckCountryPolicy(countryCode string) *PolicyCheck
 			} else {
 				result.BanReason = fmt.Sprintf("CountryPolicy: %s - Country %s not in whitelist", s.Hostname, countryCode)
 			}
+		} else {
+			// v3.57.113: Country IS in whitelist - mark as authorized
+			// These IPs should NOT be auto-banned, but require admin approval
+			result.IsAuthorizedCountry = true
+			result.RequireApproval = true
 		}
 
 	case PolicyModeBlockCountry:

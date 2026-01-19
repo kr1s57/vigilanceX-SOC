@@ -36,6 +36,15 @@ type ThreatScore struct {
 	IPSumScore      int32 `json:"ipsum_score" ch:"ipsum_score"`
 	CriminalIPScore int32 `json:"criminalip_score" ch:"criminalip_score"`
 	PulsediveScore  int32 `json:"pulsedive_score" ch:"pulsedive_score"`
+	// v3.57.112: CrowdSec CTI fields
+	CrowdSecScore           int32    `json:"crowdsec_score" ch:"crowdsec_score"`
+	CrowdSecReputation      string   `json:"crowdsec_reputation" ch:"crowdsec_reputation"`
+	CrowdSecBackgroundNoise int32    `json:"crowdsec_background_noise" ch:"crowdsec_background_noise"`
+	CrowdSecIPRangeScore    int32    `json:"crowdsec_ip_range_score" ch:"crowdsec_ip_range_score"`
+	CrowdSecBehaviors       []string `json:"crowdsec_behaviors,omitempty" ch:"crowdsec_behaviors"`
+	CrowdSecMitreTechniques []string `json:"crowdsec_mitre_techniques,omitempty" ch:"crowdsec_mitre_techniques"`
+	CrowdSecClassifications []string `json:"crowdsec_classifications,omitempty" ch:"crowdsec_classifications"`
+	CrowdSecFound           bool     `json:"crowdsec_found" ch:"crowdsec_found"`
 	// v1.6 flags
 	IsBenign     bool  `json:"is_benign" ch:"is_benign"`         // GreyNoise benign flag
 	IsVPN        bool  `json:"is_vpn" ch:"is_vpn"`               // CriminalIP VPN flag

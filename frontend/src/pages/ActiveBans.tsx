@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat, Search } from 'lucide-react'
-import { bansApi, detect2banApi, type Detect2BanStatus } from '@/lib/api'
+import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat, Search, XCircle, ShieldCheck } from 'lucide-react'
+import { bansApi, detect2banApi, pendingBansApi, type Detect2BanStatus } from '@/lib/api'
 import { IPThreatModal } from '@/components/IPThreatModal'
-import { formatDateTime, getCountryFlag } from '@/lib/utils'
-import type { BanStatus, BanStats } from '@/types'
+import { formatDateTime, getCountryFlag, cn } from '@/lib/utils'
+import type { BanStatus, BanStats, PendingBan, PendingBanStats } from '@/types'
 
 type StatsFilter = 'active' | 'permanent' | 'recent' | 'recidivist' | null
 
@@ -22,6 +22,12 @@ export function ActiveBans() {
   // Detect2Ban state
   const [detect2banStatus, setDetect2banStatus] = useState<Detect2BanStatus | null>(null)
   const [togglingDetect2ban, setTogglingDetect2ban] = useState(false)
+
+  // v3.57.114: Pending Approvals state
+  const [pendingBans, setPendingBans] = useState<PendingBan[]>([])
+  const [, setPendingStats] = useState<PendingBanStats | null>(null)
+  const [approvingIP, setApprovingIP] = useState<string | null>(null)
+  const [showPendingModal, setShowPendingModal] = useState(false)
 
   // IP Search filter
   const [searchIP, setSearchIP] = useState('')
@@ -77,6 +83,7 @@ export function ActiveBans() {
   useEffect(() => {
     fetchData()
     fetchDetect2banStatus()
+    fetchPendingBans()
   }, [])
 
   async function fetchData() {
@@ -102,6 +109,49 @@ export function ActiveBans() {
       setDetect2banStatus(status)
     } catch (err) {
       console.error('Failed to fetch Detect2Ban status:', err)
+    }
+  }
+
+  // v3.57.113: Fetch pending approvals
+  async function fetchPendingBans() {
+    try {
+      const [bansData, statsData] = await Promise.all([
+        pendingBansApi.list(),
+        pendingBansApi.stats()
+      ])
+      setPendingBans(bansData || [])
+      setPendingStats(statsData)
+    } catch (err) {
+      console.error('Failed to fetch pending bans:', err)
+      setPendingBans([])
+    }
+  }
+
+  // v3.57.113: Approve pending ban
+  async function handleApprovePending(id: string, ip: string) {
+    if (!confirm(`Approve ban for ${ip}?\n\nThis will create an active ban for this IP.`)) return
+    setApprovingIP(ip)
+    try {
+      await pendingBansApi.approve(id)
+      await Promise.all([fetchData(), fetchPendingBans()])
+    } catch (err) {
+      console.error('Failed to approve pending ban:', err)
+    } finally {
+      setApprovingIP(null)
+    }
+  }
+
+  // v3.57.113: Reject pending ban
+  async function handleRejectPending(id: string, ip: string) {
+    if (!confirm(`Reject ban for ${ip}?\n\nThis IP will NOT be banned and the pending request will be removed.`)) return
+    setApprovingIP(ip)
+    try {
+      await pendingBansApi.reject(id)
+      await fetchPendingBans()
+    } catch (err) {
+      console.error('Failed to reject pending ban:', err)
+    } finally {
+      setApprovingIP(null)
     }
   }
 
@@ -242,7 +292,7 @@ export function ActiveBans() {
 
       {/* Stats Cards - Clickable */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <button
             onClick={() => setStatsFilter('active')}
             className="bg-card rounded-xl border p-4 text-left hover:bg-muted/50 hover:border-primary/50 transition-all cursor-pointer"
@@ -282,6 +332,23 @@ export function ActiveBans() {
               Recidivists
             </div>
             <p className="text-2xl font-bold text-yellow-500">{stats.recidivist_ips}</p>
+          </button>
+          {/* v3.57.114: Pending Approval Card */}
+          <button
+            onClick={() => setShowPendingModal(true)}
+            className={`bg-card rounded-xl border p-4 text-left transition-all cursor-pointer ${
+              pendingBans.length > 0
+                ? 'hover:bg-amber-500/10 hover:border-amber-500/50 border-amber-500/30 bg-amber-500/5'
+                : 'hover:bg-muted/50 hover:border-muted'
+            }`}
+          >
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+              <ShieldCheck className="w-4 h-4" />
+              Pending Approval
+            </div>
+            <p className={`text-2xl font-bold ${pendingBans.length > 0 ? 'text-amber-500' : ''}`}>
+              {pendingBans.length}
+            </p>
           </button>
         </div>
       )}
@@ -600,8 +667,149 @@ export function ActiveBans() {
         </div>
       )}
 
+      {/* v3.57.114: Pending Approval Modal */}
+      {showPendingModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl border w-full max-w-3xl max-h-[85vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b bg-amber-500/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-lg">
+                  <ShieldCheck className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                    Pending Ban Approval
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    IPs from authorized countries requiring admin review
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPendingModal(false)}
+                className="p-2 hover:bg-muted rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="overflow-y-auto max-h-[60vh]">
+              {pendingBans.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                  <ShieldCheck className="w-12 h-12 mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No Pending Approvals</p>
+                  <p className="text-sm">All authorized country detections have been reviewed</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {pendingBans.map((pending) => (
+                    <div key={pending.id} className="p-4 hover:bg-muted/30 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        {/* IP Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl" title={pending.country}>
+                              {getCountryFlag(pending.country)}
+                            </span>
+                            <span className="font-mono text-lg font-semibold">{pending.ip}</span>
+                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded text-xs font-medium">
+                              {pending.country}
+                            </span>
+                          </div>
+
+                          {/* Details Grid */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                            <div>
+                              <p className="text-muted-foreground text-xs">Trigger</p>
+                              <p className="font-medium">{pending.trigger_rule}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-xs">Events</p>
+                              <p className="font-medium">{pending.event_count}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-xs">TI Score</p>
+                              <p className={cn(
+                                'font-bold',
+                                pending.threat_score >= 70 ? 'text-red-500' :
+                                pending.threat_score >= 30 ? 'text-orange-500' : 'text-green-500'
+                              )}>
+                                {pending.threat_score}%
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-xs">Last Event</p>
+                              <p className="font-medium text-xs">{formatDateTime(pending.last_event)}</p>
+                            </div>
+                          </div>
+
+                          {/* Reason */}
+                          <p className="text-sm text-muted-foreground truncate" title={pending.reason}>
+                            {pending.reason}
+                          </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => handleApprovePending(pending.id, pending.ip)}
+                            disabled={approvingIP === pending.ip}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium disabled:opacity-50"
+                          >
+                            {approvingIP === pending.ip ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Ban className="w-4 h-4" />
+                            )}
+                            Approve Ban
+                          </button>
+                          <button
+                            onClick={() => handleRejectPending(pending.id, pending.ip)}
+                            disabled={approvingIP === pending.ip}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500/10 text-green-500 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-colors text-sm font-medium disabled:opacity-50"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Deny Ban
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowPendingModal(false)
+                              handleIPLookup(pending.ip)
+                            }}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors text-sm"
+                          >
+                            <Search className="w-4 h-4" />
+                            View Details
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t bg-muted/30 flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {pendingBans.length} pending approval{pendingBans.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={() => setShowPendingModal(false)}
+                className="px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* IP Threat Modal */}
       <IPThreatModal
+        key={selectedIP || 'closed'}
         ip={selectedIP}
         isOpen={showThreatModal}
         onClose={() => {

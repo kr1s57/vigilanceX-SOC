@@ -91,9 +91,11 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 
 	// Get events
 	// v3.55.101: Use explicit table prefix e. to avoid alias collision with IPv4NumToString
+	// v3.57.113: Added mitre_technique for MITRE ATT&CK detection
 	query := fmt.Sprintf(`
 		SELECT
 			e.event_id, e.timestamp, e.log_type, e.category, e.sub_category, e.severity,
+			e.mitre_technique,
 			IPv4NumToString(e.src_ip) as src_ip, IPv4NumToString(e.dst_ip) as dst_ip,
 			e.src_port, e.dst_port, e.protocol, e.action, e.rule_id, e.rule_name,
 			e.hostname, e.user_name, e.url, e.http_method, e.http_status, e.user_agent,
@@ -118,6 +120,7 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 		var e entity.Event
 		if err := rows.Scan(
 			&e.EventID, &e.Timestamp, &e.LogType, &e.Category, &e.SubCategory, &e.Severity,
+			&e.MitreTechnique,
 			&e.SrcIP, &e.DstIP, &e.SrcPort, &e.DstPort, &e.Protocol, &e.Action,
 			&e.RuleID, &e.RuleName, &e.Hostname, &e.UserName, &e.URL, &e.HTTPMethod,
 			&e.HTTPStatus, &e.UserAgent, &e.GeoCountry, &e.GeoCity, &e.GeoASN,
@@ -133,10 +136,12 @@ func (r *EventsRepository) GetEvents(ctx context.Context, filters entity.EventFi
 }
 
 // GetEventByID retrieves a single event by ID
+// v3.57.113: Added mitre_technique for MITRE ATT&CK detection
 func (r *EventsRepository) GetEventByID(ctx context.Context, eventID uuid.UUID) (*entity.Event, error) {
 	query := `
 		SELECT
 			event_id, timestamp, log_type, category, sub_category, severity,
+			mitre_technique,
 			IPv4NumToString(src_ip) as src_ip, IPv4NumToString(dst_ip) as dst_ip,
 			src_port, dst_port, protocol, action, rule_id, rule_name,
 			hostname, user_name, url, http_method, http_status, user_agent,
@@ -150,6 +155,7 @@ func (r *EventsRepository) GetEventByID(ctx context.Context, eventID uuid.UUID) 
 	var e entity.Event
 	if err := r.conn.QueryRow(ctx, query, eventID).Scan(
 		&e.EventID, &e.Timestamp, &e.LogType, &e.Category, &e.SubCategory, &e.Severity,
+		&e.MitreTechnique,
 		&e.SrcIP, &e.DstIP, &e.SrcPort, &e.DstPort, &e.Protocol, &e.Action,
 		&e.RuleID, &e.RuleName, &e.Hostname, &e.UserName, &e.URL, &e.HTTPMethod,
 		&e.HTTPStatus, &e.UserAgent, &e.GeoCountry, &e.GeoCity, &e.GeoASN,
@@ -192,6 +198,7 @@ func (r *EventsRepository) GetTimeline(ctx context.Context, period string, inter
 		timeFunc = "toStartOfHour(timestamp)"
 	}
 
+	// v3.57.114: Exclude infrastructure IP 83.194.220.184 from timeline
 	query := fmt.Sprintf(`
 		SELECT
 			%s as time_bucket,
@@ -200,6 +207,7 @@ func (r *EventsRepository) GetTimeline(ctx context.Context, period string, inter
 			uniqExact(src_ip) as unique_ips
 		FROM events
 		WHERE timestamp >= ?
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY time_bucket
 		ORDER BY time_bucket ASC
 	`, timeFunc)
@@ -242,6 +250,7 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 	}
 
 	// Main events table stats
+	// v3.57.114: Exclude infrastructure IP 83.194.220.184 from stats
 	query := `
 		SELECT
 			count() as total_events,
@@ -253,6 +262,7 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 			countIf(severity = 'low') as low_events
 		FROM events
 		WHERE timestamp >= ?
+			AND src_ip != toIPv4('83.194.220.184')
 	`
 
 	var stats entity.EventStats
@@ -270,6 +280,7 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 
 	// v3.57.101: Add modsec_logs stats for WAF blocking/severity data
 	// This is where the real WAF blocking info lives (is_blocking, rule_severity)
+	// v3.57.114: Exclude infrastructure IP 83.194.220.184 from stats
 	modsecQuery := `
 		SELECT
 			countIf(is_blocking = 1) as blocked,
@@ -277,6 +288,7 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 			countIf(rule_severity = 'WARNING' OR rule_severity = 'ERROR') as high
 		FROM modsec_logs
 		WHERE timestamp >= ?
+			AND src_ip != toIPv4('83.194.220.184')
 	`
 	var modsecBlocked, modsecCritical, modsecHigh uint64
 	if err := r.conn.QueryRow(ctx, modsecQuery, startTime).Scan(
@@ -318,6 +330,7 @@ func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, l
 
 	// v3.57.108: Filter out private IP ranges (RFC1918 + loopback)
 	// v3.57.110: Also filter out XGS public IP (83.194.220.184) and VGX infrastructure IPs
+	// v3.57.113: Added 178.18.1.0/24 internal management network exclusion
 	// Only include security-relevant log types (WAF, IPS, ATP, Anti-Virus, Firewall attacks)
 	// Exclude generic events like Heartbeat, Admin, etc.
 	query := `
@@ -335,6 +348,7 @@ func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, l
 		  AND (src_ip < toIPv4('172.16.0.0') OR src_ip > toIPv4('172.31.255.255'))
 		  AND (src_ip < toIPv4('192.168.0.0') OR src_ip > toIPv4('192.168.255.255'))
 		  AND (src_ip < toIPv4('127.0.0.0') OR src_ip > toIPv4('127.255.255.255'))
+		  AND (src_ip < toIPv4('178.18.1.0') OR src_ip > toIPv4('178.18.1.255'))
 		  AND src_ip != toIPv4('83.194.220.184')
 		  AND log_type IN ('WAF', 'IPS', 'ATP', 'Anti-Virus', 'Firewall', 'Threat')
 		GROUP BY src_ip
@@ -410,6 +424,7 @@ func (r *EventsRepository) GetTopTargets(ctx context.Context, period string, lim
 }
 
 // GetStatsByLogType retrieves stats grouped by log type
+// v3.57.114: Exclude infrastructure IP 83.194.220.184
 func (r *EventsRepository) GetStatsByLogType(ctx context.Context, period string) (map[string]uint64, error) {
 	var startTime time.Time
 	now := time.Now()
@@ -431,6 +446,7 @@ func (r *EventsRepository) GetStatsByLogType(ctx context.Context, period string)
 		SELECT log_type, count() as count
 		FROM events
 		WHERE timestamp >= ?
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY log_type
 	`
 
@@ -454,6 +470,7 @@ func (r *EventsRepository) GetStatsByLogType(ctx context.Context, period string)
 }
 
 // GetGeoHeatmap retrieves geographic distribution data
+// v3.57.114: Exclude infrastructure IP 83.194.220.184
 func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]map[string]interface{}, error) {
 	var startTime time.Time
 	now := time.Now()
@@ -478,6 +495,7 @@ func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]
 			uniqExact(src_ip) as unique_ips
 		FROM events
 		WHERE timestamp >= ? AND geo_country != ''
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY geo_country
 		ORDER BY count DESC
 	`
@@ -554,6 +572,7 @@ func (r *EventsRepository) GetGeoHeatmapFiltered(ctx context.Context, period str
 	}
 
 	// v3.57.112: Filter out XGS public IP 83.194.220.184 from attack map
+	// v3.57.113: Filter out 178.18.1.0/24 internal management network
 	query := fmt.Sprintf(`
 		SELECT
 			geo_country,
@@ -562,6 +581,7 @@ func (r *EventsRepository) GetGeoHeatmapFiltered(ctx context.Context, period str
 		FROM events
 		WHERE timestamp >= ? AND geo_country != ''
 			AND src_ip != toIPv4('83.194.220.184')
+			AND (src_ip < toIPv4('178.18.1.0') OR src_ip > toIPv4('178.18.1.255'))
 			%s
 		GROUP BY geo_country
 		ORDER BY count DESC
@@ -622,6 +642,7 @@ func (r *EventsRepository) GetGeoHeatmapFilteredRange(ctx context.Context, start
 	}
 
 	// v3.57.112: Filter out XGS public IP 83.194.220.184 from attack map
+	// v3.57.113: Filter out 178.18.1.0/24 internal management network
 	query := fmt.Sprintf(`
 		SELECT
 			geo_country,
@@ -630,6 +651,7 @@ func (r *EventsRepository) GetGeoHeatmapFilteredRange(ctx context.Context, start
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ? AND geo_country != ''
 			AND src_ip != toIPv4('83.194.220.184')
+			AND (src_ip < toIPv4('178.18.1.0') OR src_ip > toIPv4('178.18.1.255'))
 			%s
 		GROUP BY geo_country
 		ORDER BY count DESC

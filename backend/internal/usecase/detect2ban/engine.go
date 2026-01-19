@@ -129,18 +129,26 @@ type GeoZoneRepository interface {
 	GetGeoZoneConfig() (*entity.GeoZoneConfig, error)
 }
 
+// PendingBansRepository interface for pending ban approvals
+// v3.57.113: Added for Authorized Countries pending approval flow
+type PendingBansRepository interface {
+	CreatePendingBan(ctx context.Context, ban *entity.PendingBan) error
+	GetPendingBanByIP(ctx context.Context, ip string) (*entity.PendingBan, error)
+}
+
 // Engine is the Detect2Ban detection engine
 type Engine struct {
-	scenarios      []*Scenario
-	eventsRepo     *clickhouse.EventsRepository
-	bansService    *bans.Service
-	threatsService *threats.Service
-	wafServersRepo WAFServersRepository // v3.57: WAF server country policy
-	geoZoneRepo    GeoZoneRepository    // v3.57.101: Global GeoZone settings fallback
-	geoIPProvider  GeoIPProvider        // v3.57: GeoIP for country lookup
-	mu             sync.RWMutex
-	running        bool
-	stopCh         chan struct{}
+	scenarios       []*Scenario
+	eventsRepo      *clickhouse.EventsRepository
+	bansService     *bans.Service
+	threatsService  *threats.Service
+	wafServersRepo  WAFServersRepository  // v3.57: WAF server country policy
+	geoZoneRepo     GeoZoneRepository     // v3.57.101: Global GeoZone settings fallback
+	pendingBansRepo PendingBansRepository // v3.57.113: Pending approvals for authorized countries
+	geoIPProvider   GeoIPProvider         // v3.57: GeoIP for country lookup
+	mu              sync.RWMutex
+	running         bool
+	stopCh          chan struct{}
 }
 
 // Scenario represents a detection scenario loaded from YAML
@@ -208,6 +216,11 @@ func (e *Engine) SetGeoIPProvider(provider GeoIPProvider) {
 // SetGeoZoneRepo sets the GeoZone repository for global settings fallback (v3.57.101)
 func (e *Engine) SetGeoZoneRepo(repo GeoZoneRepository) {
 	e.geoZoneRepo = repo
+}
+
+// SetPendingBansRepo sets the pending bans repository for approval flow (v3.57.113)
+func (e *Engine) SetPendingBansRepo(repo PendingBansRepository) {
+	e.pendingBansRepo = repo
 }
 
 // LoadScenarios loads all YAML scenarios from directory
@@ -447,6 +460,7 @@ func (e *Engine) handleMatch(ctx context.Context, scenario *Scenario, match Scen
 
 	// v3.57.101: Check country policy - WAF server rules override global settings
 	// Priority: WAF server policy > Global GeoZone settings
+	// v3.57.113: Authorized countries (FR, LU) go to pending_approval instead of auto-ban
 	if e.geoIPProvider != nil {
 		// First, try WAF server-specific policy (if server has policy enabled)
 		var useGlobalSettings = true
@@ -462,6 +476,14 @@ func (e *Engine) handleMatch(ctx context.Context, scenario *Scenario, match Scen
 						log.Printf("[DETECT2BAN] Server policy triggered for IP %s (country: %s, hostname: %s, policy: %s)",
 							match.IP, geoInfo.CountryCode, match.Hostname, policyResult.PolicyHit)
 						e.executeCountryPolicyBan(ctx, match, policyResult.BanReason)
+						return
+					}
+					// v3.57.113: Authorized country detected (FR, LU in whitelist)
+					// These IPs require manual admin approval before banning
+					if policyResult.RequireApproval && policyResult.IsAuthorizedCountry {
+						log.Printf("[DETECT2BAN] Authorized country IP %s (country: %s, hostname: %s) - creating pending approval",
+							match.IP, geoInfo.CountryCode, match.Hostname)
+						e.createPendingApproval(ctx, match, geoInfo.CountryCode, server.Hostname)
 						return
 					}
 				}
@@ -627,6 +649,58 @@ func (e *Engine) executeCountryPolicyBan(ctx context.Context, match ScenarioMatc
 
 	log.Printf("[DETECT2BAN] Banned IP %s via country policy (status: %s, expires: %v)",
 		match.IP, ban.Status, ban.ExpiresAt)
+}
+
+// createPendingApproval creates a pending approval entry for authorized country IPs
+// v3.57.113: IPs from whitelisted countries (FR, LU) require manual admin approval
+// v3.57.114: Check for existing pending entry to avoid duplicates
+func (e *Engine) createPendingApproval(ctx context.Context, match ScenarioMatch, countryCode, hostname string) {
+	if e.pendingBansRepo == nil {
+		log.Printf("[DETECT2BAN] Pending bans repository not configured, skipping pending approval for %s", match.IP)
+		return
+	}
+
+	// v3.57.114: Check if pending approval already exists for this IP
+	existing, _ := e.pendingBansRepo.GetPendingBanByIP(ctx, match.IP)
+	if existing != nil && existing.Status == "pending" {
+		log.Printf("[DETECT2BAN] Pending approval already exists for IP %s, skipping duplicate", match.IP)
+		return
+	}
+
+	// Get threat score if available
+	var threatScore int
+	var threatSources []string
+	if e.threatsService != nil {
+		result, err := e.threatsService.CheckIP(ctx, match.IP)
+		if err == nil && result != nil {
+			threatScore = result.AggregatedScore
+			for _, src := range result.Sources {
+				threatSources = append(threatSources, src.Provider)
+			}
+		}
+	}
+
+	pendingBan := &entity.PendingBan{
+		IP:            match.IP,
+		Country:       countryCode,
+		GeoZone:       entity.GeoZoneAuthorized,
+		ThreatScore:   threatScore,
+		ThreatSources: threatSources,
+		EventCount:    int(match.EventCount),
+		FirstEvent:    time.Now(),
+		LastEvent:     time.Now(),
+		TriggerRule:   "authorized_country_waf",
+		Reason:        fmt.Sprintf("WAF attack from authorized country %s on %s (%d events) - requires approval", countryCode, hostname, match.EventCount),
+		Status:        "pending",
+	}
+
+	if err := e.pendingBansRepo.CreatePendingBan(ctx, pendingBan); err != nil {
+		log.Printf("[DETECT2BAN] Failed to create pending approval for %s: %v", match.IP, err)
+		return
+	}
+
+	log.Printf("[DETECT2BAN] Created pending approval for IP %s (country: %s, hostname: %s, threat_score: %d, events: %d)",
+		match.IP, countryCode, hostname, threatScore, match.EventCount)
 }
 
 // GetScenarios returns loaded scenarios

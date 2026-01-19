@@ -200,6 +200,36 @@ export const bansApi = {
   },
 }
 
+// v3.57.113: Pending Bans API (Authorized Countries approval workflow)
+import type { PendingBan, PendingBanStats } from '@/types'
+
+export const pendingBansApi = {
+  list: async () => {
+    const response = await api.get<PendingBan[]>('/pending-bans')
+    return response.data
+  },
+
+  stats: async () => {
+    const response = await api.get<PendingBanStats>('/pending-bans/stats')
+    return response.data
+  },
+
+  approve: async (id: string, note?: string) => {
+    const response = await api.post<{ success: boolean; message: string; id: string; ip: string }>(`/pending-bans/${id}/approve`, { note })
+    return response.data
+  },
+
+  reject: async (id: string, note?: string) => {
+    const response = await api.post<{ success: boolean; message: string; id: string }>(`/pending-bans/${id}/reject`, { note })
+    return response.data
+  },
+
+  getByIP: async (ip: string) => {
+    const response = await api.get<PendingBan>(`/pending-bans/ip/${ip}`)
+    return response.data
+  },
+}
+
 // Detect2Ban API (v3.51 - Automated threat detection engine)
 export interface Detect2BanStatus {
   enabled: boolean

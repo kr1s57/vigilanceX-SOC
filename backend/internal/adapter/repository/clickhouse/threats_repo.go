@@ -19,6 +19,7 @@ func NewThreatsRepository(conn *Connection) *ThreatsRepository {
 }
 
 // GetThreatScore retrieves the threat score for an IP
+// v3.57.112: Added CrowdSec fields
 func (r *ThreatsRepository) GetThreatScore(ctx context.Context, ip string) (*entity.ThreatScore, error) {
 	query := `
 		SELECT
@@ -33,6 +34,14 @@ func (r *ThreatsRepository) GetThreatScore(ctx context.Context, ip string) (*ent
 			abuseipdb_score,
 			virustotal_score,
 			otx_score,
+			crowdsec_score,
+			crowdsec_reputation,
+			crowdsec_background_noise,
+			crowdsec_ip_range_score,
+			crowdsec_behaviors,
+			crowdsec_mitre_techniques,
+			crowdsec_classifications,
+			crowdsec_found,
 			tags,
 			malware_families,
 			adversaries,
@@ -46,6 +55,7 @@ func (r *ThreatsRepository) GetThreatScore(ctx context.Context, ip string) (*ent
 
 	var score entity.ThreatScore
 	var tags, malwareFamilies, adversaries []string
+	var crowdsecBehaviors, crowdsecMitre, crowdsecClass []string
 
 	if err := row.Scan(
 		&score.IP,
@@ -59,6 +69,14 @@ func (r *ThreatsRepository) GetThreatScore(ctx context.Context, ip string) (*ent
 		&score.AbuseIPDBScore,
 		&score.VirusTotalScore,
 		&score.OTXScore,
+		&score.CrowdSecScore,
+		&score.CrowdSecReputation,
+		&score.CrowdSecBackgroundNoise,
+		&score.CrowdSecIPRangeScore,
+		&crowdsecBehaviors,
+		&crowdsecMitre,
+		&crowdsecClass,
+		&score.CrowdSecFound,
 		&tags,
 		&malwareFamilies,
 		&adversaries,
@@ -70,12 +88,16 @@ func (r *ThreatsRepository) GetThreatScore(ctx context.Context, ip string) (*ent
 	score.Tags = tags
 	score.MalwareFamilies = malwareFamilies
 	score.Adversaries = adversaries
+	score.CrowdSecBehaviors = crowdsecBehaviors
+	score.CrowdSecMitreTechniques = crowdsecMitre
+	score.CrowdSecClassifications = crowdsecClass
 
 	return &score, nil
 }
 
 // UpsertThreatScore creates or updates a threat score
 // v1.6: Added support for 7 threat intel providers
+// v3.57.112: Added CrowdSec CTI fields
 func (r *ThreatsRepository) UpsertThreatScore(ctx context.Context, score *entity.ThreatScore) error {
 	query := `
 		INSERT INTO ip_threat_scores (
@@ -83,10 +105,13 @@ func (r *ThreatsRepository) UpsertThreatScore(ctx context.Context, score *entity
 			country, asn, isp, is_tor,
 			abuseipdb_score, virustotal_score, otx_score,
 			greynoise_score, ipsum_score, criminalip_score, pulsedive_score,
+			crowdsec_score, crowdsec_reputation, crowdsec_background_noise,
+			crowdsec_ip_range_score, crowdsec_behaviors, crowdsec_mitre_techniques,
+			crowdsec_classifications, crowdsec_found,
 			is_benign, is_vpn, is_proxy, in_blocklists,
 			tags, malware_families, adversaries,
 			last_checked, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	tags := score.Tags
@@ -100,6 +125,18 @@ func (r *ThreatsRepository) UpsertThreatScore(ctx context.Context, score *entity
 	adversaries := score.Adversaries
 	if adversaries == nil {
 		adversaries = []string{}
+	}
+	crowdsecBehaviors := score.CrowdSecBehaviors
+	if crowdsecBehaviors == nil {
+		crowdsecBehaviors = []string{}
+	}
+	crowdsecMitre := score.CrowdSecMitreTechniques
+	if crowdsecMitre == nil {
+		crowdsecMitre = []string{}
+	}
+	crowdsecClass := score.CrowdSecClassifications
+	if crowdsecClass == nil {
+		crowdsecClass = []string{}
 	}
 
 	if err := r.conn.DB().Exec(ctx, query,
@@ -120,6 +157,15 @@ func (r *ThreatsRepository) UpsertThreatScore(ctx context.Context, score *entity
 		score.IPSumScore,
 		score.CriminalIPScore,
 		score.PulsediveScore,
+		// v3.57.112: CrowdSec CTI
+		score.CrowdSecScore,
+		score.CrowdSecReputation,
+		score.CrowdSecBackgroundNoise,
+		score.CrowdSecIPRangeScore,
+		crowdsecBehaviors,
+		crowdsecMitre,
+		crowdsecClass,
+		score.CrowdSecFound,
 		// v1.6 flags
 		score.IsBenign,
 		score.IsVPN,

@@ -39,53 +39,60 @@ export function XGSLoginCard({ refreshInterval = 0 }: XGSLoginCardProps) {
     try {
       setError(null)
 
-      // v3.57.107: Query events for authentication (XGS logins, VPN, admin)
-      // Search broader to catch all authentication events
-      const response = await eventsApi.list({
-        log_type: 'Event',
-        limit: MAX_ENTRIES,
-        offset: 0
-      })
+      // v3.57.112: Query multiple log types to catch all authentication events
+      // XGS authentication logs use: Admin (Admin Login/Logout), Authentication, VPN
+      const [adminResponse, authResponse, vpnResponse] = await Promise.all([
+        eventsApi.list({ log_type: 'Admin', limit: MAX_ENTRIES, offset: 0 }).catch(() => ({ data: [] })),
+        eventsApi.list({ log_type: 'Authentication', limit: MAX_ENTRIES, offset: 0 }).catch(() => ({ data: [] })),
+        eventsApi.list({ log_type: 'VPN', limit: MAX_ENTRIES, offset: 0 }).catch(() => ({ data: [] }))
+      ])
 
-      const events = response.data || []
+      // Combine all events
+      const allEvents = [
+        ...(adminResponse.data || []),
+        ...(authResponse.data || []),
+        ...(vpnResponse.data || [])
+      ]
 
       // Transform events to login format
-      // v3.57.107: Improved filter to catch more auth events
-      const loginEvents: XGSLogin[] = events
+      // v3.57.112: Filter based on category for login-related events
+      const loginEvents: XGSLogin[] = allEvents
         .filter((e: Event) => {
           // Filter for authentication-related events
-          const msg = (e.message || '').toLowerCase()
           const cat = (e.category || '').toLowerCase()
-          const subcat = (e.sub_category || '').toLowerCase()
-          return msg.includes('login') ||
-                 msg.includes('authentication') ||
-                 msg.includes('admin') ||
-                 msg.includes('logon') ||
-                 msg.includes('logged') ||
-                 msg.includes('sign') ||
-                 cat.includes('admin') ||
+          const msg = (e.message || '').toLowerCase()
+          return cat.includes('login') ||
+                 cat.includes('logout') ||
                  cat.includes('auth') ||
-                 cat.includes('login') ||
-                 subcat.includes('auth') ||
-                 subcat.includes('login')
+                 cat.includes('connection') ||
+                 cat.includes('disconnection') ||
+                 msg.includes('login') ||
+                 msg.includes('authentication') ||
+                 msg.includes('logged')
         })
         .map((e: Event) => {
+          const cat = (e.category || '').toLowerCase()
           const msg = (e.message || '').toLowerCase()
           const action = (e.action || '').toLowerCase()
-          const isSuccess = action === 'allow' ||
-                           action === 'success' ||
+
+          // Determine success based on category and action
+          const isSuccess = cat.includes('success') ||
+                           cat.includes('login') && !cat.includes('fail') ||
+                           cat.includes('connection') && !cat.includes('fail') ||
+                           action === 'allow' ||
                            msg.includes('success') ||
-                           msg.includes('logged in') ||
-                           msg.includes('authenticated')
+                           msg.includes('logged in')
 
           return {
             timestamp: e.timestamp,
-            username: e.user_name || 'unknown',
-            src_ip: e.src_ip,
+            username: e.user_name || 'admin',
+            src_ip: e.src_ip || '0.0.0.0',
             success: isSuccess,
-            message: e.message
+            message: e.message || e.category
           }
         })
+        // Sort by timestamp descending
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, MAX_ENTRIES)
 
       setLogins(loginEvents)

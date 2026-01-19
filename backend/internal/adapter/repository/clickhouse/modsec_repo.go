@@ -25,9 +25,11 @@ func NewModSecRepository(conn *Connection, logger *slog.Logger) *ModSecRepositor
 }
 
 // GetLogs retrieves ModSec logs with filters and pagination
+// v3.57.114: Exclude infrastructure IP 83.194.220.184
 func (r *ModSecRepository) GetLogs(ctx context.Context, filters entity.ModSecLogFilters, limit, offset int) ([]entity.ModSecLog, uint64, error) {
 	// v3.55.101: Use m. prefix to avoid column alias collision with IPv4NumToString
-	conditions := []string{"1=1"}
+	// v3.57.114: Exclude infrastructure IP from all queries
+	conditions := []string{"m.src_ip != toIPv4('83.194.220.184')"}
 	args := []interface{}{}
 
 	if filters.SrcIP != "" {
@@ -115,8 +117,9 @@ func (r *ModSecRepository) GetLogs(ctx context.Context, filters entity.ModSecLog
 
 // GetGroupedByRequest retrieves ModSec logs grouped by unique_id (request)
 // Includes geolocation data and supports country search
+// v3.57.114: Exclude infrastructure IP 83.194.220.184
 func (r *ModSecRepository) GetGroupedByRequest(ctx context.Context, filters entity.ModSecLogFilters, limit, offset int) ([]entity.ModSecRequestGroup, uint64, error) {
-	conditions := []string{"m.unique_id != ''"}
+	conditions := []string{"m.unique_id != ''", "m.src_ip != toIPv4('83.194.220.184')"}
 	args := []interface{}{}
 
 	if filters.SrcIP != "" {
@@ -318,6 +321,7 @@ func (r *ModSecRepository) GetRuleStats(ctx context.Context, period string) ([]m
 		startTime = now.Add(-24 * time.Hour)
 	}
 
+	// v3.57.114: Exclude infrastructure IP 83.194.220.184
 	query := `
 		SELECT
 			rule_id,
@@ -327,6 +331,7 @@ func (r *ModSecRepository) GetRuleStats(ctx context.Context, period string) ([]m
 			uniqExact(hostname) as unique_targets
 		FROM modsec_logs
 		WHERE timestamp >= ?
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY rule_id
 		ORDER BY trigger_count DESC
 		LIMIT 50
@@ -373,6 +378,7 @@ func (r *ModSecRepository) GetAttackTypeStats(ctx context.Context, period string
 		startTime = now.Add(-24 * time.Hour)
 	}
 
+	// v3.57.114: Exclude infrastructure IP 83.194.220.184
 	query := `
 		SELECT
 			attack_type,
@@ -380,6 +386,7 @@ func (r *ModSecRepository) GetAttackTypeStats(ctx context.Context, period string
 			uniqExact(src_ip) as unique_ips
 		FROM modsec_logs
 		WHERE timestamp >= ? AND attack_type != ''
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY attack_type
 		ORDER BY count DESC
 	`

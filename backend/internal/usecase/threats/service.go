@@ -33,10 +33,9 @@ func (s *Service) CheckIP(ctx context.Context, ip string) (*threatintel.Aggregat
 		return nil, fmt.Errorf("check threat intel: %w", err)
 	}
 
-	// Save to database for historical tracking
-	if !result.CacheHit {
-		go s.saveThreatScore(ip, result)
-	}
+	// v3.57.112: Always save to database for historical tracking
+	// Even on cache hit, to ensure CrowdSec data is persisted
+	go s.saveThreatScore(ip, result)
 
 	return result, nil
 }
@@ -58,7 +57,7 @@ func (s *Service) saveThreatScore(ip string, result *threatintel.AggregatedResul
 		LastChecked:     result.LastChecked,
 	}
 
-	// Individual source scores (v1.6: 7 providers)
+	// Individual source scores (v1.6: 7 providers + v3.57.112: CrowdSec)
 	for _, source := range result.Sources {
 		switch source.Provider {
 		case "AbuseIPDB":
@@ -76,7 +75,20 @@ func (s *Service) saveThreatScore(ip string, result *threatintel.AggregatedResul
 			score.CriminalIPScore = int32(source.Score)
 		case "Pulsedive":
 			score.PulsediveScore = int32(source.Score)
+		case "CrowdSec":
+			score.CrowdSecScore = int32(source.Score)
 		}
+	}
+
+	// v3.57.112: Save CrowdSec detailed data
+	if result.CrowdSec != nil {
+		score.CrowdSecFound = result.CrowdSec.Found
+		score.CrowdSecReputation = result.CrowdSec.Reputation
+		score.CrowdSecBackgroundNoise = int32(result.CrowdSec.BackgroundNoiseScore)
+		score.CrowdSecIPRangeScore = int32(result.CrowdSec.IPRangeScore)
+		score.CrowdSecBehaviors = result.CrowdSec.Behaviors
+		score.CrowdSecMitreTechniques = result.CrowdSec.MitreTechniques
+		score.CrowdSecClassifications = result.CrowdSec.Classifications
 	}
 
 	// v1.6: Store additional flags from aggregated result

@@ -58,8 +58,47 @@ func (h *ThreatsHandler) CheckIP(w http.ResponseWriter, r *http.Request) {
 	JSONResponse(w, http.StatusOK, result)
 }
 
+// CrowdSecScoreResponse is the nested CrowdSec format expected by frontend
+// v3.57.112: Match the format returned by CheckIP endpoint
+type CrowdSecScoreResponse struct {
+	Found                bool     `json:"found"`
+	Reputation           string   `json:"reputation,omitempty"`
+	NormalizedScore      int      `json:"normalized_score"`
+	BackgroundNoiseScore int      `json:"background_noise_score"`
+	IPRangeScore         int      `json:"ip_range_score"`
+	Behaviors            []string `json:"behaviors,omitempty"`
+	MitreTechniques      []string `json:"mitre_techniques,omitempty"`
+	Classifications      []string `json:"classifications,omitempty"`
+}
+
+// StoredScoreResponse is the response format for stored threat scores
+// v3.57.112: Includes nested CrowdSec object to match CheckIP format
+type StoredScoreResponse struct {
+	IP              string                 `json:"ip"`
+	AggregatedScore int32                  `json:"aggregated_score"`
+	ThreatLevel     string                 `json:"threat_level"`
+	Confidence      float64                `json:"confidence"`
+	Country         string                 `json:"country"`
+	ASN             string                 `json:"asn"`
+	ISP             string                 `json:"isp"`
+	IsTor           bool                   `json:"is_tor"`
+	IsVPN           bool                   `json:"is_vpn"`
+	IsProxy         bool                   `json:"is_proxy"`
+	IsBenign        bool                   `json:"is_benign"`
+	InBlocklists    int32                  `json:"in_blocklists"`
+	AbuseIPDBScore  int32                  `json:"abuseipdb_score"`
+	VirusTotalScore int32                  `json:"virustotal_score"`
+	OTXScore        int32                  `json:"otx_score"`
+	Tags            []string               `json:"tags,omitempty"`
+	MalwareFamilies []string               `json:"malware_families,omitempty"`
+	Adversaries     []string               `json:"adversaries,omitempty"`
+	LastChecked     time.Time              `json:"last_checked"`
+	CrowdSec        *CrowdSecScoreResponse `json:"crowdsec,omitempty"`
+}
+
 // GetStoredScore retrieves stored threat score for an IP
 // GET /api/v1/threats/{ip}/stored
+// v3.57.112: Returns nested CrowdSec object to match CheckIP format
 func (h *ThreatsHandler) GetStoredScore(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ip := chi.URLParam(r, "ip")
@@ -70,7 +109,44 @@ func (h *ThreatsHandler) GetStoredScore(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	JSONResponse(w, http.StatusOK, score)
+	// Build response with nested CrowdSec object
+	response := StoredScoreResponse{
+		IP:              score.IP,
+		AggregatedScore: score.AggregatedScore,
+		ThreatLevel:     score.ThreatLevel,
+		Confidence:      score.Confidence,
+		Country:         score.Country,
+		ASN:             score.ASN,
+		ISP:             score.ISP,
+		IsTor:           score.IsTor,
+		IsVPN:           score.IsVPN,
+		IsProxy:         score.IsProxy,
+		IsBenign:        score.IsBenign,
+		InBlocklists:    score.InBlocklists,
+		AbuseIPDBScore:  score.AbuseIPDBScore,
+		VirusTotalScore: score.VirusTotalScore,
+		OTXScore:        score.OTXScore,
+		Tags:            score.Tags,
+		MalwareFamilies: score.MalwareFamilies,
+		Adversaries:     score.Adversaries,
+		LastChecked:     score.LastChecked,
+	}
+
+	// Add CrowdSec data if available
+	if score.CrowdSecFound || score.CrowdSecScore > 0 || score.CrowdSecReputation != "" {
+		response.CrowdSec = &CrowdSecScoreResponse{
+			Found:                score.CrowdSecFound,
+			Reputation:           score.CrowdSecReputation,
+			NormalizedScore:      int(score.CrowdSecScore),
+			BackgroundNoiseScore: int(score.CrowdSecBackgroundNoise),
+			IPRangeScore:         int(score.CrowdSecIPRangeScore),
+			Behaviors:            score.CrowdSecBehaviors,
+			MitreTechniques:      score.CrowdSecMitreTechniques,
+			Classifications:      score.CrowdSecClassifications,
+		}
+	}
+
+	JSONResponse(w, http.StatusOK, response)
 }
 
 // GetTopThreats returns IPs with highest threat scores

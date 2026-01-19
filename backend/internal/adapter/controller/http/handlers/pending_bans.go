@@ -21,7 +21,7 @@ type PendingBansStore interface {
 
 // BansServiceV2 interface for D2B v2 ban operations
 type BansServiceV2 interface {
-	BanIPWithTier(ctx context.Context, req *entity.BanRequest, tier uint8, zone string, threatScore int, xgsGroup string) (*entity.BanStatus, error)
+	BanIP(ctx context.Context, req *entity.BanRequest) (*entity.BanStatus, error)
 }
 
 // PendingBansHandler handles pending bans HTTP requests (D2B v2)
@@ -107,7 +107,7 @@ func (h *PendingBansHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create the actual ban with D2B v2 logic
+	// Create the actual ban
 	banReq := &entity.BanRequest{
 		IP:          pending.IP,
 		Reason:      "[Approved] " + pending.Reason,
@@ -115,10 +115,7 @@ func (h *PendingBansHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		PerformedBy: username,
 	}
 
-	// Determine XGS group (start at tier 0 for approved bans)
-	xgsGroup := entity.XGSGroupTempBan
-
-	ban, err := h.bansService.BanIPWithTier(ctx, banReq, 0, pending.GeoZone, pending.ThreatScore, xgsGroup)
+	ban, err := h.bansService.BanIP(ctx, banReq)
 	if err != nil {
 		log.Printf("[PENDING_BANS] Warning: Approved but failed to create ban for %s: %v", pending.IP, err)
 		// Still return success since approval was recorded

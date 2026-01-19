@@ -259,49 +259,131 @@ source = '''
 msg_lower = downcase(string(.message) ?? "")
 rule_lower = downcase(string(.rule_name) ?? "")
 
+# v3.57.112: Enhanced categorization with MITRE ATT&CK detection
+# Initialize MITRE field
+.mitre_technique = ""
+
 # Categorisation basee sur log_type
 if .log_type == "WAF" {
-    if contains(msg_lower, "sql") || contains(rule_lower, "sql") {
+    if contains(msg_lower, "sql") || contains(rule_lower, "sql") || contains(msg_lower, "union select") || contains(msg_lower, "1=1") {
         .category = "SQL Injection"
-    } else if contains(msg_lower, "xss") || contains(rule_lower, "xss") || contains(msg_lower, "cross-site") {
+        .mitre_technique = "T1190"  # Exploit Public-Facing Application
+        .sub_category = if contains(msg_lower, "union") { "Union-based" } else if contains(msg_lower, "blind") { "Blind SQLi" } else { "Generic SQLi" }
+    } else if contains(msg_lower, "xss") || contains(rule_lower, "xss") || contains(msg_lower, "cross-site") || contains(msg_lower, "<script") {
         .category = "XSS"
-    } else if contains(msg_lower, "rce") || contains(msg_lower, "command") || contains(msg_lower, "exec") {
+        .mitre_technique = "T1059.007"  # JavaScript
+        .sub_category = if contains(msg_lower, "reflected") { "Reflected XSS" } else if contains(msg_lower, "stored") { "Stored XSS" } else { "Generic XSS" }
+    } else if contains(msg_lower, "rce") || contains(msg_lower, "command injection") || contains(msg_lower, "exec") || contains(msg_lower, "; cat") || contains(msg_lower, "| cat") || contains(msg_lower, "`") {
         .category = "RCE"
-    } else if contains(msg_lower, "lfi") || contains(msg_lower, "path traversal") || contains(msg_lower, "../") {
+        .mitre_technique = "T1059"  # Command and Scripting Interpreter
+        .sub_category = if contains(msg_lower, "bash") || contains(msg_lower, "sh") { "Shell Command" } else if contains(msg_lower, "powershell") { "PowerShell" } else { "Generic RCE" }
+    } else if contains(msg_lower, "lfi") || contains(msg_lower, "path traversal") || contains(msg_lower, "../") || contains(msg_lower, "..%2f") || contains(msg_lower, "/etc/passwd") {
         .category = "LFI"
-    } else if contains(msg_lower, "rfi") || contains(msg_lower, "remote file") {
+        .mitre_technique = "T1083"  # File and Directory Discovery
+        .sub_category = "Path Traversal"
+    } else if contains(msg_lower, "rfi") || contains(msg_lower, "remote file") || contains(msg_lower, "http://") && contains(msg_lower, "include") {
         .category = "RFI"
-    } else if contains(msg_lower, "scanner") || contains(msg_lower, "nikto") || contains(msg_lower, "nmap") {
+        .mitre_technique = "T1105"  # Ingress Tool Transfer
+        .sub_category = "Remote File Inclusion"
+    } else if contains(msg_lower, "scanner") || contains(msg_lower, "nikto") || contains(msg_lower, "nmap") || contains(msg_lower, "masscan") || contains(msg_lower, "nuclei") || contains(msg_lower, "acunetix") || contains(msg_lower, "burp") || contains(msg_lower, "zap") || contains(msg_lower, "sqlmap") || contains(msg_lower, "dirbuster") || contains(msg_lower, "gobuster") || contains(msg_lower, "wfuzz") {
         .category = "Scanner"
-    } else if contains(msg_lower, "bot") {
+        .mitre_technique = "T1595"  # Active Scanning
+        .sub_category = if contains(msg_lower, "nmap") { "Nmap" } else if contains(msg_lower, "nikto") { "Nikto" } else if contains(msg_lower, "sqlmap") { "SQLMap" } else if contains(msg_lower, "nuclei") { "Nuclei" } else { "Generic Scanner" }
+    } else if contains(msg_lower, "bot") || contains(msg_lower, "crawler") || contains(msg_lower, "spider") {
         .category = "Bot"
+        .sub_category = if contains(msg_lower, "malicious") { "Malicious Bot" } else { "Web Crawler" }
+    } else if contains(msg_lower, "cve-") || contains(msg_lower, "exploit") {
+        .category = "Exploit"
+        .mitre_technique = "T1203"  # Exploitation for Client Execution
+        .sub_category = "CVE Exploit"
+    } else if contains(msg_lower, "log4j") || contains(msg_lower, "jndi") {
+        .category = "Exploit"
+        .mitre_technique = "T1190"
+        .sub_category = "Log4Shell"
+    } else if contains(msg_lower, "deserialization") || contains(msg_lower, "ysoserial") {
+        .category = "Exploit"
+        .mitre_technique = "T1059"
+        .sub_category = "Deserialization"
+    } else if contains(msg_lower, "xxe") || contains(msg_lower, "xml external") {
+        .category = "XXE"
+        .mitre_technique = "T1190"
+        .sub_category = "XML External Entity"
+    } else if contains(msg_lower, "ssrf") || contains(msg_lower, "server-side request") {
+        .category = "SSRF"
+        .mitre_technique = "T1090"  # Proxy
+        .sub_category = "Server-Side Request Forgery"
+    } else if contains(msg_lower, "ldap") || contains(msg_lower, "jndi:ldap") {
+        .category = "LDAP Injection"
+        .mitre_technique = "T1059"
+        .sub_category = "JNDI Injection"
     } else {
         .category = "WAF Attack"
     }
 } else if .log_type == "IPS" {
-    if contains(msg_lower, "scan") || contains(msg_lower, "probe") {
+    if contains(msg_lower, "scan") || contains(msg_lower, "probe") || contains(msg_lower, "reconnaissance") {
         .category = "Network Scan"
-    } else if contains(msg_lower, "exploit") {
+        .mitre_technique = "T1046"  # Network Service Discovery
+        .sub_category = if contains(msg_lower, "syn") { "SYN Scan" } else if contains(msg_lower, "port") { "Port Scan" } else { "Generic Scan" }
+    } else if contains(msg_lower, "nmap") || contains(msg_lower, "masscan") || contains(msg_lower, "zmap") {
+        .category = "Network Scan"
+        .mitre_technique = "T1046"
+        .sub_category = if contains(msg_lower, "nmap") { "Nmap Detected" } else { "Scanner Tool" }
+    } else if contains(msg_lower, "exploit") || contains(msg_lower, "cve-") || contains(msg_lower, "eternalblue") || contains(msg_lower, "shellshock") {
         .category = "Exploit"
-    } else if contains(msg_lower, "dos") || contains(msg_lower, "flood") {
+        .mitre_technique = "T1203"  # Exploitation for Client Execution
+        .sub_category = if contains(msg_lower, "cve-") { "CVE Exploit" } else if contains(msg_lower, "eternalblue") { "EternalBlue" } else { "Network Exploit" }
+    } else if contains(msg_lower, "dos") || contains(msg_lower, "flood") || contains(msg_lower, "amplification") {
         .category = "DoS"
-    } else if contains(msg_lower, "brute") {
+        .mitre_technique = "T1498"  # Network Denial of Service
+        .sub_category = if contains(msg_lower, "syn") { "SYN Flood" } else if contains(msg_lower, "udp") { "UDP Flood" } else if contains(msg_lower, "amplification") { "Amplification" } else { "Generic DoS" }
+    } else if contains(msg_lower, "brute") || contains(msg_lower, "password") || contains(msg_lower, "credential") {
         .category = "Brute Force"
+        .mitre_technique = "T1110"  # Brute Force
+        .sub_category = if contains(msg_lower, "ssh") { "SSH Brute Force" } else if contains(msg_lower, "rdp") { "RDP Brute Force" } else if contains(msg_lower, "ftp") { "FTP Brute Force" } else { "Generic Brute Force" }
+    } else if contains(msg_lower, "overflow") || contains(msg_lower, "buffer") {
+        .category = "Exploit"
+        .mitre_technique = "T1203"
+        .sub_category = "Buffer Overflow"
+    } else if contains(msg_lower, "shellcode") || contains(msg_lower, "payload") {
+        .category = "Exploit"
+        .mitre_technique = "T1059"
+        .sub_category = "Shellcode Execution"
     } else {
         .category = "IPS Alert"
     }
 } else if .log_type == "ATP" {
-    if contains(msg_lower, "c2") || contains(msg_lower, "command and control") {
+    if contains(msg_lower, "c2") || contains(msg_lower, "command and control") || contains(msg_lower, "callback") || contains(msg_lower, "beacon") {
         .category = "C2 Communication"
-    } else if contains(msg_lower, "malware") {
+        .mitre_technique = "T1071"  # Application Layer Protocol
+        .sub_category = if contains(msg_lower, "http") { "HTTP C2" } else if contains(msg_lower, "dns") { "DNS C2" } else { "Generic C2" }
+    } else if contains(msg_lower, "malware") || contains(msg_lower, "trojan") || contains(msg_lower, "virus") {
         .category = "Malware"
-    } else if contains(msg_lower, "phish") {
+        .mitre_technique = "T1204"  # User Execution
+        .sub_category = if contains(msg_lower, "trojan") { "Trojan" } else if contains(msg_lower, "ransomware") { "Ransomware" } else { "Generic Malware" }
+    } else if contains(msg_lower, "ransomware") || contains(msg_lower, "encrypt") {
+        .category = "Malware"
+        .mitre_technique = "T1486"  # Data Encrypted for Impact
+        .sub_category = "Ransomware"
+    } else if contains(msg_lower, "phish") || contains(msg_lower, "spoof") {
         .category = "Phishing"
+        .mitre_technique = "T1566"  # Phishing
+        .sub_category = if contains(msg_lower, "spear") { "Spearphishing" } else { "Generic Phishing" }
+    } else if contains(msg_lower, "cryptominer") || contains(msg_lower, "miner") || contains(msg_lower, "coinhive") {
+        .category = "Cryptominer"
+        .mitre_technique = "T1496"  # Resource Hijacking
+        .sub_category = "Cryptomining"
+    } else if contains(msg_lower, "backdoor") {
+        .category = "Backdoor"
+        .mitre_technique = "T1059"
+        .sub_category = "Backdoor Detected"
     } else {
         .category = "ATP Threat"
+        .mitre_technique = ""
     }
 } else if .log_type == "Anti-Virus" {
     .category = "Malware"
+    .mitre_technique = "T1204"  # User Execution
+    .sub_category = if contains(msg_lower, "trojan") { "Trojan" } else if contains(msg_lower, "worm") { "Worm" } else if contains(msg_lower, "adware") { "Adware" } else { "Detected Malware" }
 } else if .log_type == "Firewall" {
     if .action == "drop" || .action == "reject" {
         .category = "Blocked"
@@ -421,7 +503,9 @@ ingest_formatted = format_timestamp!(.ingested_at, format: "%Y-%m-%d %H:%M:%S")
     "recipient": .recipient,
     "subject": .subject,
     "src_zone": .src_zone,
-    "dst_zone": .dst_zone
+    "dst_zone": .dst_zone,
+    # v3.57.113: MITRE ATT&CK technique detection
+    "mitre_technique": .mitre_technique
 }
 '''
 

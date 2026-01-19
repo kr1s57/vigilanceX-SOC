@@ -6,6 +6,7 @@ export interface Event {
   category: string
   sub_category: string
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
+  mitre_technique?: string  // v3.57.113: MITRE ATT&CK technique ID (T1190, T1059, etc.)
   src_ip: string
   dst_ip: string
   src_port: number

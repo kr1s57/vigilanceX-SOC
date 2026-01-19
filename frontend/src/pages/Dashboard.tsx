@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Shield,
   ShieldAlert,
@@ -10,6 +11,7 @@ import {
   ArrowUp,
   CheckCircle2,
   Search,
+  ShieldCheck,
 } from 'lucide-react'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { TimelineChart } from '@/components/charts/TimelineChart'
@@ -17,23 +19,26 @@ import { SeverityChart } from '@/components/charts/SeverityChart'
 import { WAFServersCard } from '@/components/dashboard/WAFServersCard'
 import { XGSLoginCard } from '@/components/dashboard/XGSLoginCard'
 import { IPThreatModal } from '@/components/IPThreatModal'
-import { statsApi, eventsApi, alertsApi } from '@/lib/api'
+import { statsApi, eventsApi, alertsApi, pendingBansApi } from '@/lib/api'
 import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useLicense } from '@/contexts/LicenseContext'
-import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert } from '@/types'
+import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert, PendingBanStats } from '@/types'
 
-// v3.57.111: Current installed version
-const INSTALLED_VERSION = '3.57.112'
+// v3.57.114: Current installed version
+const INSTALLED_VERSION = '3.57.114'
 
 type Period = '1h' | '24h' | '7d' | '30d'
 
 export function Dashboard() {
+  const navigate = useNavigate()
   const { settings } = useSettings()
   const { status: licenseStatus } = useLicense()
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
   const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlert[]>([])
+  // v3.57.114: Pending approval stats for Authorized Countries
+  const [pendingStats, setPendingStats] = useState<PendingBanStats | null>(null)
   // Persist time filter in sessionStorage (resets on new browser session)
   const [period, setPeriod] = useState<Period>(() => {
     const stored = sessionStorage.getItem('dashboard_timeRange')
@@ -79,6 +84,27 @@ export function Dashboard() {
       return () => clearInterval(interval)
     }
   }, [period, settings.refreshInterval])
+
+  // v3.57.114: Fetch pending approval stats (separate from main data)
+  useEffect(() => {
+    async function fetchPendingStats() {
+      try {
+        const stats = await pendingBansApi.stats()
+        setPendingStats(stats)
+      } catch {
+        // Silent fail - pending stats are optional
+        setPendingStats(null)
+      }
+    }
+
+    fetchPendingStats()
+
+    // Refresh pending stats on same interval
+    if (settings.refreshInterval > 0) {
+      const interval = setInterval(fetchPendingStats, settings.refreshInterval * 1000)
+      return () => clearInterval(interval)
+    }
+  }, [settings.refreshInterval])
 
   if (loading && !overview) {
     return (
@@ -162,6 +188,52 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* v3.57.114: Pending Approvals Alert Banner */}
+      {pendingStats && pendingStats.total_pending > 0 && (
+        <div
+          onClick={() => navigate('/bans?status=pending')}
+          className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 cursor-pointer hover:bg-amber-500/15 transition-colors"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/20 rounded-lg">
+                <ShieldCheck className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-amber-600 dark:text-amber-400">
+                  WAF Authorized Countries - Pending Approval
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {pendingStats.total_pending} IP{pendingStats.total_pending > 1 ? 's' : ''} from authorized countries detected attacks and require admin approval
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="flex items-center gap-2 text-sm">
+                  {pendingStats.high_threat > 0 && (
+                    <span className="px-2 py-0.5 bg-red-500/20 text-red-500 rounded text-xs font-medium">
+                      {pendingStats.high_threat} High
+                    </span>
+                  )}
+                  {pendingStats.medium_threat > 0 && (
+                    <span className="px-2 py-0.5 bg-orange-500/20 text-orange-500 rounded text-xs font-medium">
+                      {pendingStats.medium_threat} Medium
+                    </span>
+                  )}
+                  {pendingStats.low_threat > 0 && (
+                    <span className="px-2 py-0.5 bg-blue-500/20 text-blue-500 rounded text-xs font-medium">
+                      {pendingStats.low_threat} Low
+                    </span>
+                  )}
+                </div>
+              </div>
+              <span className="text-amber-500 text-sm font-medium">Review &rarr;</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -271,8 +343,9 @@ export function Dashboard() {
         />
       )}
 
-      {/* v3.57.108: IP Threat Modal */}
+      {/* v3.57.108: IP Threat Modal - key forces remount on IP change */}
       <IPThreatModal
+        key={threatModalIP || 'closed'}
         ip={threatModalIP}
         isOpen={threatModalIP !== null}
         onClose={() => setThreatModalIP(null)}

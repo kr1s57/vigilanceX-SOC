@@ -12,10 +12,11 @@ type Event struct {
 	Timestamp time.Time `json:"timestamp" ch:"timestamp"`
 
 	// Classification
-	LogType     string `json:"log_type" ch:"log_type"`
-	Category    string `json:"category" ch:"category"`
-	SubCategory string `json:"sub_category" ch:"sub_category"`
-	Severity    string `json:"severity" ch:"severity"`
+	LogType        string `json:"log_type" ch:"log_type"`
+	Category       string `json:"category" ch:"category"`
+	SubCategory    string `json:"sub_category" ch:"sub_category"`
+	Severity       string `json:"severity" ch:"severity"`
+	MitreTechnique string `json:"mitre_technique,omitempty" ch:"mitre_technique"` // v3.57.113: MITRE ATT&CK technique
 
 	// Network
 	SrcIP    string `json:"src_ip" ch:"src_ip"`

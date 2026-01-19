@@ -72,6 +72,8 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
 
   useEffect(() => {
     if (isOpen && ip) {
+      // v3.57.113: Reset ALL state when opening modal for a different IP
+      setScore(null)
       setLoading(true)
       setError(null)
       setIsBanned(false)
@@ -89,9 +91,31 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
         softWhitelistApi.check(ip).catch(() => null),
         eventsApi.list({ src_ip: ip, limit: 50 }).catch(() => ({ data: [], pagination: { total: 0, limit: 50, offset: 0 } })),
         modsecApi.getLogs({ src_ip: ip, limit: 50 }).catch(() => ({ data: [], pagination: { total: 0, limit: 50, offset: 0 } })) // v3.53.105: WAF logs
-      ]).then(([scoreData, banData, historyData, whitelistData, eventsData, wafData]) => {
-        if (scoreData) setScore(scoreData)
-        else setError('Score not found in database')
+      ]).then(async ([scoreData, banData, historyData, whitelistData, eventsData, wafData]) => {
+        // v3.57.113: Auto-run full TI scan if:
+        // 1. No stored score exists, OR
+        // 2. CrowdSec data is missing (crowdsec.found is false/undefined)
+        // This ensures CrowdSec is always queried for IPs displayed in modals
+        const needsFullScan = !scoreData || !scoreData.crowdsec?.found
+
+        if (needsFullScan) {
+          try {
+            // Run full TI check including CrowdSec
+            const fullScore = await threatsApi.check(ip)
+            if (fullScore) {
+              setScore(fullScore)
+              setError(null)
+            } else {
+              setError('Could not retrieve threat intel')
+            }
+          } catch {
+            // Fallback to stored score if available
+            if (scoreData) setScore(scoreData)
+            else setError('Score not found in database')
+          }
+        } else {
+          setScore(scoreData)
+        }
 
         if (banData && (banData.status === 'active' || banData.status === 'permanent')) {
           setIsBanned(true)

@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS events (
     sub_category LowCardinality(String),
     severity LowCardinality(String),          -- critical, high, medium, low, info
 
+    -- v3.57.113: MITRE ATT&CK detection
+    mitre_technique LowCardinality(String) DEFAULT '',  -- T1190, T1059, T1046, etc.
+
     -- Reseau
     src_ip IPv4,
     dst_ip IPv4,
@@ -70,6 +73,10 @@ ALTER TABLE events ADD INDEX IF NOT EXISTS idx_src_ip src_ip TYPE bloom_filter G
 ALTER TABLE events ADD INDEX IF NOT EXISTS idx_rule_id rule_id TYPE bloom_filter GRANULARITY 4;
 ALTER TABLE events ADD INDEX IF NOT EXISTS idx_category category TYPE set(100) GRANULARITY 4;
 ALTER TABLE events ADD INDEX IF NOT EXISTS idx_hostname hostname TYPE bloom_filter GRANULARITY 4;
+
+-- v3.57.113: Add mitre_technique column for existing deployments (must be before index)
+ALTER TABLE events ADD COLUMN IF NOT EXISTS mitre_technique LowCardinality(String) DEFAULT '';
+ALTER TABLE events ADD INDEX IF NOT EXISTS idx_mitre_technique mitre_technique TYPE set(100) GRANULARITY 4;
 
 -- ============================================
 -- TABLE: modsec_logs (raw ModSec logs from XGS)
@@ -183,6 +190,15 @@ CREATE TABLE IF NOT EXISTS ip_threat_scores (
     ipsum_score Int32 DEFAULT 0,          -- Aggregated blocklists
     criminalip_score Int32 DEFAULT 0,     -- C2/VPN/Proxy detection
     pulsedive_score Int32 DEFAULT 0,      -- IOC correlation
+    -- v3.57.112: CrowdSec CTI provider
+    crowdsec_score Int32 DEFAULT 0,       -- CrowdSec normalized score 0-100
+    crowdsec_reputation LowCardinality(String) DEFAULT '', -- malicious, suspicious, safe, unknown
+    crowdsec_background_noise Int32 DEFAULT 0, -- 0-10 background noise score
+    crowdsec_ip_range_score Int32 DEFAULT 0,   -- 0-5 subnet reputation
+    crowdsec_behaviors Array(String),      -- Observed attack behaviors
+    crowdsec_mitre_techniques Array(String), -- MITRE ATT&CK techniques
+    crowdsec_classifications Array(String), -- IP classifications
+    crowdsec_found UInt8 DEFAULT 0,        -- Found in CrowdSec database
     -- v1.6 infrastructure flags
     is_benign UInt8 DEFAULT 0,            -- GreyNoise RIOT (known benign)
     is_vpn UInt8 DEFAULT 0,               -- CriminalIP VPN flag
@@ -202,6 +218,16 @@ CREATE TABLE IF NOT EXISTS ip_threat_scores (
 )
 ENGINE = ReplacingMergeTree(version)
 ORDER BY ip;
+
+-- v3.57.113: Add CrowdSec columns for existing deployments
+ALTER TABLE ip_threat_scores ADD COLUMN IF NOT EXISTS crowdsec_score Int32 DEFAULT 0;
+ALTER TABLE ip_threat_scores ADD COLUMN IF NOT EXISTS crowdsec_reputation LowCardinality(String) DEFAULT '';
+ALTER TABLE ip_threat_scores ADD COLUMN IF NOT EXISTS crowdsec_background_noise Int32 DEFAULT 0;
+ALTER TABLE ip_threat_scores ADD COLUMN IF NOT EXISTS crowdsec_ip_range_score Int32 DEFAULT 0;
+ALTER TABLE ip_threat_scores ADD COLUMN IF NOT EXISTS crowdsec_behaviors Array(String);
+ALTER TABLE ip_threat_scores ADD COLUMN IF NOT EXISTS crowdsec_mitre_techniques Array(String);
+ALTER TABLE ip_threat_scores ADD COLUMN IF NOT EXISTS crowdsec_classifications Array(String);
+ALTER TABLE ip_threat_scores ADD COLUMN IF NOT EXISTS crowdsec_found UInt8 DEFAULT 0;
 
 -- ============================================
 -- TABLE: ip_ban_status

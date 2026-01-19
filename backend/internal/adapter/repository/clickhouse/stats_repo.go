@@ -185,6 +185,7 @@ type CountryStat struct {
 }
 
 // GetReportStats retrieves comprehensive stats for a report
+// v3.57.114: Exclude infrastructure IP 83.194.220.184 from report stats
 func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate time.Time) (*ReportStats, error) {
 	stats := &ReportStats{
 		EventsByType:     make(map[string]uint64),
@@ -204,6 +205,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 			countIf(severity = 'low') as low_events
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ?
+			AND src_ip != toIPv4('83.194.220.184')
 	`
 	row := r.conn.QueryRow(ctx, mainQuery, startDate, endDate)
 	if err := row.Scan(
@@ -222,11 +224,12 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 		stats.BlockRate = float64(stats.BlockedEvents) / float64(stats.TotalEvents) * 100
 	}
 
-	// Events by type
+	// Events by type (excludes infrastructure IP)
 	byTypeQuery := `
 		SELECT log_type, count() as cnt
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ?
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY log_type
 		ORDER BY cnt DESC
 	`
@@ -242,11 +245,12 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 		}
 	}
 
-	// Events by severity
+	// Events by severity (excludes infrastructure IP)
 	bySeverityQuery := `
 		SELECT severity, count() as cnt
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ?
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY severity
 		ORDER BY cnt DESC
 	`
@@ -262,11 +266,12 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 		}
 	}
 
-	// Events by action
+	// Events by action (excludes infrastructure IP)
 	byActionQuery := `
 		SELECT action, count() as cnt
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ?
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY action
 		ORDER BY cnt DESC
 	`
@@ -282,7 +287,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 		}
 	}
 
-	// Top attackers
+	// Top attackers (excludes infrastructure IP)
 	attackersQuery := `
 		SELECT
 			IPv4NumToString(src_ip) as ip,
@@ -293,6 +298,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 			any(geo_country) as country
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ?
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY src_ip
 		ORDER BY attack_count DESC
 		LIMIT 10
@@ -315,7 +321,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 		}
 	}
 
-	// Top targets
+	// Top targets (excludes infrastructure IP)
 	targetsQuery := `
 		SELECT
 			hostname,
@@ -324,6 +330,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 			uniqExact(src_ip) as unique_ips
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ? AND hostname != ''
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY hostname
 		ORDER BY attack_count DESC
 		LIMIT 10
@@ -344,7 +351,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 		}
 	}
 
-	// Top rules
+	// Top rules (excludes infrastructure IP)
 	rulesQuery := `
 		SELECT
 			rule_id,
@@ -353,6 +360,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 			uniqExact(src_ip) as unique_ips
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ? AND rule_id != ''
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY rule_id
 		ORDER BY trigger_count DESC
 		LIMIT 10
@@ -373,7 +381,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 		}
 	}
 
-	// Top countries
+	// Top countries (excludes infrastructure IP)
 	countriesQuery := `
 		SELECT
 			geo_country as country,
@@ -381,6 +389,7 @@ func (r *StatsRepository) GetReportStats(ctx context.Context, startDate, endDate
 			uniqExact(src_ip) as unique_ips
 		FROM events
 		WHERE timestamp >= ? AND timestamp <= ? AND geo_country != ''
+			AND src_ip != toIPv4('83.194.220.184')
 		GROUP BY geo_country
 		ORDER BY attack_count DESC
 		LIMIT 10

@@ -7,6 +7,67 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.114] - 2026-01-19
+
+### Fixed
+- **Infrastructure IP Exclusion**: Exclude XGS/VigilanceX public IP (83.194.220.184) from all stats
+  - Dashboard stats: Total events, blocked events, unique IPs, severity counts
+  - Timeline chart: Event counts per time bucket
+  - GeoHeatmap: Country distribution (all versions)
+  - Stats by log type: Event type breakdown
+  - Report stats: All report statistics and aggregations
+  - Top attackers, targets, rules, countries in reports
+  - WAF Explorer: GetLogs, GetGroupedByRequest, rule stats, attack type stats
+  - ModSec logs: All queries exclude infrastructure IP to avoid false positives
+
+- **Duplicate Pending Bans**: Fixed D2B engine creating duplicate pending entries
+  - Added existence check in `createPendingApproval` before creating new entry
+  - Cleaned up existing duplicates in database
+
+### Added
+- **Pending Approval UI**: New clickable stats card in Active2Ban page
+  - 5-column stats grid with new "Pending Approval" card
+  - Full modal with IP info, Approve Ban, Deny Ban, View Details buttons
+  - Real-time pending count display
+
+- **Permanent Whitelist Entry**: Added infrastructure IP to permanent whitelist
+  - IP 83.194.220.184 whitelisted as "Infrastructure VigilanceX/XGS"
+
+---
+
+## [3.57.113] - 2026-01-18
+
+### Added
+- **MITRE ATT&CK Detection**: Automatic technique identification in Vector log parser
+  - 23 MITRE techniques mapped: T1190, T1059, T1059.007, T1083, T1105, T1595, T1203, T1046, T1498, T1110, T1071, T1204, T1486, T1566, T1496, T1090
+  - WAF attacks: SQL Injection (T1190), XSS (T1059.007), RCE (T1059), LFI (T1083), RFI (T1105)
+  - IPS alerts: Port Scan (T1046), DoS (T1498), Brute Force (T1110), Exploits (T1203)
+  - ATP threats: C2 Communication (T1071), Malware (T1204), Ransomware (T1486), Phishing (T1566), Cryptominer (T1496)
+  - Scanner detection: Nmap, Masscan, Nuclei, SQLMap, Nikto, Burp, ZAP, Dirbuster, Gobuster, Wfuzz
+  - Exploit detection: Log4Shell, XXE, SSRF, Deserialization, EternalBlue, Shellshock
+
+- **Enhanced Log Categorization**: More granular sub_category field
+  - SQL Injection: Union-based, Blind SQLi, Generic SQLi
+  - XSS: Reflected, Stored, Generic XSS
+  - RCE: Shell Command, PowerShell, Generic RCE
+  - Network Scan: SYN Scan, Port Scan, Nmap Detected
+  - DoS: SYN Flood, UDP Flood, Amplification
+  - Malware: Trojan, Ransomware, Worm, Adware
+
+### Changed
+- **Event Entity**: Added `mitre_technique` field to Event struct and ClickHouse schema
+- **Events Repository**: Updated GetEvents and GetEventByID to include MITRE technique
+- **Frontend Types**: Added `mitre_technique` to Event interface
+
+### Technical
+- `docker/vector/vector.toml`: Added MITRE ATT&CK categorization in categorize_attacks transform
+- `docker/clickhouse/init-db.sql`: Added mitre_technique column + index
+- `backend/internal/entity/event.go`: Added MitreTechnique field
+- `backend/internal/adapter/repository/clickhouse/events_repo.go`: Updated queries for mitre_technique
+- `frontend/src/types/index.ts`: Added mitre_technique to Event interface
+
+---
+
 ## [3.57.112] - 2026-01-18
 
 ### Fixed

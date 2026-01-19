@@ -419,7 +419,9 @@ func main() {
 	detect2banEngine.SetGeoIPProvider(geoIPClient)
 	// v3.57.101: Wire GeoZone repo for global settings fallback (WAF server > Global GeoZone)
 	detect2banEngine.SetGeoZoneRepo(geozoneRepo)
-	logger.Info("Detect2Ban engine: Country policy support enabled (WAF server > Global GeoZone)")
+	// v3.57.113: Wire pending bans repo for authorized countries approval flow
+	detect2banEngine.SetPendingBansRepo(pendingBansRepo)
+	logger.Info("Detect2Ban engine: Country policy support enabled (WAF server > Global GeoZone, authorized countries -> pending approval)")
 
 	reportsService := reports.NewService(statsRepo, logger)
 	blocklistsService := blocklists.NewService(feedIngester)
@@ -492,16 +494,16 @@ func main() {
 	}
 	reportsHandler := handlers.NewReportsHandler(reportsService, notificationService)
 	blocklistsHandler := handlers.NewBlocklistsHandler(blocklistsService)
-	geoblockingHandler := handlers.NewGeoblockingHandler(geoblockingService)    // v2.0: Geoblocking
-	authHandler := handlers.NewAuthHandler(authService, logger)                 // v2.6: Authentication
-	usersHandler := handlers.NewUsersHandler(authService, logger)               // v2.6: User management
-	licenseHandler := handlers.NewLicenseHandler(licenseClient)                 // v2.9: License management
-	parserHandler := handlers.NewParserHandler(xgsParser)                       // v3.1: XGS Parser
-	notificationHandler := handlers.NewNotificationHandler(notificationService) // v3.3: Email notifications
-	geozoneHandler := handlers.NewGeoZoneHandler(geozoneRepo)                   // v3.52: D2B v2 GeoZone
-	retentionService := retention.NewService(retentionRepo, logger)             // v3.52: Log retention service
-	retentionHandler := handlers.NewRetentionHandler(retentionService)          // v3.52: Log retention API
-	_ = pendingBansRepo                                                         // v3.52: Will be used in Phase 2
+	geoblockingHandler := handlers.NewGeoblockingHandler(geoblockingService)           // v2.0: Geoblocking
+	authHandler := handlers.NewAuthHandler(authService, logger)                        // v2.6: Authentication
+	usersHandler := handlers.NewUsersHandler(authService, logger)                      // v2.6: User management
+	licenseHandler := handlers.NewLicenseHandler(licenseClient)                        // v2.9: License management
+	parserHandler := handlers.NewParserHandler(xgsParser)                              // v3.1: XGS Parser
+	notificationHandler := handlers.NewNotificationHandler(notificationService)        // v3.3: Email notifications
+	geozoneHandler := handlers.NewGeoZoneHandler(geozoneRepo)                          // v3.52: D2B v2 GeoZone
+	retentionService := retention.NewService(retentionRepo, logger)                    // v3.52: Log retention service
+	retentionHandler := handlers.NewRetentionHandler(retentionService)                 // v3.52: Log retention API
+	pendingBansHandler := handlers.NewPendingBansHandler(pendingBansRepo, bansService) // v3.57.114: Pending bans approval
 
 	// v3.53: CrowdSec Blocklist integration (Phase 1 - download and store only, no XGS)
 	// Load API key from env var first, then fall back to persisted config
@@ -772,6 +774,15 @@ func main() {
 				r.Post("/disable", detect2banHandler.Disable)
 				r.Post("/toggle", detect2banHandler.Toggle)
 				r.Get("/scenarios", detect2banHandler.GetScenarios)
+			})
+
+			// Pending Bans (v3.57.114 - Authorized countries approval workflow)
+			r.Route("/pending-bans", func(r chi.Router) {
+				r.Get("/", pendingBansHandler.List)
+				r.Get("/stats", pendingBansHandler.GetStats)
+				r.Get("/ip/{ip}", pendingBansHandler.GetByIP)
+				r.Post("/{id}/approve", pendingBansHandler.Approve)
+				r.Post("/{id}/reject", pendingBansHandler.Reject)
 			})
 
 			// Blocklists (v1.6 - Feed Ingester)
