@@ -1,0 +1,34 @@
+# VIGILANCE X - Detect2Ban Scenario
+# High Threat Auto-Ban - Bans IPs with high TI score even with few events
+# Format compatible with engine.go loader
+
+name: high_threat_auto_ban
+description: Auto-ban IPs with high threat intel score (>=70) even with single event
+enabled: true
+cooldown: "24h"
+
+# Conditions that must be met (AND logic)
+# Trigger on any security event type (WAF, IPS, ATP)
+conditions:
+  - field: log_type
+    operator: in
+    value:
+      - WAF
+      - IPS
+      - ATP
+
+# Aggregation - trigger with just 1 event
+# The real filtering is done by threat_threshold in action
+aggregation:
+  group_by: src_ip
+  window: "24h"
+  threshold: 1
+
+# Action - validate threat score BEFORE banning
+# Only bans if IP has TI score >= 70
+action:
+  type: ban
+  duration: "24h"
+  validate_threat: true
+  threat_threshold: 70
+  reason: "High Threat IP: TI score >= 70 - Auto-ban on first security event"

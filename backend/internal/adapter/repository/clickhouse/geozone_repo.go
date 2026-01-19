@@ -303,6 +303,20 @@ func (r *PendingBansRepository) RejectPendingBan(ctx context.Context, id string,
 	return r.conn.Exec(ctx, query, reviewedBy, note, id)
 }
 
+// UpdatePendingBanEventCount updates event count for an existing pending ban
+// v3.57.115: Used to update stats instead of creating duplicates
+func (r *PendingBansRepository) UpdatePendingBanEventCount(ctx context.Context, ip string, newEventCount int) error {
+	query := `
+		ALTER TABLE vigilance_x.pending_bans
+		UPDATE
+			event_count = ?,
+			last_event = now()
+		WHERE ip = ? AND status = 'pending'
+	`
+
+	return r.conn.Exec(ctx, query, newEventCount, ip)
+}
+
 // GetPendingBanStats retrieves pending ban statistics
 func (r *PendingBansRepository) GetPendingBanStats(ctx context.Context) (*entity.PendingBanStats, error) {
 	query := `

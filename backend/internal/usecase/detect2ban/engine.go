@@ -131,9 +131,11 @@ type GeoZoneRepository interface {
 
 // PendingBansRepository interface for pending ban approvals
 // v3.57.113: Added for Authorized Countries pending approval flow
+// v3.57.115: Added UpdatePendingBanEventCount to fix duplicate entries bug
 type PendingBansRepository interface {
 	CreatePendingBan(ctx context.Context, ban *entity.PendingBan) error
 	GetPendingBanByIP(ctx context.Context, ip string) (*entity.PendingBan, error)
+	UpdatePendingBanEventCount(ctx context.Context, ip string, newEventCount int) error
 }
 
 // Engine is the Detect2Ban detection engine
@@ -661,9 +663,18 @@ func (e *Engine) createPendingApproval(ctx context.Context, match ScenarioMatch,
 	}
 
 	// v3.57.114: Check if pending approval already exists for this IP
+	// v3.57.115: Update existing entry instead of creating duplicate
 	existing, _ := e.pendingBansRepo.GetPendingBanByIP(ctx, match.IP)
 	if existing != nil && existing.Status == "pending" {
-		log.Printf("[DETECT2BAN] Pending approval already exists for IP %s, skipping duplicate", match.IP)
+		// Update event count if new count is higher (IP is still attacking)
+		if int(match.EventCount) > existing.EventCount {
+			if err := e.pendingBansRepo.UpdatePendingBanEventCount(ctx, match.IP, int(match.EventCount)); err != nil {
+				log.Printf("[DETECT2BAN] Failed to update pending ban event count for %s: %v", match.IP, err)
+			} else {
+				log.Printf("[DETECT2BAN] Updated pending approval for IP %s (events: %d -> %d)",
+					match.IP, existing.EventCount, match.EventCount)
+			}
+		}
 		return
 	}
 

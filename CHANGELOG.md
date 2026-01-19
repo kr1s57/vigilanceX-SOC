@@ -7,6 +7,24 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.115] - 2026-01-19
+
+### Added
+- **High Threat Auto-Ban Scenario**: New D2B scenario `high_threat_auto_ban.yaml`
+  - Bans IPs with TI score >= 70 even with single security event
+  - Triggers on WAF, IPS, ATP events
+  - 24h aggregation window, 24h ban duration
+  - Solves issue where high-threat IPs with low event count weren't banned
+
+### Fixed
+- **Duplicate Pending Bans**: Improved D2B engine duplicate handling
+  - Added `UpdatePendingBanEventCount` method to repository
+  - Engine now updates existing pending bans instead of creating duplicates
+  - Updates event_count and last_event timestamp for ongoing attacks
+  - Interface `PendingBansRepository` extended with new method
+
+---
+
 ## [3.57.114] - 2026-01-19
 
 ### Fixed
