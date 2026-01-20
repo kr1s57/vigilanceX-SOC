@@ -81,7 +81,10 @@ services:
   # Backend Go - API REST
   # ============================================
   backend:
-    image: ghcr.io/kr1s57/vigilancex-api:${VGX_VERSION:-latest}
+    # image: ghcr.io/kr1s57/vigilancex-api:${VGX_VERSION:-latest}  # v3.57.116: Disabled for local build debug
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     container_name: vigilance_backend
     ports:
       - "8080:8080"
@@ -178,8 +181,10 @@ services:
 
   # ============================================
   # Detect2Ban Engine - Detection daemon
+  # v3.57.116: DISABLED FOR DEBUG - separate D2B service was causing XGS block
   # ============================================
   detect2ban:
+    profiles: ["disabled"]  # v3.57.116: Disabled - D2B now runs inside backend only
     image: ghcr.io/kr1s57/vigilancex-detect2ban:${VGX_VERSION:-latest}
     container_name: vigilance_detect2ban
     environment:
@@ -206,7 +211,10 @@ services:
   # Frontend React
   # ============================================
   frontend:
-    image: ghcr.io/kr1s57/vigilancex-frontend:${VGX_VERSION:-latest}
+    # image: ghcr.io/kr1s57/vigilancex-frontend:${VGX_VERSION:-latest}  # v3.57.116: Disabled for local build
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
     container_name: vigilance_frontend
     ports:
       - "3000:80"

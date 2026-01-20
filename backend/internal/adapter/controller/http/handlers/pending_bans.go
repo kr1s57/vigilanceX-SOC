@@ -14,6 +14,7 @@ import (
 type PendingBansStore interface {
 	GetPendingBans(ctx context.Context) ([]entity.PendingBan, error)
 	GetPendingBanByIP(ctx context.Context, ip string) (*entity.PendingBan, error)
+	GetPendingBanByID(ctx context.Context, id string) (*entity.PendingBan, error) // v3.57.118
 	ApprovePendingBan(ctx context.Context, id string, reviewedBy string, note string) error
 	RejectPendingBan(ctx context.Context, id string, reviewedBy string, note string) error
 	GetPendingBanStats(ctx context.Context) (*entity.PendingBanStats, error)
@@ -76,6 +77,7 @@ func (h *PendingBansHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 
 // Approve approves a pending ban and creates the actual ban
 // POST /api/v1/pending-bans/{id}/approve
+// v3.57.118: Fixed to use GetPendingBanByID instead of GetPendingBanByIP
 func (h *PendingBansHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := chi.URLParam(r, "id")
@@ -94,9 +96,10 @@ func (h *PendingBansHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		username = user.(string)
 	}
 
-	// Get the pending ban details first
-	pending, err := h.store.GetPendingBanByIP(ctx, id)
+	// Get the pending ban details first (using ID, not IP)
+	pending, err := h.store.GetPendingBanByID(ctx, id)
 	if err != nil || pending == nil {
+		log.Printf("[PENDING_BANS] Pending ban not found for ID: %s", id)
 		ErrorResponse(w, http.StatusNotFound, "Pending ban not found", err)
 		return
 	}

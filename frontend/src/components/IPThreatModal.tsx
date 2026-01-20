@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   Globe,
@@ -18,10 +19,13 @@ import {
   Shield,
   ShieldCheck,
   ShieldX,
+  Network,
+  Crosshair,
+  BarChart3,
 } from 'lucide-react'
 import { threatsApi, bansApi, softWhitelistApi, eventsApi, modsecApi } from '@/lib/api'
 import { formatDateTime, getCountryFlag, cn } from '@/lib/utils'
-import type { ThreatScore, BanHistory, WhitelistCheckResult, Event, ModSecLog } from '@/types'
+import type { ThreatScore, BanHistory, WhitelistCheckResult, Event, ModSecLog, BanStatus } from '@/types'
 
 // Threat level colors
 const threatLevelColors: Record<string, { bg: string; text: string; border: string }> = {
@@ -40,6 +44,7 @@ interface IPThreatModalProps {
 }
 
 export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
+  const navigate = useNavigate()
   const [score, setScore] = useState<ThreatScore | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,10 +52,25 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
   const [banning, setBanning] = useState(false)
   const [isBanned, setIsBanned] = useState(false)
   const [banStatus, setBanStatus] = useState<string | null>(null)
+  const [banData, setBanData] = useState<BanStatus | null>(null) // v3.57.117: Store full ban data for expiry
   const [banHistory, setBanHistory] = useState<BanHistory[]>([])
   const [whitelistStatus, setWhitelistStatus] = useState<WhitelistCheckResult | null>(null)
   const [attackHistory, setAttackHistory] = useState<Event[]>([]) // v3.53.105: Attack history (events)
   const [wafHistory, setWafHistory] = useState<ModSecLog[]>([]) // v3.53.105: WAF attack history (modsec_logs)
+
+  // v3.57.118: Quick navigation helpers with auto-search
+  const handleNavigateToVPN = () => {
+    onClose()
+    navigate(`/vpn?src_ip=${ip}`)
+  }
+  const handleNavigateToTrackIP = () => {
+    onClose()
+    navigate(`/track-ip?ip=${ip}`)
+  }
+  const handleNavigateToAttackAnalyzer = () => {
+    onClose()
+    navigate(`/attacks?src_ip=${ip}`)
+  }
 
   const handleBanIP = async () => {
     if (!ip) return
@@ -78,6 +98,7 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
       setError(null)
       setIsBanned(false)
       setBanStatus(null)
+      setBanData(null) // v3.57.117: Reset ban data
       setBanHistory([])
       setWhitelistStatus(null)
       setAttackHistory([])
@@ -92,15 +113,13 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
         eventsApi.list({ src_ip: ip, limit: 50 }).catch(() => ({ data: [], pagination: { total: 0, limit: 50, offset: 0 } })),
         modsecApi.getLogs({ src_ip: ip, limit: 50 }).catch(() => ({ data: [], pagination: { total: 0, limit: 50, offset: 0 } })) // v3.53.105: WAF logs
       ]).then(async ([scoreData, banData, historyData, whitelistData, eventsData, wafData]) => {
-        // v3.57.113: Auto-run full TI scan if:
-        // 1. No stored score exists, OR
-        // 2. CrowdSec data is missing (crowdsec.found is false/undefined)
-        // This ensures CrowdSec is always queried for IPs displayed in modals
-        const needsFullScan = !scoreData || !scoreData.crowdsec?.found
-
-        if (needsFullScan) {
+        // v3.57.118: Only auto-scan if NO score exists at all
+        // If score exists (even without CrowdSec), show it immediately - user can refresh manually
+        if (scoreData) {
+          setScore(scoreData)
+        } else {
+          // No stored score - run full TI scan
           try {
-            // Run full TI check including CrowdSec
             const fullScore = await threatsApi.check(ip)
             if (fullScore) {
               setScore(fullScore)
@@ -109,17 +128,14 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
               setError('Could not retrieve threat intel')
             }
           } catch {
-            // Fallback to stored score if available
-            if (scoreData) setScore(scoreData)
-            else setError('Score not found in database')
+            setError('Score not found in database')
           }
-        } else {
-          setScore(scoreData)
         }
 
         if (banData && (banData.status === 'active' || banData.status === 'permanent')) {
           setIsBanned(true)
           setBanStatus(banData.status)
+          setBanData(banData) // v3.57.117: Store full ban data for expiry display
         }
 
         if (historyData && historyData.length > 0) {
@@ -185,15 +201,24 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
           </div>
           <div className="flex items-center gap-2">
             {isBanned ? (
-              <span className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium',
-                banStatus === 'permanent'
-                  ? 'bg-red-500/20 text-red-500'
-                  : 'bg-orange-500/20 text-orange-500'
-              )}>
-                <Ban className="w-4 h-4" />
-                {banStatus === 'permanent' ? 'Permanent Ban' : 'Banned'}
-              </span>
+              <div className="flex flex-col items-end gap-0.5">
+                <span className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium',
+                  banStatus === 'permanent'
+                    ? 'bg-red-500/20 text-red-500'
+                    : 'bg-orange-500/20 text-orange-500'
+                )}>
+                  <Ban className="w-4 h-4" />
+                  {banStatus === 'permanent' ? 'Permanent Ban' : 'Banned'}
+                </span>
+                {/* v3.57.117: Show ban expiry date */}
+                {banData?.expires_at && banStatus !== 'permanent' && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    Expires: {formatDateTime(banData.expires_at)}
+                  </span>
+                )}
+              </div>
             ) : (
               <button
                 onClick={handleBanIP}
@@ -803,8 +828,33 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
                   </div>
                 </div>
 
-              {/* External Links */}
+              {/* v3.57.118: Quick Actions - Internal Navigation */}
               <div className="flex flex-wrap gap-2 pt-2 border-t">
+                <button
+                  onClick={handleNavigateToVPN}
+                  className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2 text-sm bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 rounded-lg transition-colors font-medium"
+                >
+                  <Network className="w-4 h-4" />
+                  VPN & Network
+                </button>
+                <button
+                  onClick={handleNavigateToTrackIP}
+                  className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2 text-sm bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors font-medium"
+                >
+                  <Crosshair className="w-4 h-4" />
+                  Track IP
+                </button>
+                <button
+                  onClick={handleNavigateToAttackAnalyzer}
+                  className="flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2 text-sm bg-orange-500/10 text-orange-600 dark:text-orange-400 hover:bg-orange-500/20 rounded-lg transition-colors font-medium"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  Attack Analyzer
+                </button>
+              </div>
+
+              {/* External Links */}
+              <div className="flex flex-wrap gap-2 pt-2">
                 <a
                   href={`https://www.abuseipdb.com/check/${ip}`}
                   target="_blank"

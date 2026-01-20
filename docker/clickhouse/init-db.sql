@@ -587,6 +587,25 @@ PARTITION BY toYYYYMM(timestamp)
 ORDER BY (timestamp, user_id);
 
 -- ============================================
+-- TABLE: system_whitelist (v3.57.117)
+-- Custom protected IPs added by admins
+-- ============================================
+CREATE TABLE IF NOT EXISTS system_whitelist (
+    id UUID DEFAULT generateUUIDv4(),
+    ip String,
+    name String,
+    provider String,
+    category LowCardinality(String),  -- dns, cdn, cloud, monitoring, security, custom
+    description String,
+    is_active UInt8 DEFAULT 1,
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now(),
+    created_by String DEFAULT ''
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (ip);
+
+-- ============================================
 -- Views utiles pour le dashboard
 -- ============================================
 

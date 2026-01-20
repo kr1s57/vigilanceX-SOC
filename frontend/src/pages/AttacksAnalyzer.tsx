@@ -307,6 +307,7 @@ function AttackersModal({
   period,
   totalUniqueIPs,
   onIPLookup,
+  initialSearchTerm = '', // v3.57.118: Initial search term from URL
 }: {
   isOpen: boolean
   onClose: () => void
@@ -314,10 +315,12 @@ function AttackersModal({
   period: string
   totalUniqueIPs: number
   onIPLookup: (ip: string) => void
+  initialSearchTerm?: string
 }) {
   const [bans, setBans] = useState<BanStatus[]>([])
   const [loadingBans, setLoadingBans] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  // v3.57.118: Initialize searchTerm from prop
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm)
   const [sortMode, setSortMode] = useState<'attacks' | 'blocked'>('attacks')
   const [banningIP, setBanningIP] = useState<string | null>(null)
   const [newlyBannedIPs, setNewlyBannedIPs] = useState<Set<string>>(new Set())
@@ -665,8 +668,11 @@ export function AttacksAnalyzer() {
   const [topAttackers, setTopAttackers] = useState<TopAttacker[]>([])
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set())
   const [showAttackersModal, setShowAttackersModal] = useState(false)
-  const [selectedIP, setSelectedIP] = useState<string | null>(searchParams.get('src_ip'))
-  const [showThreatModal, setShowThreatModal] = useState(!!searchParams.get('src_ip'))
+  const [selectedIP, setSelectedIP] = useState<string | null>(null)
+  const [showThreatModal, setShowThreatModal] = useState(false)
+  // v3.57.118: Auto-open attackers modal with IP filter
+  const urlIP = searchParams.get('src_ip')
+  const [initialIPFilter] = useState(urlIP || '')
   const [attackTypeModal, setAttackTypeModal] = useState<{ attackType: string; attackTypeName: string } | null>(null)
   const [totalUniqueIPs, setTotalUniqueIPs] = useState(0)
 
@@ -674,6 +680,13 @@ export function AttacksAnalyzer() {
     setSelectedIP(ip)
     setShowThreatModal(true)
   }
+
+  // v3.57.118: Auto-open attackers modal when URL has IP param
+  useEffect(() => {
+    if (urlIP && topAttackers.length > 0) {
+      setShowAttackersModal(true)
+    }
+  }, [urlIP, topAttackers.length])
 
   // Ban state for inline banning
   const [banningIP, setBanningIP] = useState<string | null>(null)
@@ -1222,6 +1235,7 @@ export function AttacksAnalyzer() {
         period={period}
         totalUniqueIPs={summaryStats.totalUniqueIPs}
         onIPLookup={handleIPLookup}
+        initialSearchTerm={initialIPFilter}
       />
 
       {/* IP Threat Modal */}

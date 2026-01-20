@@ -7,6 +7,51 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.118] - 2026-01-20
+
+### Fixed
+- **Pending Bans Approve/Reject 404**: Fixed API returning 404 on approve/reject operations
+  - Added `GetPendingBanByID` method to repository for UUID lookup
+  - Updated handler to use ID instead of IP for pending ban retrieval
+  - Interface `PendingBansStore` extended with new method
+
+- **IP Modal Slow Loading**: Fixed auto-scan triggering even when score exists
+  - Modals now display existing scores immediately
+  - Full TI scan only runs when no stored score exists
+  - User can manually refresh to get updated data
+
+### Added
+- **Sorting for Pending Approval List**: Sort by Date or TI Score
+  - Toggle buttons in modal header
+  - Ascending/descending support
+
+- **Sorting for Active Bans Table**: Sortable columns
+  - Status (permanent > active)
+  - Ban Count (high to low)
+  - Last Ban date
+
+- **Pagination for Active Bans**: Navigation system for large lists
+  - Items per page selector: 25 / 50 / 100
+  - Page navigation: First, Previous, Page X of Y, Next, Last
+  - Auto-reset to page 1 on filter changes
+
+- **8h Time Filter**: Added to Active2Ban page
+  - Filter options: All, 8h, 24h, 7d
+
+- **WAF Explorer 8h Filter**: Replaced 14d with 8h
+  - Period options now: 1h, 8h, 24h, 7d, 30d
+
+- **Quick Navigation Buttons**: VPN, Track IP, Attack Analyzer in IP modals
+  - Navigate to pages with IP pre-filled
+  - Auto-search/filter on arrival
+
+- **Auto-Search on Navigation**: Pages now auto-execute searches from URL params
+  - TrackIP: `?ip=X.X.X.X` triggers search
+  - VpnNetwork: `?src_ip=X.X.X.X` sets filter
+  - AttacksAnalyzer: `?src_ip=X.X.X.X` opens modal with filter
+
+---
+
 ## [3.57.115] - 2026-01-19
 
 ### Added

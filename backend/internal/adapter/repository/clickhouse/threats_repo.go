@@ -438,6 +438,59 @@ func (r *ThreatsRepository) GetIPsWithMalware(ctx context.Context, limit int) ([
 	return scores, nil
 }
 
+// HasRecentCrowdSecScore checks if an IP has a CrowdSec score within the specified duration
+// v3.57.116: Used to avoid re-querying CrowdSec API within 15 days
+func (r *ThreatsRepository) HasRecentCrowdSecScore(ctx context.Context, ip string, maxAge time.Duration) (bool, *entity.ThreatScore, error) {
+	cutoff := time.Now().Add(-maxAge)
+
+	query := `
+		SELECT
+			ip,
+			aggregated_score,
+			threat_level,
+			crowdsec_score,
+			crowdsec_reputation,
+			crowdsec_background_noise,
+			crowdsec_ip_range_score,
+			crowdsec_behaviors,
+			crowdsec_mitre_techniques,
+			crowdsec_classifications,
+			crowdsec_found,
+			last_checked
+		FROM ip_threat_scores FINAL
+		WHERE ip = ? AND crowdsec_found = 1 AND last_checked >= ?
+		LIMIT 1
+	`
+
+	var score entity.ThreatScore
+	var crowdsecBehaviors, crowdsecMitre, crowdsecClass []string
+
+	row := r.conn.DB().QueryRow(ctx, query, ip, cutoff)
+	if err := row.Scan(
+		&score.IP,
+		&score.AggregatedScore,
+		&score.ThreatLevel,
+		&score.CrowdSecScore,
+		&score.CrowdSecReputation,
+		&score.CrowdSecBackgroundNoise,
+		&score.CrowdSecIPRangeScore,
+		&crowdsecBehaviors,
+		&crowdsecMitre,
+		&crowdsecClass,
+		&score.CrowdSecFound,
+		&score.LastChecked,
+	); err != nil {
+		// No recent score found
+		return false, nil, nil
+	}
+
+	score.CrowdSecBehaviors = crowdsecBehaviors
+	score.CrowdSecMitreTechniques = crowdsecMitre
+	score.CrowdSecClassifications = crowdsecClass
+
+	return true, &score, nil
+}
+
 // DeleteOldScores removes scores older than specified duration
 func (r *ThreatsRepository) DeleteOldScores(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoff := time.Now().Add(-olderThan)

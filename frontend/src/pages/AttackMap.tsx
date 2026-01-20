@@ -150,8 +150,10 @@ function PeriodSelector({
   customDate: string
   onCustomDateChange: (date: string) => void
 }) {
+  // v3.57.117: Added 8h period
   const periods: { value: MapPeriod; label: string }[] = [
     { value: 'live', label: 'Live' },
+    { value: '8h', label: '8h' },
     { value: '24h', label: '24h' },
     { value: '7d', label: '7d' },
     { value: '30d', label: '30d' },

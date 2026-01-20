@@ -93,6 +93,8 @@ func getStartTimeFromPeriodTrackIP(period string) time.Time {
 	switch period {
 	case "1h":
 		return now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		return now.Add(-8 * time.Hour)
 	case "24h":
 		return now.Add(-24 * time.Hour)
 	case "7d":

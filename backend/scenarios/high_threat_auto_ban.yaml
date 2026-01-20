@@ -4,7 +4,7 @@
 
 name: high_threat_auto_ban
 description: Auto-ban IPs with high threat intel score (>=70) even with single event
-enabled: true
+enabled: false  # v3.57.116: DISABLED FOR DEBUG - suspected cause of XGS overload
 cooldown: "24h"
 
 # Conditions that must be met (AND logic)

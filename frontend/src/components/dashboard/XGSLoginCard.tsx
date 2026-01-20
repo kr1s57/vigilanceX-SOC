@@ -1,5 +1,6 @@
 // v3.57.105: XGS Login Activity card with pagination
-import { useState, useEffect } from 'react'
+// v3.57.116: Filter VGX auto-connections, add clickable success/failed filters
+import { useState, useEffect, useMemo } from 'react'
 import {
   LogIn,
   CheckCircle2,
@@ -8,7 +9,8 @@ import {
   Clock,
   User,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Filter
 } from 'lucide-react'
 import { eventsApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -26,6 +28,18 @@ interface XGSLogin {
   message?: string
 }
 
+// v3.57.116: Filter types for login display
+type LoginFilter = 'all' | 'success' | 'failed'
+
+// v3.57.116: VGX auto-connection patterns to exclude from display
+// These are automated connections from VGX for log sync, not real user logins
+const VGX_AUTO_PATTERNS = {
+  // ModSec sync uses admin via SSH from VGX server
+  modsecSync: { username: 'admin', srcIpPrefix: '10.56.125.', method: 'ssh' },
+  // API service account for XGS API calls
+  apiService: { username: 'api_service_soc' }
+}
+
 const ITEMS_PER_PAGE = 10
 const MAX_ENTRIES = 200
 
@@ -34,6 +48,7 @@ export function XGSLoginCard({ refreshInterval = 0 }: XGSLoginCardProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [filter, setFilter] = useState<LoginFilter>('all') // v3.57.116: Filter state
 
   async function fetchData() {
     try {
@@ -56,6 +71,7 @@ export function XGSLoginCard({ refreshInterval = 0 }: XGSLoginCardProps) {
 
       // Transform events to login format
       // v3.57.112: Filter based on category for login-related events
+      // v3.57.116: Exclude VGX auto-connections (ModSec sync, API service)
       const loginEvents: XGSLogin[] = allEvents
         .filter((e: Event) => {
           // Filter for authentication-related events
@@ -91,6 +107,25 @@ export function XGSLoginCard({ refreshInterval = 0 }: XGSLoginCardProps) {
             message: e.message || e.category
           }
         })
+        // v3.57.116: Filter out VGX automated connections
+        .filter((login: XGSLogin) => {
+          const msg = (login.message || '').toLowerCase()
+
+          // Exclude api_service_soc (VGX API account)
+          if (login.username === VGX_AUTO_PATTERNS.apiService.username) {
+            return false
+          }
+
+          // Exclude admin SSH connections from VGX server (ModSec sync)
+          // These are automated every 30s and clutter the real login monitoring
+          if (login.username === VGX_AUTO_PATTERNS.modsecSync.username &&
+              login.src_ip.startsWith(VGX_AUTO_PATTERNS.modsecSync.srcIpPrefix) &&
+              msg.includes('ssh')) {
+            return false
+          }
+
+          return true
+        })
         // Sort by timestamp descending
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, MAX_ENTRIES)
@@ -114,16 +149,34 @@ export function XGSLoginCard({ refreshInterval = 0 }: XGSLoginCardProps) {
     }
   }, [refreshInterval])
 
-  // Pagination calculations
-  const totalPages = Math.ceil(logins.length / ITEMS_PER_PAGE)
+  // v3.57.116: Filter logins based on selected filter
+  const filteredLogins = useMemo(() => {
+    switch (filter) {
+      case 'success':
+        return logins.filter(l => l.success)
+      case 'failed':
+        return logins.filter(l => !l.success)
+      default:
+        return logins
+    }
+  }, [logins, filter])
+
+  // Pagination calculations (now based on filtered logins)
+  const totalPages = Math.ceil(filteredLogins.length / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
   const endIndex = startIndex + ITEMS_PER_PAGE
-  const currentLogins = logins.slice(startIndex, endIndex)
+  const currentLogins = filteredLogins.slice(startIndex, endIndex)
 
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page)
     }
+  }
+
+  // v3.57.116: Handle filter change
+  const handleFilterChange = (newFilter: LoginFilter) => {
+    setFilter(newFilter === filter ? 'all' : newFilter) // Toggle off if same filter clicked
+    setCurrentPage(1) // Reset to page 1 when filter changes
   }
 
   // Generate page numbers to display
@@ -189,19 +242,47 @@ export function XGSLoginCard({ refreshInterval = 0 }: XGSLoginCardProps) {
         <div className="flex items-center gap-2">
           <LogIn className="w-5 h-5 text-primary" />
           <h3 className="text-lg font-semibold">XGS Logins</h3>
+          {/* v3.57.116: Show active filter indicator */}
+          {filter !== 'all' && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Filter className="w-3 h-3" />
+              {filter === 'success' ? 'Success only' : 'Failed only'}
+            </span>
+          )}
         </div>
         {hasLogins && (
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3 text-green-500" />
-              {successCount}
-            </span>
-            {failedCount > 0 && (
-              <span className="flex items-center gap-1 text-red-500">
-                <XCircle className="w-3 h-3" />
-                {failedCount}
-              </span>
-            )}
+          <div className="flex items-center gap-2 text-xs">
+            {/* v3.57.116: Clickable success badge */}
+            <button
+              onClick={() => handleFilterChange('success')}
+              className={cn(
+                "flex items-center gap-1 px-2 py-1 rounded-full transition-all cursor-pointer",
+                filter === 'success'
+                  ? "bg-green-500/30 text-green-400 ring-1 ring-green-500"
+                  : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+              )}
+              title="Click to filter success logins"
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              <span className="font-medium">{successCount}</span>
+            </button>
+
+            {/* v3.57.116: Clickable failed badge */}
+            <button
+              onClick={() => handleFilterChange('failed')}
+              className={cn(
+                "flex items-center gap-1 px-2 py-1 rounded-full transition-all cursor-pointer",
+                filter === 'failed'
+                  ? "bg-red-500/30 text-red-400 ring-1 ring-red-500"
+                  : failedCount > 0
+                    ? "bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                    : "bg-muted text-muted-foreground"
+              )}
+              title="Click to filter failed logins"
+            >
+              <XCircle className="w-3 h-3" />
+              <span className="font-medium">{failedCount}</span>
+            </button>
           </div>
         )}
       </div>

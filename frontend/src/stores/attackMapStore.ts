@@ -65,7 +65,8 @@ export const TARGET_LOCATION = {
   name: 'Infrastructure'
 }
 
-export type MapPeriod = 'live' | '24h' | '7d' | '30d'
+// v3.57.117: Added 8h period
+export type MapPeriod = 'live' | '8h' | '24h' | '7d' | '30d'
 
 // Attack type definitions with colors
 export type AttackType = 'waf' | 'ips' | 'malware' | 'threat'
@@ -283,7 +284,8 @@ export const useAttackMapStore = create<AttackMapState>((set) => ({
 }))
 
 // Initialize period from sessionStorage
+// v3.57.117: Added 8h period
 const savedPeriod = sessionStorage.getItem('attackMapPeriod') as MapPeriod | null
-if (savedPeriod && ['live', '24h', '7d', '30d'].includes(savedPeriod)) {
+if (savedPeriod && ['live', '8h', '24h', '7d', '30d'].includes(savedPeriod)) {
   useAttackMapStore.getState().setPeriod(savedPeriod)
 }

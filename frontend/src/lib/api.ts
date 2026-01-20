@@ -588,6 +588,31 @@ export const geoblockingApi = {
 
 // System Whitelist Entry type (protected IPs like DNS, CDN)
 export interface SystemWhitelistEntry {
+  id?: string
+  ip: string
+  name: string
+  provider: string
+  category: string
+  description: string
+  is_custom?: boolean
+}
+
+// v3.57.117: Custom system whitelist entry with metadata
+export interface CustomSystemWhitelistEntry {
+  id: string
+  ip: string
+  name: string
+  provider: string
+  category: string
+  description: string
+  created_at: string
+  updated_at: string
+  created_by: string
+  is_custom: boolean
+}
+
+// v3.57.117: Request type for creating custom entries
+export interface CreateSystemWhitelistRequest {
   ip: string
   name: string
   provider: string
@@ -631,6 +656,9 @@ export const configApi = {
       by_category: Record<string, SystemWhitelistEntry[]>
       ips: string[]
       count: number
+      default_count: number
+      custom_count: number
+      custom_entries: CustomSystemWhitelistEntry[]
     }>('/config/system-whitelist')
     return response.data
   },
@@ -641,6 +669,33 @@ export const configApi = {
       entry?: SystemWhitelistEntry
       message: string
     }>(`/config/system-whitelist/check/${ip}`)
+    return response.data
+  },
+
+  // v3.57.117: CRUD for custom system whitelist entries
+  createSystemWhitelist: async (entry: CreateSystemWhitelistRequest) => {
+    const response = await api.post<{
+      success: boolean
+      message: string
+      entry: CustomSystemWhitelistEntry
+    }>('/config/system-whitelist', entry)
+    return response.data
+  },
+
+  updateSystemWhitelist: async (id: string, entry: Partial<CreateSystemWhitelistRequest>) => {
+    const response = await api.put<{
+      success: boolean
+      message: string
+      entry: CustomSystemWhitelistEntry
+    }>(`/config/system-whitelist/${id}`, entry)
+    return response.data
+  },
+
+  deleteSystemWhitelist: async (id: string) => {
+    const response = await api.delete<{
+      success: boolean
+      message: string
+    }>(`/config/system-whitelist/${id}`)
     return response.data
   },
 }

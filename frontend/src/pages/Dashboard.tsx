@@ -25,10 +25,11 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert, PendingBanStats } from '@/types'
 
-// v3.57.115: Current installed version
-const INSTALLED_VERSION = '3.57.115'
+// v3.57.118: Current installed version
+const INSTALLED_VERSION = '3.57.118'
 
-type Period = '1h' | '24h' | '7d' | '30d'
+// v3.57.117: Added 8h filter option
+type Period = '1h' | '8h' | '24h' | '7d' | '30d'
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -62,7 +63,7 @@ export function Dashboard() {
       try {
         const [overviewData, timelineData, alertsData] = await Promise.all([
           statsApi.overview(period),
-          eventsApi.timeline(period, period === '24h' || period === '1h' ? 'hour' : 'day'),
+          eventsApi.timeline(period, period === '24h' || period === '8h' || period === '1h' ? 'hour' : 'day'),
           alertsApi.critical(20, period),
         ])
         setOverview(overviewData)
@@ -172,7 +173,7 @@ export function Dashboard() {
         <div className="flex items-center gap-4">
           <DashboardClock timezone={settings.timezone} show={settings.showDashboardClock} />
           <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-            {(['1h', '24h', '7d', '30d'] as Period[]).map((p) => (
+            {(['1h', '8h', '24h', '7d', '30d'] as Period[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
@@ -189,7 +190,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* v3.57.114: Pending Approvals Alert Banner */}
+      {/* v3.57.114: Pending Approvals Alert Banner (v3.57.118: Enhanced with FP + Country Policy) */}
       {pendingStats && pendingStats.total_pending > 0 && (
         <div
           onClick={() => navigate('/bans?status=pending')}
@@ -202,16 +203,27 @@ export function Dashboard() {
               </div>
               <div>
                 <h3 className="font-semibold text-amber-600 dark:text-amber-400">
-                  WAF Authorized Countries - Pending Approval
+                  WAF Ban - False Positive - Pending Approval
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  {pendingStats.total_pending} IP{pendingStats.total_pending > 1 ? 's' : ''} from authorized countries detected attacks and require admin approval
+                  {pendingStats.total_pending} IP{pendingStats.total_pending > 1 ? 's' : ''} require admin review before ban action
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm flex-wrap justify-end">
+                  {/* v3.57.118: FP and Country Policy counts */}
+                  {(pendingStats.false_positive_count ?? 0) > 0 && (
+                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-500 rounded text-xs font-medium">
+                      {pendingStats.false_positive_count} False Positive
+                    </span>
+                  )}
+                  {(pendingStats.country_policy_count ?? 0) > 0 && (
+                    <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-500 rounded text-xs font-medium">
+                      {pendingStats.country_policy_count} Country Policy
+                    </span>
+                  )}
                   {pendingStats.high_threat > 0 && (
                     <span className="px-2 py-0.5 bg-red-500/20 text-red-500 rounded text-xs font-medium">
                       {pendingStats.high_threat} High

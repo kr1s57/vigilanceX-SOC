@@ -107,7 +107,8 @@ func (r *UsersRepository) GetByID(ctx context.Context, id string) (*entity.User,
 	return &user, nil
 }
 
-// List retrieves all users
+// List retrieves all active users
+// v3.57.117: Filter out inactive (deleted) users
 func (r *UsersRepository) List(ctx context.Context) ([]entity.User, error) {
 	query := `
 		SELECT
@@ -121,6 +122,7 @@ func (r *UsersRepository) List(ctx context.Context) ([]entity.User, error) {
 			created_at,
 			updated_at
 		FROM users FINAL
+		WHERE is_active = 1
 		ORDER BY username
 	`
 

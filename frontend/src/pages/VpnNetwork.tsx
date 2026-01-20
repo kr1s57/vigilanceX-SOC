@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Network,
   Wifi,
@@ -201,9 +202,11 @@ function EventsDetailModal({
 }
 
 export function VpnNetwork() {
+  const [searchParams] = useSearchParams()
   const [period, setPeriod] = useState<Period>('24h')
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
-  const [vpnFilter, setVpnFilter] = useState('')
+  // v3.57.118: Initialize vpnFilter from URL param
+  const [vpnFilter, setVpnFilter] = useState(searchParams.get('src_ip') || '')
   const [loading, setLoading] = useState(true)
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
   const [detailModal, setDetailModal] = useState<{

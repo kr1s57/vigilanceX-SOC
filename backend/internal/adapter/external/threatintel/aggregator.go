@@ -73,10 +73,17 @@ type Aggregator struct {
 
 // CascadeConfig defines thresholds for tiered API querying
 type CascadeConfig struct {
-	Tier2Threshold   int  // Score threshold to query Tier 2 (default: 30)
-	Tier3Threshold   int  // Score threshold to query Tier 3 (default: 60)
-	EnableCascade    bool // Enable cascade mode (default: true)
-	PriorityCrowdSec bool // v3.57.107: Always query CrowdSec regardless of tier threshold
+	Tier2Threshold         int  // Score threshold to query Tier 2 (default: 30)
+	Tier3Threshold         int  // Score threshold to query Tier 3 (default: 60)
+	EnableCascade          bool // Enable cascade mode (default: true)
+	PriorityCrowdSec       bool // v3.57.116: Query CrowdSec regardless of tier threshold (default: false to save quota)
+	CrowdSecAttacksTrigger int  // v3.57.116: Query CrowdSec if IP has >= N attacks (default: 10)
+}
+
+// CheckOptions provides context for IP checking
+// v3.57.116: Added to pass attack count context
+type CheckOptions struct {
+	AttackCount int // Number of attacks from this IP (triggers CrowdSec if >= threshold)
 }
 
 // AggregationWeights defines the weight of each source in final score
@@ -123,10 +130,11 @@ func DefaultWeights() AggregationWeights {
 // DefaultCascadeConfig returns default cascade thresholds
 func DefaultCascadeConfig() CascadeConfig {
 	return CascadeConfig{
-		Tier2Threshold:   30, // Query Tier 2 if Tier 1 score >= 30
-		Tier3Threshold:   60, // Query Tier 3 if Tier 2 score >= 60
-		EnableCascade:    true,
-		PriorityCrowdSec: true, // v3.57.107: Always query CrowdSec (best data quality)
+		Tier2Threshold:         30, // Query Tier 2 if Tier 1 score >= 30
+		Tier3Threshold:         60, // Query Tier 3 if Tier 2 score >= 60
+		EnableCascade:          true,
+		PriorityCrowdSec:       false, // v3.57.116: Disabled to save CrowdSec quota (50/day)
+		CrowdSecAttacksTrigger: 10,    // v3.57.116: Query CrowdSec if IP has 10+ attacks
 	}
 }
 
@@ -315,6 +323,12 @@ type SourceResult struct {
 
 // CheckIP queries all configured threat intel sources and aggregates results
 func (a *Aggregator) CheckIP(ctx context.Context, ip string) (*AggregatedResult, error) {
+	return a.CheckIPWithOptions(ctx, ip, nil)
+}
+
+// CheckIPWithOptions queries threat intel with additional context
+// v3.57.116: Added to support attack count context for CrowdSec triggering
+func (a *Aggregator) CheckIPWithOptions(ctx context.Context, ip string, opts *CheckOptions) (*AggregatedResult, error) {
 	// Check cache first
 	if cached, found := a.cache.Get(ip); found {
 		cached.CacheHit = true
@@ -336,7 +350,7 @@ func (a *Aggregator) CheckIP(ctx context.Context, ip string) (*AggregatedResult,
 	}
 
 	// Local providers mode
-	result = a.checkIPLocally(ctx, ip)
+	result = a.checkIPLocallyWithOptions(ctx, ip, opts)
 
 	// Cache the result
 	a.cache.Set(ip, result)
@@ -344,10 +358,10 @@ func (a *Aggregator) CheckIP(ctx context.Context, ip string) (*AggregatedResult,
 	return result, nil
 }
 
-// checkIPLocally queries threat intel providers using cascade tiers
+// checkIPLocallyWithOptions queries threat intel providers using cascade tiers
 // v2.9.5: Implements tiered cascade to save API quotas
-// v3.57.107: Added PriorityCrowdSec for always querying CrowdSec
-func (a *Aggregator) checkIPLocally(ctx context.Context, ip string) *AggregatedResult {
+// v3.57.116: Added support for attack count and unknown IP detection
+func (a *Aggregator) checkIPLocallyWithOptions(ctx context.Context, ip string, opts *CheckOptions) *AggregatedResult {
 	result := &AggregatedResult{
 		IP:           ip,
 		LastChecked:  time.Now(),
@@ -356,7 +370,13 @@ func (a *Aggregator) checkIPLocally(ctx context.Context, ip string) *AggregatedR
 	}
 
 	var mu sync.Mutex
-	crowdSecQueried := false // v3.57.107: Track if CrowdSec was already queried
+	crowdSecQueried := false
+
+	// Get attack count from options
+	attackCount := 0
+	if opts != nil {
+		attackCount = opts.AttackCount
+	}
 
 	// =========================================================================
 	// TIER 1: Unlimited providers (always query in parallel)
@@ -364,21 +384,34 @@ func (a *Aggregator) checkIPLocally(ctx context.Context, ip string) *AggregatedR
 	a.queryTier1(ctx, ip, result, &mu)
 
 	// =========================================================================
-	// v3.57.107: PRIORITY CROWDSEC - Query immediately after Tier 1
-	// CrowdSec has unique data (behaviors, MITRE, subnet reputation) that
-	// free Tier 1 providers don't have. Query it regardless of cascade threshold.
+	// v3.57.116: CROWDSEC TRIGGER CONDITIONS
+	// Query CrowdSec if:
+	// 1. PriorityCrowdSec is enabled (always query)
+	// 2. IP has >= CrowdSecAttacksTrigger attacks (default: 10)
+	// 3. IP is unknown (no data from Tier 1 providers)
 	// =========================================================================
-	if a.cascadeConfig.PriorityCrowdSec && a.crowdSec != nil && a.crowdSec.IsConfigured() {
+	tier1HasNoData := a.hasNoTier1Data(result)
+	highAttackCount := attackCount >= a.cascadeConfig.CrowdSecAttacksTrigger && a.cascadeConfig.CrowdSecAttacksTrigger > 0
+
+	shouldQueryCrowdSecEarly := a.cascadeConfig.PriorityCrowdSec || tier1HasNoData || highAttackCount
+
+	if shouldQueryCrowdSecEarly && a.crowdSec != nil && a.crowdSec.IsConfigured() {
 		a.queryCrowdSecPriority(ctx, ip, result, &mu)
 		crowdSecQueried = true
-		log.Printf("[CASCADE] %s: CrowdSec queried via priority mode", ip)
+		if tier1HasNoData {
+			log.Printf("[CASCADE] %s: CrowdSec queried (unknown IP - no Tier1 data)", ip)
+		} else if highAttackCount {
+			log.Printf("[CASCADE] %s: CrowdSec queried (high attack count: %d)", ip, attackCount)
+		} else {
+			log.Printf("[CASCADE] %s: CrowdSec queried via priority mode", ip)
+		}
 	}
 
-	// Calculate intermediate score after Tier 1 (+CrowdSec if priority)
+	// Calculate intermediate score after Tier 1 (+CrowdSec if triggered)
 	tier1Score := a.calculateIntermediateScore(result)
 	hasCriticalIndicators := a.hasCriticalIndicators(result)
 
-	log.Printf("[CASCADE] %s: Tier 1 score=%d, critical=%v", ip, tier1Score, hasCriticalIndicators)
+	log.Printf("[CASCADE] %s: Tier 1 score=%d, critical=%v, attacks=%d, unknown=%v", ip, tier1Score, hasCriticalIndicators, attackCount, tier1HasNoData)
 
 	// =========================================================================
 	// TIER 2: Moderate limits (query if Tier 1 indicates suspicion)
@@ -962,6 +995,20 @@ func (a *Aggregator) calculateIntermediateScore(result *AggregatedResult) int {
 		return int(weightedSum / totalWeight)
 	}
 	return 0
+}
+
+// hasNoTier1Data checks if Tier 1 providers returned no meaningful data about the IP
+// v3.57.116: Used to trigger CrowdSec for unknown IPs
+func (a *Aggregator) hasNoTier1Data(result *AggregatedResult) bool {
+	// Check if any Tier 1 provider has data
+	hasIPSumData := result.IPSum != nil && result.IPSum.InBlocklists
+	hasOTXData := result.OTX != nil && result.OTX.PulseCount > 0
+	hasThreatFoxData := result.ThreatFox != nil && result.ThreatFox.Found
+	hasURLhausData := result.URLhaus != nil && result.URLhaus.Found
+	hasShodanData := result.ShodanIDB != nil && result.ShodanIDB.Found
+
+	// IP is "unknown" if no Tier 1 provider has any data
+	return !hasIPSumData && !hasOTXData && !hasThreatFoxData && !hasURLhausData && !hasShodanData
 }
 
 // hasCriticalIndicators checks for critical indicators that warrant deeper investigation

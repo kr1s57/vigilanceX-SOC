@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/kr1s57/vigilancex/internal/entity"
 	"golang.org/x/crypto/ssh"
 )
@@ -18,11 +20,21 @@ import (
 // SMTPReloadFunc is a callback to reload SMTP configuration
 type SMTPReloadFunc func(host string, port int, security, fromEmail, username, password string, recipients []string)
 
+// SystemWhitelistRepository interface for custom entries
+type SystemWhitelistRepository interface {
+	List(ctx context.Context) ([]entity.CustomSystemWhitelistEntry, error)
+	GetByIP(ctx context.Context, ip string) (*entity.CustomSystemWhitelistEntry, error)
+	Create(ctx context.Context, entry *entity.CustomSystemWhitelistEntry) error
+	Update(ctx context.Context, entry *entity.CustomSystemWhitelistEntry) error
+	Delete(ctx context.Context, id string) error
+}
+
 // ConfigHandler handles configuration management
 type ConfigHandler struct {
-	configPath   string
-	mu           sync.RWMutex
-	onSMTPReload SMTPReloadFunc
+	configPath       string
+	mu               sync.RWMutex
+	onSMTPReload     SMTPReloadFunc
+	sysWhitelistRepo SystemWhitelistRepository
 }
 
 // NewConfigHandler creates a new config handler
@@ -30,6 +42,11 @@ func NewConfigHandler() *ConfigHandler {
 	return &ConfigHandler{
 		configPath: "/app/config/integrations.json",
 	}
+}
+
+// SetSystemWhitelistRepo sets the system whitelist repository for CRUD operations
+func (h *ConfigHandler) SetSystemWhitelistRepo(repo SystemWhitelistRepository) {
+	h.sysWhitelistRepo = repo
 }
 
 // SetSMTPReloadCallback sets the callback for SMTP config reload
@@ -734,22 +751,77 @@ func (h *ConfigHandler) applyConfigToEnv(pluginID string, fields map[string]stri
 	}
 }
 
-// GetSystemWhitelist returns the system whitelist of protected IPs
+// GetSystemWhitelist returns the system whitelist of protected IPs (default + custom)
 // GET /api/v1/config/system-whitelist
 func (h *ConfigHandler) GetSystemWhitelist(w http.ResponseWriter, r *http.Request) {
-	whitelist := entity.DefaultSystemWhitelist()
+	defaultEntries := entity.DefaultSystemWhitelist()
+
+	// Get custom entries if repo is configured
+	var customEntries []entity.CustomSystemWhitelistEntry
+	if h.sysWhitelistRepo != nil {
+		var err error
+		customEntries, err = h.sysWhitelistRepo.List(r.Context())
+		if err != nil {
+			// Log error but continue with default entries only
+			fmt.Printf("[WARN] Failed to fetch custom whitelist: %v\n", err)
+		}
+	}
+
+	// Combine all entries for display
+	type DisplayEntry struct {
+		ID          string `json:"id,omitempty"`
+		IP          string `json:"ip"`
+		Name        string `json:"name"`
+		Provider    string `json:"provider"`
+		Category    string `json:"category"`
+		Description string `json:"description"`
+		IsCustom    bool   `json:"is_custom"`
+	}
+
+	var allEntries []DisplayEntry
+	allIPs := make([]string, 0)
+
+	// Add default entries
+	for _, e := range defaultEntries {
+		allEntries = append(allEntries, DisplayEntry{
+			IP:          e.IP,
+			Name:        e.Name,
+			Provider:    e.Provider,
+			Category:    e.Category,
+			Description: e.Description,
+			IsCustom:    false,
+		})
+		allIPs = append(allIPs, e.IP)
+	}
+
+	// Add custom entries
+	for _, e := range customEntries {
+		allEntries = append(allEntries, DisplayEntry{
+			ID:          e.ID,
+			IP:          e.IP,
+			Name:        e.Name,
+			Provider:    e.Provider,
+			Category:    e.Category,
+			Description: e.Description,
+			IsCustom:    true,
+		})
+		allIPs = append(allIPs, e.IP)
+	}
 
 	// Group by category
-	byCategory := make(map[string][]entity.SystemWhitelistEntry)
-	for _, entry := range whitelist {
+	byCategory := make(map[string][]DisplayEntry)
+	for _, entry := range allEntries {
 		byCategory[entry.Category] = append(byCategory[entry.Category], entry)
 	}
 
 	JSONResponse(w, http.StatusOK, map[string]interface{}{
-		"entries":     whitelist,
-		"by_category": byCategory,
-		"ips":         entity.GetSystemWhitelistIPs(),
-		"count":       len(whitelist),
+		"entries":        allEntries,
+		"by_category":    byCategory,
+		"ips":            allIPs,
+		"count":          len(allEntries),
+		"default_count":  len(defaultEntries),
+		"custom_count":   len(customEntries),
+		"custom_entries": customEntries,
 	})
 }
 
@@ -770,5 +842,168 @@ func (h *ConfigHandler) CheckSystemWhitelist(w http.ResponseWriter, r *http.Requ
 	JSONResponse(w, http.StatusOK, map[string]interface{}{
 		"is_protected": false,
 		"message":      fmt.Sprintf("IP %s is not in the system whitelist", ip),
+	})
+}
+
+// CreateSystemWhitelistEntry creates a new custom system whitelist entry
+// POST /api/v1/config/system-whitelist
+func (h *ConfigHandler) CreateSystemWhitelistEntry(w http.ResponseWriter, r *http.Request) {
+	if h.sysWhitelistRepo == nil {
+		ErrorResponse(w, http.StatusServiceUnavailable, "System whitelist repository not configured", nil)
+		return
+	}
+
+	var req entity.CreateSystemWhitelistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	// Validate required fields
+	if req.IP == "" {
+		ErrorResponse(w, http.StatusBadRequest, "IP address is required", nil)
+		return
+	}
+	if req.Name == "" {
+		ErrorResponse(w, http.StatusBadRequest, "Name is required", nil)
+		return
+	}
+	if req.Category == "" {
+		req.Category = "custom"
+	}
+
+	// Check if IP already exists in default whitelist
+	if entity.IsSystemWhitelisted(req.IP) {
+		ErrorResponse(w, http.StatusConflict, "IP already exists in default system whitelist", nil)
+		return
+	}
+
+	// Check if IP already exists in custom whitelist
+	existing, _ := h.sysWhitelistRepo.GetByIP(r.Context(), req.IP)
+	if existing != nil {
+		ErrorResponse(w, http.StatusConflict, "IP already exists in custom system whitelist", nil)
+		return
+	}
+
+	// Get username from context (set by auth middleware)
+	username := "admin"
+	if user := r.Context().Value("user"); user != nil {
+		if u, ok := user.(map[string]interface{}); ok {
+			if name, ok := u["username"].(string); ok {
+				username = name
+			}
+		}
+	}
+
+	entry := &entity.CustomSystemWhitelistEntry{
+		IP:          req.IP,
+		Name:        req.Name,
+		Provider:    req.Provider,
+		Category:    req.Category,
+		Description: req.Description,
+		CreatedBy:   username,
+		IsCustom:    true,
+	}
+
+	if err := h.sysWhitelistRepo.Create(r.Context(), entry); err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to create entry", err)
+		return
+	}
+
+	JSONResponse(w, http.StatusCreated, map[string]interface{}{
+		"success": true,
+		"message": "System whitelist entry created",
+		"entry":   entry,
+	})
+}
+
+// UpdateSystemWhitelistEntry updates an existing custom system whitelist entry
+// PUT /api/v1/config/system-whitelist/{id}
+func (h *ConfigHandler) UpdateSystemWhitelistEntry(w http.ResponseWriter, r *http.Request) {
+	if h.sysWhitelistRepo == nil {
+		ErrorResponse(w, http.StatusServiceUnavailable, "System whitelist repository not configured", nil)
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		ErrorResponse(w, http.StatusBadRequest, "Entry ID is required", nil)
+		return
+	}
+
+	var req entity.UpdateSystemWhitelistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	// Get existing entry by iterating through custom entries
+	entries, err := h.sysWhitelistRepo.List(r.Context())
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch entries", err)
+		return
+	}
+
+	var existing *entity.CustomSystemWhitelistEntry
+	for _, e := range entries {
+		if e.ID == id {
+			existing = &e
+			break
+		}
+	}
+
+	if existing == nil {
+		ErrorResponse(w, http.StatusNotFound, "Entry not found", nil)
+		return
+	}
+
+	// Update fields
+	if req.Name != "" {
+		existing.Name = req.Name
+	}
+	if req.Provider != "" {
+		existing.Provider = req.Provider
+	}
+	if req.Category != "" {
+		existing.Category = req.Category
+	}
+	if req.Description != "" {
+		existing.Description = req.Description
+	}
+
+	if err := h.sysWhitelistRepo.Update(r.Context(), existing); err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to update entry", err)
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "System whitelist entry updated",
+		"entry":   existing,
+	})
+}
+
+// DeleteSystemWhitelistEntry deletes a custom system whitelist entry
+// DELETE /api/v1/config/system-whitelist/{id}
+func (h *ConfigHandler) DeleteSystemWhitelistEntry(w http.ResponseWriter, r *http.Request) {
+	if h.sysWhitelistRepo == nil {
+		ErrorResponse(w, http.StatusServiceUnavailable, "System whitelist repository not configured", nil)
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		ErrorResponse(w, http.StatusBadRequest, "Entry ID is required", nil)
+		return
+	}
+
+	if err := h.sysWhitelistRepo.Delete(r.Context(), id); err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Failed to delete entry", err)
+		return
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "System whitelist entry deleted",
 	})
 }

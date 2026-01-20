@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Shield, ShieldCheck, Eye, Plus, Trash2, Search, RefreshCw, Clock, Tag, Server, Globe } from 'lucide-react'
-import { softWhitelistApi, configApi, SystemWhitelistEntry } from '@/lib/api'
+import { Shield, ShieldCheck, Eye, Plus, Trash2, Search, RefreshCw, Clock, Tag, Server, Globe, Pencil, X, Loader2 } from 'lucide-react'
+import { softWhitelistApi, configApi, SystemWhitelistEntry, CustomSystemWhitelistEntry, CreateSystemWhitelistRequest } from '@/lib/api'
 import type { WhitelistEntry, WhitelistStats, WhitelistCheckResult, WhitelistRequest } from '@/types'
+import { cn } from '@/lib/utils'
 
 export function SoftWhitelist() {
   const [stats, setStats] = useState<WhitelistStats | null>(null)
@@ -14,8 +15,22 @@ export function SoftWhitelist() {
   const [systemWhitelist, setSystemWhitelist] = useState<{
     entries: SystemWhitelistEntry[]
     by_category: Record<string, SystemWhitelistEntry[]>
+    custom_entries?: CustomSystemWhitelistEntry[]
   } | null>(null)
   const [showSystemIPs, setShowSystemIPs] = useState(false)
+
+  // v3.57.117: Custom system whitelist modal
+  const [showSystemModal, setShowSystemModal] = useState(false)
+  const [systemModalMode, setSystemModalMode] = useState<'add' | 'edit'>('add')
+  const [systemModalLoading, setSystemModalLoading] = useState(false)
+  const [editingSystemEntry, setEditingSystemEntry] = useState<CustomSystemWhitelistEntry | null>(null)
+  const [newSystemEntry, setNewSystemEntry] = useState<CreateSystemWhitelistRequest>({
+    ip: '',
+    name: '',
+    provider: '',
+    category: 'custom',
+    description: '',
+  })
 
   // Add entry modal
   const [showAddModal, setShowAddModal] = useState(false)
@@ -41,11 +56,70 @@ export function SoftWhitelist() {
   }, [filterType])
 
   // Load system whitelist on mount
+  const loadSystemWhitelist = async () => {
+    try {
+      const data = await configApi.getSystemWhitelist()
+      setSystemWhitelist(data)
+    } catch (err) {
+      console.error('Failed to load system whitelist:', err)
+    }
+  }
+
   useEffect(() => {
-    configApi.getSystemWhitelist()
-      .then(setSystemWhitelist)
-      .catch(err => console.error('Failed to load system whitelist:', err))
+    loadSystemWhitelist()
   }, [])
+
+  // v3.57.117: System whitelist CRUD functions
+  const handleOpenAddSystemEntry = () => {
+    setNewSystemEntry({ ip: '', name: '', provider: '', category: 'custom', description: '' })
+    setEditingSystemEntry(null)
+    setSystemModalMode('add')
+    setShowSystemModal(true)
+  }
+
+  const handleOpenEditSystemEntry = (entry: CustomSystemWhitelistEntry) => {
+    setNewSystemEntry({
+      ip: entry.ip,
+      name: entry.name,
+      provider: entry.provider,
+      category: entry.category,
+      description: entry.description,
+    })
+    setEditingSystemEntry(entry)
+    setSystemModalMode('edit')
+    setShowSystemModal(true)
+  }
+
+  const handleSaveSystemEntry = async () => {
+    if (!newSystemEntry.ip || !newSystemEntry.name) return
+
+    setSystemModalLoading(true)
+    try {
+      if (systemModalMode === 'add') {
+        await configApi.createSystemWhitelist(newSystemEntry)
+      } else if (editingSystemEntry) {
+        await configApi.updateSystemWhitelist(editingSystemEntry.id, newSystemEntry)
+      }
+      await loadSystemWhitelist()
+      setShowSystemModal(false)
+    } catch (err) {
+      console.error('Failed to save system whitelist entry:', err)
+      alert('Failed to save entry. Check if the IP already exists.')
+    } finally {
+      setSystemModalLoading(false)
+    }
+  }
+
+  const handleDeleteSystemEntry = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this protected IP?')) return
+
+    try {
+      await configApi.deleteSystemWhitelist(id)
+      await loadSystemWhitelist()
+    } catch (err) {
+      console.error('Failed to delete system whitelist entry:', err)
+    }
+  }
 
   const loadData = async () => {
     try {
@@ -457,26 +531,79 @@ export function SoftWhitelist() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setShowSystemIPs(!showSystemIPs)}
-            className="px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
-          >
-            {showSystemIPs ? 'Hide' : 'Show'} ({systemWhitelist?.entries.length || 0} IPs)
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleOpenAddSystemEntry}
+              className="px-3 py-1.5 text-sm bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 rounded-lg transition-colors flex items-center gap-1"
+            >
+              <Plus className="w-4 h-4" />
+              Add Custom IP
+            </button>
+            <button
+              onClick={() => setShowSystemIPs(!showSystemIPs)}
+              className="px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+            >
+              {showSystemIPs ? 'Hide' : 'Show'} ({systemWhitelist?.entries.length || 0} IPs)
+            </button>
+          </div>
         </div>
 
         {showSystemIPs && systemWhitelist && (
           <div className="p-4">
-            {Object.entries(systemWhitelist.by_category).map(([category, ips]) => (
+            {/* Custom entries section first (v3.57.117) */}
+            {systemWhitelist.custom_entries && systemWhitelist.custom_entries.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-muted-foreground mb-2 capitalize flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  CUSTOM ({systemWhitelist.custom_entries.length})
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {systemWhitelist.custom_entries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center gap-3 p-2 bg-cyan-500/10 border border-cyan-500/30 rounded-lg group"
+                    >
+                      <code className="text-sm font-mono text-cyan-400">{entry.ip}</code>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{entry.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{entry.provider || entry.category}</p>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleOpenEditSystemEntry(entry)}
+                          className="p-1 hover:bg-cyan-500/20 rounded transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3 h-3 text-cyan-400" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSystemEntry(entry.id)}
+                          className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3 h-3 text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Default entries by category */}
+            {Object.entries(systemWhitelist.by_category)
+              .filter(([category]) => category !== 'custom')
+              .map(([category, ips]) => (
               <div key={category} className="mb-4 last:mb-0">
                 <h4 className="text-sm font-medium text-muted-foreground mb-2 capitalize flex items-center gap-2">
                   {category === 'dns' && <Globe className="w-4 h-4" />}
                   {category === 'cloud' && <Server className="w-4 h-4" />}
                   {category === 'monitoring' && <Eye className="w-4 h-4" />}
-                  {category.toUpperCase()} ({ips.length})
+                  {category === 'security' && <Shield className="w-4 h-4" />}
+                  {category.toUpperCase()} ({ips.filter(ip => !ip.is_custom).length})
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {ips.map((ip) => (
+                  {ips.filter(ip => !ip.is_custom).map((ip) => (
                     <div
                       key={ip.ip}
                       className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg"
@@ -497,6 +624,110 @@ export function SoftWhitelist() {
           </div>
         )}
       </div>
+
+      {/* System Whitelist Modal (v3.57.117) */}
+      {showSystemModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">
+                {systemModalMode === 'add' ? 'Add Protected IP' : 'Edit Protected IP'}
+              </h2>
+              <button
+                onClick={() => setShowSystemModal(false)}
+                className="p-1 hover:bg-muted rounded transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">IP Address *</label>
+                <input
+                  type="text"
+                  value={newSystemEntry.ip}
+                  onChange={(e) => setNewSystemEntry({ ...newSystemEntry, ip: e.target.value })}
+                  placeholder="192.168.1.1"
+                  disabled={systemModalMode === 'edit'}
+                  className={cn(
+                    "w-full px-3 py-2 bg-background border border-border rounded-lg",
+                    systemModalMode === 'edit' && "opacity-50 cursor-not-allowed"
+                  )}
+                />
+                {systemModalMode === 'edit' && (
+                  <p className="text-xs text-muted-foreground mt-1">IP cannot be changed. Delete and recreate if needed.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Name *</label>
+                <input
+                  type="text"
+                  value={newSystemEntry.name}
+                  onChange={(e) => setNewSystemEntry({ ...newSystemEntry, name: e.target.value })}
+                  placeholder="My Server"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Provider</label>
+                <input
+                  type="text"
+                  value={newSystemEntry.provider}
+                  onChange={(e) => setNewSystemEntry({ ...newSystemEntry, provider: e.target.value })}
+                  placeholder="AWS, Azure, Custom..."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Category</label>
+                <select
+                  value={newSystemEntry.category}
+                  onChange={(e) => setNewSystemEntry({ ...newSystemEntry, category: e.target.value })}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                >
+                  <option value="custom">Custom</option>
+                  <option value="dns">DNS</option>
+                  <option value="cloud">Cloud</option>
+                  <option value="monitoring">Monitoring</option>
+                  <option value="security">Security</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <input
+                  type="text"
+                  value={newSystemEntry.description}
+                  onChange={(e) => setNewSystemEntry({ ...newSystemEntry, description: e.target.value })}
+                  placeholder="Additional details..."
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowSystemModal(false)}
+                className="px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveSystemEntry}
+                disabled={systemModalLoading || !newSystemEntry.ip || !newSystemEntry.name}
+                className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {systemModalLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {systemModalMode === 'add' ? 'Add' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Entry Modal */}
       {showAddModal && (

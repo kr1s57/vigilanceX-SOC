@@ -1045,3 +1045,454 @@
 .futuristic .admin-console-modal .bg-zinc-950 {
   background: rgba(5, 10, 20, 0.95) !important;
 }
+
+/* =============================================================================
+   v3.57.116: MIDNIGHT THEME - Modern Purple/Violet Dark Aesthetic
+   ============================================================================= */
+
+/* Midnight theme color variables */
+.midnight {
+  /* Base colors - Deep purple-tinted black */
+  --background: 250 20% 4%;
+  --foreground: 270 20% 95%;
+
+  /* Card surfaces - Slightly elevated with purple tint */
+  --card: 250 25% 7%;
+  --card-foreground: 270 20% 95%;
+
+  /* Popover/Modal */
+  --popover: 250 25% 9%;
+  --popover-foreground: 270 20% 95%;
+
+  /* Primary - Violet accent */
+  --primary: 270 76% 55%;
+  --primary-foreground: 270 20% 98%;
+
+  /* Secondary - Deep purple */
+  --secondary: 280 50% 25%;
+  --secondary-foreground: 270 20% 95%;
+
+  /* Muted - Subtle purple backgrounds */
+  --muted: 250 20% 12%;
+  --muted-foreground: 270 15% 60%;
+
+  /* Accent - Magenta/Pink accent */
+  --accent: 320 70% 50%;
+  --accent-foreground: 270 20% 98%;
+
+  /* Destructive - Bright red */
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 270 20% 98%;
+
+  /* Borders - Subtle purple glow */
+  --border: 250 25% 15%;
+  --input: 250 25% 12%;
+  --ring: 270 76% 55%;
+
+  /* Extended midnight palette */
+  --midnight-purple: 270 76% 55%;
+  --midnight-violet: 280 65% 50%;
+  --midnight-magenta: 320 70% 50%;
+  --midnight-blue: 240 60% 50%;
+  --midnight-indigo: 260 70% 45%;
+}
+
+/* Midnight body enhancements */
+.midnight body {
+  background-image:
+    radial-gradient(ellipse at top, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(236, 72, 153, 0.02) 0%, transparent 50%);
+}
+
+/* =============================================================================
+   MIDNIGHT GLOW EFFECTS
+   ============================================================================= */
+
+/* Neon text effects for midnight */
+.midnight-text-glow {
+  color: #a78bfa;
+  text-shadow:
+    0 0 7px rgba(167, 139, 250, 0.6),
+    0 0 14px rgba(167, 139, 250, 0.4),
+    0 0 21px rgba(167, 139, 250, 0.2);
+}
+
+/* Neon border effects for midnight */
+.midnight-border-glow {
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  box-shadow:
+    0 0 8px rgba(139, 92, 246, 0.2),
+    inset 0 0 8px rgba(139, 92, 246, 0.05);
+}
+
+/* =============================================================================
+   MIDNIGHT SEVERITY BADGES
+   ============================================================================= */
+
+.midnight .severity-critical {
+  @apply bg-red-500/15 text-red-400 border border-red-500/40;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.15);
+}
+
+.midnight .severity-high {
+  @apply bg-orange-500/15 text-orange-400 border border-orange-500/40;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.15);
+}
+
+.midnight .severity-medium {
+  @apply bg-yellow-500/15 text-yellow-400 border border-yellow-500/40;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.15);
+}
+
+.midnight .severity-low {
+  @apply bg-violet-500/15 text-violet-400 border border-violet-500/40;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
+}
+
+/* =============================================================================
+   MIDNIGHT DATA TABLE
+   ============================================================================= */
+
+.midnight .data-table th {
+  @apply px-4 py-3 text-left font-medium text-violet-400/80 bg-violet-500/5;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.midnight .data-table td {
+  @apply px-4 py-3;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.05);
+}
+
+.midnight .data-table tr:hover td {
+  background: rgba(139, 92, 246, 0.05);
+}
+
+/* =============================================================================
+   MIDNIGHT GLASSMORPHISM
+   ============================================================================= */
+
+.glass-midnight {
+  background: linear-gradient(
+    135deg,
+    rgba(17, 12, 30, 0.85) 0%,
+    rgba(17, 12, 30, 0.5) 100%
+  );
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 0 0 20px rgba(139, 92, 246, 0.02);
+}
+
+/* =============================================================================
+   MIDNIGHT CARDS
+   ============================================================================= */
+
+.card-midnight {
+  @apply rounded-xl p-6;
+  background: linear-gradient(
+    135deg,
+    rgba(17, 12, 30, 0.95) 0%,
+    rgba(17, 12, 30, 0.75) 100%
+  );
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  transition: all 0.3s ease;
+}
+
+.card-midnight:hover {
+  border-color: rgba(139, 92, 246, 0.25);
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(139, 92, 246, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transform: translateY(-2px);
+}
+
+/* =============================================================================
+   MIDNIGHT BUTTONS
+   ============================================================================= */
+
+.btn-midnight {
+  @apply relative px-6 py-2.5 font-medium rounded-lg overflow-hidden;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(236, 72, 153, 0.15) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #a78bfa;
+  transition: all 0.3s ease;
+}
+
+.btn-midnight:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(236, 72, 153, 0.2) 100%);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.25);
+  transform: translateY(-2px);
+}
+
+.btn-midnight-primary {
+  @apply relative px-6 py-2.5 font-semibold rounded-lg overflow-hidden;
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: white;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.35);
+  transition: all 0.3s ease;
+}
+
+.btn-midnight-primary:hover {
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.5), 0 0 60px rgba(139, 92, 246, 0.2);
+  transform: translateY(-2px);
+}
+
+/* =============================================================================
+   MIDNIGHT SCROLLBAR
+   ============================================================================= */
+
+.midnight ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.midnight ::-webkit-scrollbar-track {
+  background: rgba(17, 12, 30, 0.5);
+}
+
+.midnight ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.4), rgba(236, 72, 153, 0.3));
+  border-radius: 3px;
+}
+
+.midnight ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.6), rgba(236, 72, 153, 0.5));
+}
+
+/* =============================================================================
+   MIDNIGHT THEME - AUTO-APPLIED STYLES
+   ============================================================================= */
+
+/* Header enhancement */
+.midnight header {
+  background: linear-gradient(180deg, rgba(17, 12, 30, 0.95) 0%, rgba(17, 12, 30, 0.8) 100%);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.12);
+  backdrop-filter: blur(12px);
+}
+
+.midnight header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(139, 92, 246, 0.4) 50%, transparent 100%);
+}
+
+/* Sidebar enhancement */
+.midnight aside,
+.midnight nav[class*="sidebar"],
+.midnight div[class*="sidebar"] {
+  background: linear-gradient(180deg, rgba(17, 12, 30, 0.98) 0%, rgba(12, 8, 24, 0.95) 100%);
+  border-right: 1px solid rgba(139, 92, 246, 0.08);
+}
+
+/* Card enhancements */
+.midnight [class*="rounded-xl"][class*="border"][class*="bg-card"],
+.midnight [class*="rounded-lg"][class*="border"][class*="bg-card"] {
+  background: linear-gradient(135deg, rgba(17, 12, 30, 0.95) 0%, rgba(17, 12, 30, 0.75) 100%);
+  border-color: rgba(139, 92, 246, 0.08);
+  transition: all 0.3s ease;
+}
+
+.midnight [class*="rounded-xl"][class*="border"][class*="bg-card"]:hover,
+.midnight [class*="rounded-lg"][class*="border"][class*="bg-card"]:hover {
+  border-color: rgba(139, 92, 246, 0.2);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.06);
+}
+
+/* Status badges with glow */
+.midnight [class*="bg-green-500/10"] {
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
+}
+
+.midnight [class*="bg-red-500/10"] {
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.2);
+}
+
+.midnight [class*="bg-violet-500/10"],
+.midnight [class*="bg-purple-500/10"] {
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.2);
+}
+
+/* Enhanced buttons */
+.midnight button[class*="bg-primary"],
+.midnight button[class*="bg-violet"],
+.midnight button[class*="bg-purple"] {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, rgba(124, 58, 237, 0.9) 100%);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+  transition: all 0.3s ease;
+}
+
+.midnight button[class*="bg-primary"]:hover,
+.midnight button[class*="bg-violet"]:hover,
+.midnight button[class*="bg-purple"]:hover {
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Input fields */
+.midnight input:not([type="checkbox"]):not([type="radio"]),
+.midnight textarea,
+.midnight select {
+  background: rgba(17, 12, 30, 0.8);
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  transition: all 0.2s ease;
+}
+
+.midnight input:not([type="checkbox"]):not([type="radio"]):focus,
+.midnight textarea:focus,
+.midnight select:focus {
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1), 0 0 15px rgba(139, 92, 246, 0.08);
+}
+
+/* Modal/Dialog enhancements */
+.midnight [role="dialog"],
+.midnight [class*="modal"],
+.midnight [class*="Dialog"] {
+  background: linear-gradient(135deg, rgba(17, 12, 30, 0.98) 0%, rgba(12, 8, 24, 0.95) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.08),
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(139, 92, 246, 0.04);
+}
+
+/* Dropdown menus */
+.midnight [role="menu"],
+.midnight [class*="dropdown"],
+.midnight [class*="popover"] {
+  background: linear-gradient(180deg, rgba(22, 16, 38, 0.98) 0%, rgba(17, 12, 30, 0.95) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Tabs styling */
+.midnight [role="tablist"] button[data-state="active"] {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(236, 72, 153, 0.08) 100%);
+  border-color: rgba(139, 92, 246, 0.35);
+  color: #a78bfa;
+}
+
+/* Progress bars */
+.midnight [role="progressbar"] > div,
+.midnight [class*="progress"] > div {
+  background: linear-gradient(90deg, #8b5cf6, #ec4899);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+}
+
+/* Table header enhancement */
+.midnight th,
+.midnight thead tr {
+  background: rgba(139, 92, 246, 0.04);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.08);
+}
+
+.midnight th {
+  color: rgba(167, 139, 250, 0.8);
+  font-weight: 500;
+}
+
+/* Table row hover */
+.midnight tbody tr:hover {
+  background: rgba(139, 92, 246, 0.04);
+}
+
+/* Charts - Recharts customization */
+.midnight .recharts-cartesian-grid line {
+  stroke: rgba(139, 92, 246, 0.08);
+}
+
+.midnight .recharts-text {
+  fill: rgba(167, 139, 250, 0.6);
+}
+
+/* Tooltip styling */
+.midnight .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: rgba(17, 12, 30, 0.95) !important;
+  border: 1px solid rgba(139, 92, 246, 0.15) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Navigation links */
+.midnight a[class*="text-muted"]:hover {
+  color: #a78bfa;
+  text-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+
+/* Active navigation item */
+.midnight a[class*="bg-primary/10"],
+.midnight [class*="active"][class*="bg"] {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.12) 0%, transparent 100%);
+  border-left: 2px solid #8b5cf6;
+}
+
+/* Select dropdown trigger */
+.midnight [class*="SelectTrigger"],
+.midnight button[role="combobox"] {
+  background: rgba(17, 12, 30, 0.8);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.midnight [class*="SelectTrigger"]:hover,
+.midnight button[role="combobox"]:hover {
+  border-color: rgba(139, 92, 246, 0.35);
+}
+
+/* Code/Pre elements */
+.midnight pre,
+.midnight code {
+  background: rgba(12, 8, 24, 0.8);
+  border: 1px solid rgba(139, 92, 246, 0.08);
+}
+
+/* Leaflet map styling for midnight theme */
+.midnight .leaflet-container {
+  background: #0a0812;
+}
+
+.midnight .leaflet-tile-pane {
+  filter: brightness(0.55) saturate(1.1) hue-rotate(260deg);
+}
+
+.midnight .leaflet-popup-content-wrapper {
+  background: linear-gradient(135deg, rgba(17, 12, 30, 0.95) 0%, rgba(12, 8, 24, 0.9) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.midnight .leaflet-popup-tip {
+  background: rgba(17, 12, 30, 0.95);
+}
+
+/* Separator lines */
+.midnight hr,
+.midnight [class*="separator"],
+.midnight [class*="border-b"] {
+  border-color: rgba(139, 92, 246, 0.08);
+}
+
+/* Logo/Brand text enhancement */
+.midnight h1[class*="font-bold"],
+.midnight [class*="logo"] {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Stat numbers enhancement */
+.midnight [class*="text-3xl"][class*="font-bold"],
+.midnight [class*="text-4xl"][class*="font-bold"] {
+  color: #a78bfa;
+  text-shadow: 0 0 20px rgba(139, 92, 246, 0.25);
+}

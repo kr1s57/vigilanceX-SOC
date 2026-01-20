@@ -13,7 +13,6 @@ import {
   Activity,
   FileText,
   Settings,
-  Users,
   LogOut,
   LucideIcon,
   Key,
@@ -105,8 +104,16 @@ const categories: NavCategory[] = [
   },
 ]
 
+// v3.57.116: Get icon class based on style
+function getIconClass(iconStyle: 'mono' | 'color' | 'cyber', colorClass: string, isActive: boolean): string {
+  if (isActive) return '' // Active items use primary color from parent
+  if (iconStyle === 'color') return colorClass
+  if (iconStyle === 'cyber') return 'text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.5)]'
+  return '' // mono
+}
+
 // Composant pour afficher un item de navigation simple
-function NavItemComponent({ item, useColorIcons }: { item: NavItem; useColorIcons: boolean }) {
+function NavItemComponent({ item, iconStyle }: { item: NavItem; iconStyle: 'mono' | 'color' | 'cyber' }) {
   return (
     <NavLink
       to={item.href}
@@ -124,7 +131,7 @@ function NavItemComponent({ item, useColorIcons }: { item: NavItem; useColorIcon
           <item.icon
             className={cn(
               'w-5 h-5 transition-colors',
-              useColorIcons && !isActive ? item.colorClass : ''
+              getIconClass(iconStyle, item.colorClass, isActive)
             )}
           />
           {item.name}
@@ -139,13 +146,13 @@ function CategoryItem({
   category,
   isOpen,
   onToggle,
-  useColorIcons,
+  iconStyle,
   isAdmin,
 }: {
   category: NavCategory
   isOpen: boolean
   onToggle: () => void
-  useColorIcons: boolean
+  iconStyle: 'mono' | 'color' | 'cyber'
   isAdmin: boolean
 }) {
   const location = useLocation()
@@ -173,7 +180,7 @@ function CategoryItem({
         <category.icon
           className={cn(
             'w-5 h-5 transition-colors',
-            useColorIcons ? category.colorClass : ''
+            getIconClass(iconStyle, category.colorClass, hasActiveChild)
           )}
         />
         <span className="flex-1 text-left">{category.name}</span>
@@ -211,7 +218,7 @@ function CategoryItem({
                   <item.icon
                     className={cn(
                       'w-4 h-4 transition-colors',
-                      useColorIcons && !isActive ? item.colorClass : ''
+                      getIconClass(iconStyle, item.colorClass, isActive)
                     )}
                   />
                   {item.name}
@@ -231,7 +238,6 @@ export function Sidebar() {
   const { settings } = useSettings()
   const { user, isAdmin, logout } = useAuth()
   const { status: licenseStatus, isLicensed } = useLicense()
-  const useColorIcons = settings.iconStyle === 'color'
 
   // State pour tracker les catégories ouvertes
   const [openCategories, setOpenCategories] = useState<Set<string>>(() => {
@@ -300,7 +306,7 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {/* Items standalone (Dashboard) */}
         {standaloneItems.map((item) => (
-          <NavItemComponent key={item.href} item={item} useColorIcons={useColorIcons} />
+          <NavItemComponent key={item.href} item={item} iconStyle={settings.iconStyle} />
         ))}
 
         {/* Séparateur visuel */}
@@ -313,7 +319,7 @@ export function Sidebar() {
             category={category}
             isOpen={openCategories.has(category.name)}
             onToggle={() => toggleCategory(category.name)}
-            useColorIcons={useColorIcons}
+            iconStyle={settings.iconStyle}
             isAdmin={isAdmin}
           />
         ))}
@@ -378,32 +384,7 @@ export function Sidebar() {
           )
         })()}
 
-        {/* Users - Admin only */}
-        {isAdmin && (
-          <NavLink
-            to="/users"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Users
-                  className={cn(
-                    'w-5 h-5 transition-colors',
-                    useColorIcons && !isActive ? 'text-sky-500' : ''
-                  )}
-                />
-                Users
-              </>
-            )}
-          </NavLink>
-        )}
+        {/* v3.57.117: Users moved to Settings tab */}
 
         {/* Settings - Admin only */}
         {isAdmin && (
@@ -423,7 +404,7 @@ export function Sidebar() {
                 <Settings
                   className={cn(
                     'w-5 h-5 transition-colors',
-                    useColorIcons && !isActive ? 'text-gray-400' : ''
+                    getIconClass(settings.iconStyle, 'text-gray-400', isActive)
                   )}
                 />
                 Settings

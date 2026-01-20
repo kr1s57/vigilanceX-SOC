@@ -370,14 +370,16 @@ func (c *GeoZoneConfig) ClassifyCountry(countryCode string) string {
 }
 
 // PendingBan represents a ban awaiting admin approval (D2B v2)
+// v3.57.116: Changed ThreatScore and EventCount to int32 for ClickHouse compatibility
+// v3.57.118: Added PendingType to distinguish country_policy vs false_positive
 type PendingBan struct {
 	ID            string     `json:"id" ch:"id"`
 	IP            string     `json:"ip" ch:"ip"`
 	Country       string     `json:"country" ch:"country"`
 	GeoZone       string     `json:"geo_zone" ch:"geo_zone"`
-	ThreatScore   int        `json:"threat_score" ch:"threat_score"`
+	ThreatScore   int32      `json:"threat_score" ch:"threat_score"`
 	ThreatSources []string   `json:"threat_sources" ch:"threat_sources"`
-	EventCount    int        `json:"event_count" ch:"event_count"`
+	EventCount    uint32     `json:"event_count" ch:"event_count"`
 	FirstEvent    time.Time  `json:"first_event" ch:"first_event"`
 	LastEvent     time.Time  `json:"last_event" ch:"last_event"`
 	TriggerRule   string     `json:"trigger_rule" ch:"trigger_rule"`
@@ -387,15 +389,35 @@ type PendingBan struct {
 	ReviewedAt    *time.Time `json:"reviewed_at" ch:"reviewed_at"`
 	ReviewedBy    string     `json:"reviewed_by" ch:"reviewed_by"`
 	ReviewNote    string     `json:"review_note" ch:"review_note"`
+	// v3.57.118: False Positive detection fields
+	PendingType  string `json:"pending_type" ch:"pending_type"`     // country_policy, false_positive
+	FPRuleID     string `json:"fp_rule_id" ch:"fp_rule_id"`         // Rule ID causing false positive
+	FPURI        string `json:"fp_uri" ch:"fp_uri"`                 // URI pattern causing false positive
+	FPHostname   string `json:"fp_hostname" ch:"fp_hostname"`       // Target hostname
+	FPMatchCount uint32 `json:"fp_match_count" ch:"fp_match_count"` // Identical pattern occurrences
 }
 
+// PendingType constants (v3.57.118)
+const (
+	PendingTypeCountryPolicy = "country_policy" // From authorized country requiring approval
+	PendingTypeFalsePositive = "false_positive" // Detected as potential false positive
+)
+
+// False positive detection threshold (v3.57.118)
+// If same IP triggers 10+ identical attacks (same rule_id + same URI), it's likely a FP
+const FalsePositiveThreshold = 10
+
 // PendingBanStats for dashboard widgets
+// v3.57.117: Changed to uint64 for ClickHouse count() compatibility
+// v3.57.118: Added FalsePositiveCount for FP detection
 type PendingBanStats struct {
-	TotalPending  int        `json:"total_pending"`
-	HighThreat    int        `json:"high_threat"`   // Score >= 70
-	MediumThreat  int        `json:"medium_threat"` // Score 30-69
-	LowThreat     int        `json:"low_threat"`    // Score < 30
-	OldestPending *time.Time `json:"oldest_pending"`
+	TotalPending       uint64     `json:"total_pending"`
+	HighThreat         uint64     `json:"high_threat"`   // Score >= 70
+	MediumThreat       uint64     `json:"medium_threat"` // Score 30-69
+	LowThreat          uint64     `json:"low_threat"`    // Score < 30
+	OldestPending      *time.Time `json:"oldest_pending"`
+	FalsePositiveCount uint64     `json:"false_positive_count"` // v3.57.118: FP detections
+	CountryPolicyCount uint64     `json:"country_policy_count"` // v3.57.118: Country policy detections
 }
 
 // ============================================================================

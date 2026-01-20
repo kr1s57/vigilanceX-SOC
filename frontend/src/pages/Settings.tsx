@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Settings as SettingsIcon,
   Monitor,
@@ -33,7 +34,6 @@ import {
   Palette,
   ChevronDown,
   ChevronUp,
-  ChevronsUpDown,
   Mail,
   Send,
   MapPin,
@@ -45,6 +45,22 @@ import {
   Sparkles,
   Copy,
 } from 'lucide-react'
+
+// v3.57.117: Lazy load UserManagement for tab integration
+const UserManagementContent = lazy(() => import('@/pages/UserManagement'))
+
+// v3.57.117: Settings tabs
+type SettingsTab = 'general' | 'notifications' | 'security' | 'data' | 'integrations' | 'license' | 'users'
+
+const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
+  { id: 'general', label: 'General', icon: <Monitor className="w-4 h-4" /> },
+  { id: 'notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" /> },
+  { id: 'security', label: 'Security', icon: <Shield className="w-4 h-4" /> },
+  { id: 'data', label: 'Data', icon: <Database className="w-4 h-4" /> },
+  { id: 'integrations', label: 'Integrations', icon: <Plug className="w-4 h-4" /> },
+  { id: 'license', label: 'License', icon: <Key className="w-4 h-4" /> },
+  { id: 'users', label: 'Users', icon: <Users className="w-4 h-4" />, adminOnly: true },
+]
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, retentionApi, integrationsApi, crowdsecBlocklistApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig, type RetentionSettings, type StorageStats, type APIProviderStatus, type CrowdSecBlocklistConfig } from '@/lib/api'
@@ -196,6 +212,20 @@ const defaultPluginConfigs: PluginConfig[] = [
 export function Settings() {
   const { settings, updateSettings, resetSettings } = useSettings()
   const { isAdmin } = useAuth()
+
+  // v3.57.117: Tab navigation with URL sync
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab') as SettingsTab | null
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    tabParam && SETTINGS_TABS.some(t => t.id === tabParam) ? tabParam : 'general'
+  )
+
+  // Sync tab with URL
+  const handleTabChange = (tab: SettingsTab) => {
+    setActiveTab(tab)
+    setSearchParams({ tab })
+  }
+
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
   const [loadingIntegrations, setLoadingIntegrations] = useState(true)
   const [saved, setSaved] = useState(false)
@@ -256,14 +286,7 @@ export function Settings() {
     }))
   }
 
-  const toggleAllSections = (collapse: boolean) => {
-    const sections = ['display', 'dashboard', 'notifications', 'email_notifications', 'security', 'geozone', 'license', 'integrations']
-    setCollapsedSections(
-      sections.reduce((acc, section) => ({ ...acc, [section]: collapse }), {})
-    )
-  }
-
-  const allCollapsed = Object.values(collapsedSections).every(Boolean)
+  // v3.57.117: Removed toggleAllSections and allCollapsed - no longer needed with tab navigation
 
   // Plugin editor state
   const [editingPlugin, setEditingPlugin] = useState<PluginConfig | null>(null)
@@ -893,7 +916,7 @@ export function Settings() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -910,24 +933,45 @@ export function Settings() {
               Saved
             </span>
           )}
-          <button
-            onClick={() => toggleAllSections(!allCollapsed)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
-          >
-            <ChevronsUpDown className="w-4 h-4" />
-            {allCollapsed ? 'Expand all' : 'Collapse all'}
-          </button>
-          <button
-            onClick={resetSettings}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset to defaults
-          </button>
+          {activeTab !== 'users' && (
+            <button
+              onClick={resetSettings}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset to defaults
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Display Settings */}
+      {/* v3.57.117: Tab Navigation */}
+      <div className="border-b border-border">
+        <nav className="flex gap-1 overflow-x-auto pb-px" aria-label="Settings tabs">
+          {SETTINGS_TABS.filter(tab => !tab.adminOnly || isAdmin).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+                activeTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/50'
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      <div className="max-w-4xl">
+        {/* GENERAL TAB: Display + Dashboard Settings */}
+        {activeTab === 'general' && (
+          <>
+            {/* Display Settings */}
       <SettingsSection
         title="Display"
         description="Appearance and formatting preferences"
@@ -947,6 +991,7 @@ export function Settings() {
             options={[
               { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
               { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
+              { value: 'midnight', label: 'Midnight', icon: <Moon className="w-4 h-4" /> },
               { value: 'futuristic', label: 'Cyber', icon: <Sparkles className="w-4 h-4" /> },
               { value: 'system', label: 'System', icon: <Laptop className="w-4 h-4" /> },
             ]}
@@ -981,6 +1026,7 @@ export function Settings() {
             options={[
               { value: 'mono', label: 'Monochrome' },
               { value: 'color', label: 'Color' },
+              { value: 'cyber', label: 'Cyber' },
             ]}
           />
         </SettingRow>
@@ -1028,6 +1074,7 @@ export function Settings() {
             onChange={(v) => handleChange('defaultPeriod', v as AppSettings['defaultPeriod'])}
             options={[
               { value: '1h', label: '1h' },
+              { value: '8h', label: '8h' },
               { value: '24h', label: '24h' },
               { value: '7d', label: '7d' },
               { value: '30d', label: '30d' },
@@ -1126,15 +1173,20 @@ export function Settings() {
           />
         </SettingRow>
       </SettingsSection>
+          </>
+        )}
 
-      {/* Notifications Settings */}
-      <SettingsSection
-        title="Notifications"
-        description="Alert and notification preferences"
-        icon={<Bell className="w-5 h-5" />}
-        isCollapsed={collapsedSections['notifications']}
-        onToggle={() => toggleSection('notifications')}
-      >
+        {/* NOTIFICATIONS TAB */}
+        {activeTab === 'notifications' && (
+          <>
+            {/* Notifications Settings */}
+            <SettingsSection
+              title="Notifications"
+              description="Alert and notification preferences"
+              icon={<Bell className="w-5 h-5" />}
+              isCollapsed={collapsedSections['notifications']}
+              onToggle={() => toggleSection('notifications')}
+            >
         {/* Notifications Enabled */}
         <SettingRow
           label="Enable notifications"
@@ -1464,16 +1516,21 @@ export function Settings() {
             </SettingRow>
           </>
         )}
-      </SettingsSection>
+            </SettingsSection>
+          </>
+        )}
 
-      {/* Security Settings */}
-      <SettingsSection
-        title="Security & Privacy"
-        description="Security and data display options"
-        icon={<Shield className="w-5 h-5" />}
-        isCollapsed={collapsedSections['security']}
-        onToggle={() => toggleSection('security')}
-      >
+        {/* SECURITY TAB */}
+        {activeTab === 'security' && (
+          <>
+            {/* Security Settings */}
+            <SettingsSection
+              title="Security & Privacy"
+              description="Security and data display options"
+              icon={<Shield className="w-5 h-5" />}
+              isCollapsed={collapsedSections['security']}
+              onToggle={() => toggleSection('security')}
+            >
         {/* Session Timeout */}
         <SettingRow
           label="Session timeout"
@@ -1725,17 +1782,14 @@ export function Settings() {
             </div>
           </>
         )}
-      </SettingsSection>
+            </SettingsSection>
+          </>
+        )}
 
-      {/* Log Retention Settings (v3.52) */}
-      <SettingsSection
-        title="Log Retention"
-        description="Configure log retention periods and storage cleanup"
-        icon={<Database className="w-5 h-5" />}
-        isCollapsed={collapsedSections['retention']}
-        onToggle={() => toggleSection('retention')}
-      >
-        {loadingRetention ? (
+        {/* DATA TAB - v3.57.117: Simplified, no collapsible wrapper */}
+        {activeTab === 'data' && (
+          <div className="bg-card rounded-xl border">
+            {loadingRetention ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
@@ -1912,17 +1966,13 @@ export function Settings() {
             </div>
           </>
         )}
-      </SettingsSection>
+          </div>
+        )}
 
-      {/* License Status Section */}
-      <SettingsSection
-        title="License"
-        description="License status and subscription information"
-        icon={<Key className="w-5 h-5" />}
-        isCollapsed={collapsedSections['license']}
-        onToggle={() => toggleSection('license')}
-      >
-        {loadingLicense ? (
+        {/* LICENSE TAB - v3.57.117: Simplified, no collapsible wrapper */}
+        {activeTab === 'license' && (
+          <div className="bg-card rounded-xl border">
+            {loadingLicense ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
@@ -2086,18 +2136,13 @@ export function Settings() {
             <p>Unable to retrieve license information</p>
           </div>
         )}
-      </SettingsSection>
+          </div>
+        )}
 
-      {/* Integrations Status */}
-      <SettingsSection
-        title="Integrations"
-        description={isAdmin ? "Status and configuration of external services" : "Admin access required to modify integrations"}
-        icon={<Plug className="w-5 h-5" />}
-        disabled={!isAdmin}
-        isCollapsed={collapsedSections['integrations']}
-        onToggle={() => toggleSection('integrations')}
-      >
-        {loadingIntegrations ? (
+        {/* INTEGRATIONS TAB - v3.57.117: Simplified, no collapsible wrapper */}
+        {activeTab === 'integrations' && (
+          <div className={cn("bg-card rounded-xl border", !isAdmin && "opacity-60")}>
+            {loadingIntegrations ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
@@ -2254,7 +2299,20 @@ export function Settings() {
             </IntegrationCategory>
           </>
         )}
-      </SettingsSection>
+          </div>
+        )}
+
+        {/* USERS TAB */}
+        {activeTab === 'users' && isAdmin && (
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          }>
+            <UserManagementContent />
+          </Suspense>
+        )}
+      </div>
 
       {/* Plugin Edit Modal */}
       {editingPlugin && (
@@ -2379,7 +2437,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.57.115</p>
+        <p>VIGILANCE X v3.57.118</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

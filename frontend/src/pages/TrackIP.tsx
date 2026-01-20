@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Search,
   RefreshCw,
@@ -245,6 +246,7 @@ function ListModal({
 }
 
 export function TrackIP() {
+  const [searchParams] = useSearchParams()
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState<Period>('7d')
   const [loading, setLoading] = useState(false)
@@ -252,8 +254,10 @@ export function TrackIP() {
   const [listModal, setListModal] = useState<{ title: string; items: string[] } | null>(null)
   const [result, setResult] = useState<TrackIPResponse | null>(null)
 
-  const handleSearch = async () => {
-    if (!query.trim()) {
+  // v3.57.118: Search function wrapped in useCallback for auto-search
+  const handleSearch = useCallback(async (searchQuery?: string) => {
+    const q = searchQuery || query
+    if (!q.trim()) {
       setError('Please enter an IP address or hostname')
       return
     }
@@ -264,7 +268,7 @@ export function TrackIP() {
 
     try {
       const response = await trackIPApi.search({
-        query: query.trim(),
+        query: q.trim(),
         period: period === 'custom' ? undefined : period,
         limit: 500, // Get all events for client-side pagination
       })
@@ -275,7 +279,16 @@ export function TrackIP() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [query, period])
+
+  // v3.57.118: Auto-search if IP param is present in URL
+  useEffect(() => {
+    const ipParam = searchParams.get('ip')
+    if (ipParam) {
+      setQuery(ipParam)
+      handleSearch(ipParam)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -345,7 +358,7 @@ export function TrackIP() {
 
           {/* Search Button */}
           <button
-            onClick={handleSearch}
+            onClick={() => handleSearch()}
             disabled={loading || !query.trim()}
             className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >

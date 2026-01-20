@@ -1,11 +1,17 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat, Search, XCircle, ShieldCheck } from 'lucide-react'
+import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat, Search, XCircle, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react'
 import { bansApi, detect2banApi, pendingBansApi, type Detect2BanStatus } from '@/lib/api'
 import { IPThreatModal } from '@/components/IPThreatModal'
+import { PendingApprovalDetailModal } from '@/components/PendingApprovalDetailModal'
 import { formatDateTime, getCountryFlag, cn } from '@/lib/utils'
 import type { BanStatus, BanStats, PendingBan, PendingBanStats } from '@/types'
 
 type StatsFilter = 'active' | 'permanent' | 'recent' | 'recidivist' | null
+
+// v3.57.118: Sorting types
+type PendingSortKey = 'date' | 'score'
+type BansSortKey = 'status' | 'ban_count' | 'date'
+type SortDirection = 'asc' | 'desc'
 
 export function ActiveBans() {
   const [bans, setBans] = useState<BanStatus[]>([])
@@ -28,9 +34,23 @@ export function ActiveBans() {
   const [, setPendingStats] = useState<PendingBanStats | null>(null)
   const [approvingIP, setApprovingIP] = useState<string | null>(null)
   const [showPendingModal, setShowPendingModal] = useState(false)
+  // v3.57.117: Selected pending for detail modal
+  const [selectedPending, setSelectedPending] = useState<PendingBan | null>(null)
+  const [showPendingDetailModal, setShowPendingDetailModal] = useState(false)
 
   // IP Search filter
   const [searchIP, setSearchIP] = useState('')
+
+  // v3.57.118: Sorting state for pending bans
+  const [pendingSort, setPendingSort] = useState<{ key: PendingSortKey; dir: SortDirection }>({ key: 'date', dir: 'desc' })
+  // v3.57.118: Sorting state for bans list
+  const [bansSort, setBansSort] = useState<{ key: BansSortKey; dir: SortDirection }>({ key: 'date', dir: 'desc' })
+  // v3.57.118: Time filter for bans list (in hours, 0 = all)
+  const [timeFilter, setTimeFilter] = useState<number>(0)
+
+  // v3.57.118: Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
 
   const handleIPLookup = (ip: string) => {
     setSelectedIP(ip)
@@ -67,12 +87,90 @@ export function ActiveBans() {
     }
   }
 
-  // Filter bans by IP search
+  // Filter bans by IP search and time
   const filteredBans = useMemo(() => {
-    if (!searchIP.trim()) return bans
-    const search = searchIP.trim().toLowerCase()
-    return bans.filter(ban => ban.ip.toLowerCase().includes(search))
-  }, [bans, searchIP])
+    let filtered = bans
+    // v3.57.118: Apply time filter
+    if (timeFilter > 0) {
+      const cutoff = new Date(Date.now() - timeFilter * 60 * 60 * 1000)
+      filtered = filtered.filter(ban => new Date(ban.last_ban) >= cutoff)
+    }
+    // Apply IP search
+    if (searchIP.trim()) {
+      const search = searchIP.trim().toLowerCase()
+      filtered = filtered.filter(ban => ban.ip.toLowerCase().includes(search))
+    }
+    return filtered
+  }, [bans, searchIP, timeFilter])
+
+  // v3.57.118: Sort filtered bans
+  const sortedBans = useMemo(() => {
+    const sorted = [...filteredBans]
+    sorted.sort((a, b) => {
+      let cmp = 0
+      switch (bansSort.key) {
+        case 'status':
+          // permanent > active > other
+          const statusOrder = { permanent: 2, active: 1 }
+          cmp = (statusOrder[b.status as keyof typeof statusOrder] || 0) - (statusOrder[a.status as keyof typeof statusOrder] || 0)
+          break
+        case 'ban_count':
+          cmp = b.ban_count - a.ban_count
+          break
+        case 'date':
+        default:
+          cmp = new Date(b.last_ban).getTime() - new Date(a.last_ban).getTime()
+      }
+      return bansSort.dir === 'asc' ? -cmp : cmp
+    })
+    return sorted
+  }, [filteredBans, bansSort])
+
+  // v3.57.118: Sort pending bans
+  const sortedPendingBans = useMemo(() => {
+    const sorted = [...pendingBans]
+    sorted.sort((a, b) => {
+      let cmp = 0
+      switch (pendingSort.key) {
+        case 'score':
+          cmp = b.threat_score - a.threat_score
+          break
+        case 'date':
+        default:
+          cmp = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      }
+      return pendingSort.dir === 'asc' ? -cmp : cmp
+    })
+    return sorted
+  }, [pendingBans, pendingSort])
+
+  // v3.57.118: Toggle sorting for pending bans
+  const togglePendingSort = (key: PendingSortKey) => {
+    setPendingSort(prev => ({
+      key,
+      dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc'
+    }))
+  }
+
+  // v3.57.118: Toggle sorting for bans
+  const toggleBansSort = (key: BansSortKey) => {
+    setBansSort(prev => ({
+      key,
+      dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc'
+    }))
+  }
+
+  // v3.57.118: Pagination calculations
+  const totalPages = Math.ceil(sortedBans.length / itemsPerPage)
+  const paginatedBans = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return sortedBans.slice(start, start + itemsPerPage)
+  }, [sortedBans, currentPage, itemsPerPage])
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchIP, timeFilter, bansSort])
 
   // Form states
   const [banIP, setBanIP] = useState('')
@@ -153,6 +251,40 @@ export function ActiveBans() {
     } finally {
       setApprovingIP(null)
     }
+  }
+
+  // v3.57.117: Approve/Reject from detail modal (no confirm, modal already provides context)
+  async function handleApprovePendingFromModal(id: string, ip: string) {
+    setApprovingIP(ip)
+    try {
+      await pendingBansApi.approve(id)
+      await Promise.all([fetchData(), fetchPendingBans()])
+    } catch (err) {
+      console.error('Failed to approve pending ban:', err)
+      throw err // Re-throw for modal to handle
+    } finally {
+      setApprovingIP(null)
+    }
+  }
+
+  async function handleRejectPendingFromModal(id: string, ip: string) {
+    setApprovingIP(ip)
+    try {
+      await pendingBansApi.reject(id)
+      await fetchPendingBans()
+    } catch (err) {
+      console.error('Failed to reject pending ban:', err)
+      throw err // Re-throw for modal to handle
+    } finally {
+      setApprovingIP(null)
+    }
+  }
+
+  // v3.57.117: Open detail modal for a pending ban
+  function handleOpenPendingDetail(pending: PendingBan) {
+    setSelectedPending(pending)
+    setShowPendingDetailModal(true)
+    setShowPendingModal(false) // Close list modal
   }
 
   async function handleToggleDetect2ban() {
@@ -357,27 +489,53 @@ export function ActiveBans() {
       <div className="bg-card rounded-xl border overflow-hidden">
         {/* IP Search Filter */}
         <div className="p-4 border-b bg-muted/30">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchIP}
-              onChange={(e) => setSearchIP(e.target.value)}
-              placeholder="Search by IP address..."
-              className="w-full pl-10 pr-10 py-2 bg-background border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            {searchIP && (
-              <button
-                onClick={() => setSearchIP('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded transition-colors"
-              >
-                <X className="w-3 h-3 text-muted-foreground" />
-              </button>
-            )}
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchIP}
+                onChange={(e) => setSearchIP(e.target.value)}
+                placeholder="Search by IP address..."
+                className="w-full pl-10 pr-10 py-2 bg-background border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              {searchIP && (
+                <button
+                  onClick={() => setSearchIP('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded transition-colors"
+                >
+                  <X className="w-3 h-3 text-muted-foreground" />
+                </button>
+              )}
+            </div>
+            {/* v3.57.118: Time filter buttons */}
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+              {[
+                { label: 'All', value: 0 },
+                { label: '8h', value: 8 },
+                { label: '24h', value: 24 },
+                { label: '7d', value: 168 },
+              ].map(({ label, value }) => (
+                <button
+                  key={value}
+                  onClick={() => setTimeFilter(value)}
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium rounded transition-colors",
+                    timeFilter === value
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          {searchIP && (
+          {(searchIP || timeFilter > 0) && (
             <p className="mt-2 text-sm text-muted-foreground">
-              Found {filteredBans.length} result{filteredBans.length !== 1 ? 's' : ''} for "{searchIP}"
+              Found {filteredBans.length} result{filteredBans.length !== 1 ? 's' : ''}
+              {searchIP && ` for "${searchIP}"`}
+              {timeFilter > 0 && ` in last ${timeFilter < 24 ? timeFilter + 'h' : Math.round(timeFilter / 24) + 'd'}`}
             </p>
           )}
         </div>
@@ -386,9 +544,39 @@ export function ActiveBans() {
             <thead>
               <tr>
                 <th>IP Address</th>
-                <th>Status</th>
-                <th>Ban Count</th>
-                <th>Last Ban</th>
+                <th
+                  className="cursor-pointer hover:bg-muted/50 select-none"
+                  onClick={() => toggleBansSort('status')}
+                >
+                  <div className="flex items-center gap-1">
+                    Status
+                    {bansSort.key === 'status' && (
+                      bansSort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  className="cursor-pointer hover:bg-muted/50 select-none"
+                  onClick={() => toggleBansSort('ban_count')}
+                >
+                  <div className="flex items-center gap-1">
+                    Ban Count
+                    {bansSort.key === 'ban_count' && (
+                      bansSort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  className="cursor-pointer hover:bg-muted/50 select-none"
+                  onClick={() => toggleBansSort('date')}
+                >
+                  <div className="flex items-center gap-1">
+                    Last Ban
+                    {bansSort.key === 'date' && (
+                      bansSort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
+                    )}
+                  </div>
+                </th>
                 <th>Expires</th>
                 <th>Reason</th>
                 <th>Synced</th>
@@ -402,14 +590,14 @@ export function ActiveBans() {
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
                   </td>
                 </tr>
-              ) : filteredBans.length === 0 ? (
+              ) : sortedBans.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-8 text-muted-foreground">
                     {searchIP ? `No bans found for "${searchIP}"` : 'No active bans'}
                   </td>
                 </tr>
               ) : (
-                filteredBans.map((ban) => (
+                paginatedBans.map((ban) => (
                   <tr
                     key={ban.ip}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -505,6 +693,65 @@ export function ActiveBans() {
             </tbody>
           </table>
         </div>
+
+        {/* v3.57.118: Pagination Controls */}
+        {sortedBans.length > 0 && (
+          <div className="flex items-center justify-between p-4 border-t bg-muted/30">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, sortedBans.length)} of {sortedBans.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="bg-background border rounded px-2 py-1 text-sm"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                First
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="px-3 py-1 text-sm">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="px-3 py-1 text-sm border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage >= totalPages}
+                className="px-3 py-1 text-sm border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Ban Modal */}
@@ -686,17 +933,48 @@ export function ActiveBans() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowPendingModal(false)}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* v3.57.118: Sorting controls */}
+                <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+                  <button
+                    onClick={() => togglePendingSort('date')}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors",
+                      pendingSort.key === 'date' ? "bg-amber-500/20 text-amber-600" : "hover:bg-muted"
+                    )}
+                  >
+                    <Clock className="w-3 h-3" />
+                    Date
+                    {pendingSort.key === 'date' && (
+                      pendingSort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => togglePendingSort('score')}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors",
+                      pendingSort.key === 'score' ? "bg-amber-500/20 text-amber-600" : "hover:bg-muted"
+                    )}
+                  >
+                    <AlertCircle className="w-3 h-3" />
+                    Score
+                    {pendingSort.key === 'score' && (
+                      pendingSort.dir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowPendingModal(false)}
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Content */}
             <div className="overflow-y-auto max-h-[60vh]">
-              {pendingBans.length === 0 ? (
+              {sortedPendingBans.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <ShieldCheck className="w-12 h-12 mb-4 opacity-50" />
                   <p className="text-lg font-medium">No Pending Approvals</p>
@@ -704,8 +982,12 @@ export function ActiveBans() {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {pendingBans.map((pending) => (
-                    <div key={pending.id} className="p-4 hover:bg-muted/30 transition-colors">
+                  {sortedPendingBans.map((pending) => (
+                    <div
+                      key={pending.id}
+                      className="p-4 hover:bg-muted/30 transition-colors cursor-pointer"
+                      onClick={() => handleOpenPendingDetail(pending)}
+                    >
                       <div className="flex items-start justify-between gap-4">
                         {/* IP Info */}
                         <div className="flex-1 min-w-0">
@@ -751,8 +1033,8 @@ export function ActiveBans() {
                           </p>
                         </div>
 
-                        {/* Actions */}
-                        <div className="flex flex-col gap-2">
+                        {/* Quick Actions - v3.57.117: Simplified, main action via click */}
+                        <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => handleApprovePending(pending.id, pending.ip)}
                             disabled={approvingIP === pending.ip}
@@ -763,7 +1045,7 @@ export function ActiveBans() {
                             ) : (
                               <Ban className="w-4 h-4" />
                             )}
-                            Approve Ban
+                            Ban
                           </button>
                           <button
                             onClick={() => handleRejectPending(pending.id, pending.ip)}
@@ -771,20 +1053,14 @@ export function ActiveBans() {
                             className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500/10 text-green-500 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-colors text-sm font-medium disabled:opacity-50"
                           >
                             <XCircle className="w-4 h-4" />
-                            Deny Ban
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowPendingModal(false)
-                              handleIPLookup(pending.ip)
-                            }}
-                            className="flex items-center justify-center gap-2 px-4 py-2 bg-muted rounded-lg hover:bg-muted/80 transition-colors text-sm"
-                          >
-                            <Search className="w-4 h-4" />
-                            View Details
+                            Deny
                           </button>
                         </div>
                       </div>
+                      {/* Click hint */}
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
+                        Click to view full TI analysis and detection history
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -816,6 +1092,18 @@ export function ActiveBans() {
           setShowThreatModal(false)
           setSelectedIP(null)
         }}
+      />
+
+      {/* v3.57.117: Pending Approval Detail Modal */}
+      <PendingApprovalDetailModal
+        pending={selectedPending}
+        isOpen={showPendingDetailModal}
+        onClose={() => {
+          setShowPendingDetailModal(false)
+          setSelectedPending(null)
+        }}
+        onApprove={handleApprovePendingFromModal}
+        onReject={handleRejectPendingFromModal}
       />
     </div>
   )

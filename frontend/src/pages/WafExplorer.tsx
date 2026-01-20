@@ -9,7 +9,8 @@ import { WAFServerModal } from '@/components/WAFServerModal'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
 
 // Period options for WAF logs
-type WafPeriod = '1h' | '24h' | '7d' | '14d' | '30d'
+// v3.57.118: Replaced 14d with 8h
+type WafPeriod = '1h' | '8h' | '24h' | '7d' | '30d'
 
 // Attack type colors
 const attackTypeColors: Record<string, string> = {
@@ -61,11 +62,12 @@ function getDateKey(timestamp: string): string {
 // Helper to get start time from period
 function getStartTimeFromPeriod(period: WafPeriod): string {
   const now = new Date()
+  // v3.57.118: Replaced 14d with 8h
   const offsets: Record<WafPeriod, number> = {
     '1h': 60 * 60 * 1000,
+    '8h': 8 * 60 * 60 * 1000,
     '24h': 24 * 60 * 60 * 1000,
     '7d': 7 * 24 * 60 * 60 * 1000,
-    '14d': 14 * 24 * 60 * 60 * 1000,
     '30d': 30 * 24 * 60 * 60 * 1000,
   }
   return new Date(now.getTime() - offsets[period]).toISOString()
@@ -571,7 +573,7 @@ export function WafExplorer() {
                 </span>
               ) : (
                 <span className="ml-2 text-xs">
-                  Last {period === '1h' ? 'hour' : period === '24h' ? '24 hours' : period === '7d' ? '7 days' : period === '14d' ? '14 days' : '30 days'}
+                  Last {period === '1h' ? 'hour' : period === '8h' ? '8 hours' : period === '24h' ? '24 hours' : period === '7d' ? '7 days' : '30 days'}
                 </span>
               )}
               {syncStatus && (
@@ -623,9 +625,9 @@ export function WafExplorer() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-4 p-4 bg-card rounded-xl border">
-        {/* Period selector */}
+        {/* Period selector - v3.57.118: Replaced 14d with 8h */}
         <div className="flex bg-muted rounded-lg p-1">
-          {(['1h', '24h', '7d', '14d', '30d'] as WafPeriod[]).map((p) => (
+          {(['1h', '8h', '24h', '7d', '30d'] as WafPeriod[]).map((p) => (
             <button
               key={p}
               onClick={() => {
@@ -640,7 +642,7 @@ export function WafExplorer() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {p === '1h' ? '1h' : p === '24h' ? '24h' : p === '7d' ? '7 days' : p === '14d' ? '14 days' : '30 days'}
+              {p === '1h' ? '1h' : p === '8h' ? '8h' : p === '24h' ? '24h' : p === '7d' ? '7 days' : '30 days'}
             </button>
           ))}
         </div>

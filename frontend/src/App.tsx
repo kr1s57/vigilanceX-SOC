@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -27,7 +27,7 @@ const VigimailChecker = lazy(() => import('@/pages/VigimailChecker').then(m => (
 const TrackIP = lazy(() => import('@/pages/TrackIP').then(m => ({ default: m.TrackIP })))
 const Reports = lazy(() => import('@/pages/Reports').then(m => ({ default: m.Reports })))
 const Settings = lazy(() => import('@/pages/Settings').then(m => ({ default: m.Settings })))
-const UserManagement = lazy(() => import('@/pages/UserManagement'))
+// v3.57.117: UserManagement moved to Settings tab - import kept for lazy loading there
 
 // Loading fallback component
 const PageLoader = () => (
@@ -72,7 +72,8 @@ function App() {
                     {/* Admin-only routes */}
                     <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                     <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
-                    <Route path="/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+                    {/* v3.57.117: Redirect /users to Settings Users tab */}
+                    <Route path="/users" element={<Navigate to="/settings?tab=users" replace />} />
                   </Routes>
                 </Suspense>
               </Layout>

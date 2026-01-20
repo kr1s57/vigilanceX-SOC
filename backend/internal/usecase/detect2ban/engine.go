@@ -138,6 +138,11 @@ type PendingBansRepository interface {
 	UpdatePendingBanEventCount(ctx context.Context, ip string, newEventCount int) error
 }
 
+// FalsePositiveDetector interface for detecting FP patterns (v3.57.118)
+type FalsePositiveDetector interface {
+	DetectFalsePositivePattern(ctx context.Context, ip string, threshold int) (*clickhouse.FalsePositivePattern, error)
+}
+
 // Engine is the Detect2Ban detection engine
 type Engine struct {
 	scenarios       []*Scenario
@@ -148,6 +153,7 @@ type Engine struct {
 	geoZoneRepo     GeoZoneRepository     // v3.57.101: Global GeoZone settings fallback
 	pendingBansRepo PendingBansRepository // v3.57.113: Pending approvals for authorized countries
 	geoIPProvider   GeoIPProvider         // v3.57: GeoIP for country lookup
+	fpDetector      FalsePositiveDetector // v3.57.118: False positive pattern detector
 	mu              sync.RWMutex
 	running         bool
 	stopCh          chan struct{}
@@ -223,6 +229,11 @@ func (e *Engine) SetGeoZoneRepo(repo GeoZoneRepository) {
 // SetPendingBansRepo sets the pending bans repository for approval flow (v3.57.113)
 func (e *Engine) SetPendingBansRepo(repo PendingBansRepository) {
 	e.pendingBansRepo = repo
+}
+
+// SetFalsePositiveDetector sets the FP detector for pattern detection (v3.57.118)
+func (e *Engine) SetFalsePositiveDetector(detector FalsePositiveDetector) {
+	e.fpDetector = detector
 }
 
 // LoadScenarios loads all YAML scenarios from directory
@@ -558,6 +569,19 @@ func (e *Engine) handleMatch(ctx context.Context, scenario *Scenario, match Scen
 		}
 	}
 
+	// v3.57.118: Check for false positive patterns before banning
+	// If same IP triggers 10+ identical attacks (same rule_id + same URI), it's likely a FP
+	// Examples: Mattermost client repeatedly hitting strict ModSec rules
+	if e.fpDetector != nil && scenario.Name == "waf_attacks" {
+		fpPattern, err := e.fpDetector.DetectFalsePositivePattern(ctx, match.IP, entity.FalsePositiveThreshold)
+		if err == nil && fpPattern != nil {
+			log.Printf("[DETECT2BAN] False positive pattern detected for IP %s (rule: %s, uri: %s, count: %d)",
+				match.IP, fpPattern.RuleID, fpPattern.URI, fpPattern.MatchCount)
+			e.createFalsePositiveApproval(ctx, match, fpPattern)
+			return
+		}
+	}
+
 	// Validate with threat intelligence if configured
 	if scenario.Action.ValidateThreat && e.threatsService != nil {
 		threatResult, err := e.threatsService.CheckIP(ctx, match.IP)
@@ -664,10 +688,12 @@ func (e *Engine) createPendingApproval(ctx context.Context, match ScenarioMatch,
 
 	// v3.57.114: Check if pending approval already exists for this IP
 	// v3.57.115: Update existing entry instead of creating duplicate
+	// v3.57.116: Fixed ClickHouse type compatibility (int32/uint32)
 	existing, _ := e.pendingBansRepo.GetPendingBanByIP(ctx, match.IP)
 	if existing != nil && existing.Status == "pending" {
 		// Update event count if new count is higher (IP is still attacking)
-		if int(match.EventCount) > existing.EventCount {
+		// v3.57.116: Fixed type comparison - existing.EventCount is now uint32
+		if match.EventCount > uint64(existing.EventCount) {
 			if err := e.pendingBansRepo.UpdatePendingBanEventCount(ctx, match.IP, int(match.EventCount)); err != nil {
 				log.Printf("[DETECT2BAN] Failed to update pending ban event count for %s: %v", match.IP, err)
 			} else {
@@ -695,9 +721,9 @@ func (e *Engine) createPendingApproval(ctx context.Context, match ScenarioMatch,
 		IP:            match.IP,
 		Country:       countryCode,
 		GeoZone:       entity.GeoZoneAuthorized,
-		ThreatScore:   threatScore,
+		ThreatScore:   int32(threatScore), // v3.57.116: Cast to int32 for ClickHouse
 		ThreatSources: threatSources,
-		EventCount:    int(match.EventCount),
+		EventCount:    uint32(match.EventCount), // v3.57.116: Cast to uint32 for ClickHouse
 		FirstEvent:    time.Now(),
 		LastEvent:     time.Now(),
 		TriggerRule:   "authorized_country_waf",
@@ -712,6 +738,80 @@ func (e *Engine) createPendingApproval(ctx context.Context, match ScenarioMatch,
 
 	log.Printf("[DETECT2BAN] Created pending approval for IP %s (country: %s, hostname: %s, threat_score: %d, events: %d)",
 		match.IP, countryCode, hostname, threatScore, match.EventCount)
+}
+
+// createFalsePositiveApproval creates a pending approval for potential false positive IPs
+// v3.57.118: Detected when same IP triggers 10+ identical attacks (same rule_id + same URI)
+func (e *Engine) createFalsePositiveApproval(ctx context.Context, match ScenarioMatch, fpPattern *clickhouse.FalsePositivePattern) {
+	if e.pendingBansRepo == nil {
+		log.Printf("[DETECT2BAN] Pending bans repository not configured, skipping FP approval for %s", match.IP)
+		return
+	}
+
+	// Check if pending approval already exists for this IP
+	existing, _ := e.pendingBansRepo.GetPendingBanByIP(ctx, match.IP)
+	if existing != nil && existing.Status == "pending" {
+		// Update event count if new count is higher
+		if match.EventCount > uint64(existing.EventCount) {
+			if err := e.pendingBansRepo.UpdatePendingBanEventCount(ctx, match.IP, int(match.EventCount)); err != nil {
+				log.Printf("[DETECT2BAN] Failed to update FP pending ban event count for %s: %v", match.IP, err)
+			} else {
+				log.Printf("[DETECT2BAN] Updated FP pending approval for IP %s (events: %d -> %d)",
+					match.IP, existing.EventCount, match.EventCount)
+			}
+		}
+		return
+	}
+
+	// Get country code via GeoIP
+	countryCode := ""
+	if e.geoIPProvider != nil {
+		geoInfo, err := e.geoIPProvider.Lookup(ctx, match.IP)
+		if err == nil && geoInfo != nil {
+			countryCode = geoInfo.CountryCode
+		}
+	}
+
+	// Get threat score if available
+	var threatScore int
+	var threatSources []string
+	if e.threatsService != nil {
+		result, err := e.threatsService.CheckIP(ctx, match.IP)
+		if err == nil && result != nil {
+			threatScore = result.AggregatedScore
+			for _, src := range result.Sources {
+				threatSources = append(threatSources, src.Provider)
+			}
+		}
+	}
+
+	pendingBan := &entity.PendingBan{
+		IP:            match.IP,
+		Country:       countryCode,
+		GeoZone:       entity.GeoZoneNeutral, // FP is not zone-based
+		ThreatScore:   int32(threatScore),
+		ThreatSources: threatSources,
+		EventCount:    uint32(match.EventCount),
+		FirstEvent:    time.Now(),
+		LastEvent:     time.Now(),
+		TriggerRule:   "false_positive_detection",
+		Reason:        fmt.Sprintf("Potential false positive: %d identical attacks (rule %s on %s) - requires review", fpPattern.MatchCount, fpPattern.RuleID, fpPattern.URI),
+		Status:        "pending",
+		// v3.57.118: FP-specific fields
+		PendingType:  entity.PendingTypeFalsePositive,
+		FPRuleID:     fpPattern.RuleID,
+		FPURI:        fpPattern.URI,
+		FPHostname:   fpPattern.Hostname,
+		FPMatchCount: uint32(fpPattern.MatchCount),
+	}
+
+	if err := e.pendingBansRepo.CreatePendingBan(ctx, pendingBan); err != nil {
+		log.Printf("[DETECT2BAN] Failed to create FP pending approval for %s: %v", match.IP, err)
+		return
+	}
+
+	log.Printf("[DETECT2BAN] Created FP pending approval for IP %s (rule: %s, uri: %s, matches: %d, threat_score: %d)",
+		match.IP, fpPattern.RuleID, fpPattern.URI, fpPattern.MatchCount, threatScore)
 }
 
 // GetScenarios returns loaded scenarios

@@ -4,12 +4,12 @@ import { configApi, SystemWhitelistEntry } from '@/lib/api'
 // Settings types
 export interface AppSettings {
   // Display
-  theme: 'dark' | 'light' | 'system' | 'futuristic' // v3.57.109: Added futuristic theme
+  theme: 'dark' | 'light' | 'system' | 'futuristic' | 'midnight' // v3.57.116: Added midnight theme
   language: 'fr' | 'en'
   dateFormat: '24h' | '12h'
   numberFormat: 'fr' | 'en'
-  defaultPeriod: '1h' | '24h' | '7d' | '30d'
-  iconStyle: 'mono' | 'color' // v2.3: Icon style option
+  defaultPeriod: '1h' | '8h' | '24h' | '7d' | '30d' // v3.57.116: Added 8h option
+  iconStyle: 'mono' | 'color' | 'cyber' // v3.57.116: Added cyber icon style
   timezone: string // v3.5: Timezone setting (e.g., 'Europe/Paris', 'UTC')
   showDashboardClock: boolean // v3.5: Show clock on dashboard
 
@@ -132,8 +132,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement
 
-    // v3.57.109: Clear all theme classes first
-    root.classList.remove('dark', 'light', 'futuristic')
+    // v3.57.116: Clear all theme classes first
+    root.classList.remove('dark', 'light', 'futuristic', 'midnight')
 
     if (settings.theme === 'system') {
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -141,6 +141,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     } else if (settings.theme === 'futuristic') {
       // v3.57.109: Futuristic theme - also needs dark base styles
       root.classList.add('dark', 'futuristic')
+    } else if (settings.theme === 'midnight') {
+      // v3.57.116: Midnight theme - purple/violet dark theme
+      root.classList.add('dark', 'midnight')
     } else {
       root.classList.add(settings.theme)
     }

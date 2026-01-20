@@ -1,11 +1,44 @@
 package entity
 
+import "time"
+
 // SystemWhitelistEntry represents a system-protected IP that should never be blocked
 type SystemWhitelistEntry struct {
 	IP          string `json:"ip"`
 	Name        string `json:"name"`
 	Provider    string `json:"provider"`
 	Category    string `json:"category"` // dns, cdn, cloud, monitoring, security
+	Description string `json:"description"`
+}
+
+// CustomSystemWhitelistEntry represents a custom entry added by admin (v3.57.117)
+type CustomSystemWhitelistEntry struct {
+	ID          string    `json:"id"`
+	IP          string    `json:"ip"`
+	Name        string    `json:"name"`
+	Provider    string    `json:"provider"`
+	Category    string    `json:"category"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	CreatedBy   string    `json:"created_by"`
+	IsCustom    bool      `json:"is_custom"` // Always true for custom entries
+}
+
+// CreateSystemWhitelistRequest for creating a new custom entry
+type CreateSystemWhitelistRequest struct {
+	IP          string `json:"ip"`
+	Name        string `json:"name"`
+	Provider    string `json:"provider"`
+	Category    string `json:"category"`
+	Description string `json:"description"`
+}
+
+// UpdateSystemWhitelistRequest for updating a custom entry
+type UpdateSystemWhitelistRequest struct {
+	Name        string `json:"name"`
+	Provider    string `json:"provider"`
+	Category    string `json:"category"`
 	Description string `json:"description"`
 }
 

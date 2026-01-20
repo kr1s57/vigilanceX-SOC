@@ -231,12 +231,13 @@ func main() {
 			// Cache settings
 			CacheTTL: cfg.ThreatIntel.CacheTTL,
 			// v2.9.5: Cascade configuration
-			// v3.57.108: Added PriorityCrowdSec to always query CrowdSec
+			// v3.57.116: Disabled PriorityCrowdSec to save API quota (50/day)
+			// CrowdSec will only be queried when Tier1 score >= 30 (cascade threshold)
 			CascadeConfig: &threatintel.CascadeConfig{
 				EnableCascade:    cfg.ThreatIntel.CascadeEnabled,
 				Tier2Threshold:   cfg.ThreatIntel.Tier2Threshold,
 				Tier3Threshold:   cfg.ThreatIntel.Tier3Threshold,
-				PriorityCrowdSec: true, // v3.57.108: Always query CrowdSec (best data quality)
+				PriorityCrowdSec: false, // v3.57.116: Respect cascade to save quota
 			},
 		})
 	}
@@ -421,7 +422,9 @@ func main() {
 	detect2banEngine.SetGeoZoneRepo(geozoneRepo)
 	// v3.57.113: Wire pending bans repo for authorized countries approval flow
 	detect2banEngine.SetPendingBansRepo(pendingBansRepo)
-	logger.Info("Detect2Ban engine: Country policy support enabled (WAF server > Global GeoZone, authorized countries -> pending approval)")
+	// v3.57.118: Wire FP detector for false positive pattern detection
+	detect2banEngine.SetFalsePositiveDetector(eventsRepo)
+	logger.Info("Detect2Ban engine: Country policy + FP detection enabled (WAF server > Global GeoZone, authorized countries -> pending approval, FP patterns -> pending review)")
 
 	reportsService := reports.NewService(statsRepo, logger)
 	blocklistsService := blocklists.NewService(feedIngester)
@@ -456,6 +459,7 @@ func main() {
 	detect2banHandler := handlers.NewDetect2BanHandler(detect2banEngine) // v3.51: Detect2Ban control
 
 	// v3.51: Auto-start Detect2Ban engine
+	// v3.57.116: Re-enabled after debug - separate detect2ban service was the issue
 	detect2banCtx, detect2banCancel := context.WithCancel(context.Background())
 	go detect2banEngine.Start(detect2banCtx, 30*time.Second)
 	detect2banHandler.SetAutoStarted(detect2banCtx, detect2banCancel)
@@ -978,6 +982,9 @@ func main() {
 			// Config management (v2.3 - Plugin configuration)
 			r.Route("/config", func(r chi.Router) {
 				configHandler := handlers.NewConfigHandler()
+				// v3.57.117: Set up system whitelist repository for CRUD
+				sysWhitelistRepo := clickhouse.NewSystemWhitelistRepository(chConn)
+				configHandler.SetSystemWhitelistRepo(sysWhitelistRepo)
 				// v3.3: Set SMTP hot-reload callback
 				// v3.51.100: Also persist SMTP config for auto-reconnect on restart
 				configHandler.SetSMTPReloadCallback(func(host string, port int, security, fromEmail, username, password string, recipients []string) {
@@ -1016,8 +1023,11 @@ func main() {
 				r.Post("/save", configHandler.SaveConfig)
 				r.Get("/", configHandler.GetConfig)
 				r.Delete("/{plugin_id}", configHandler.ClearConfig) // v3.53.104 - Clear/disconnect plugin
-				// System whitelist (v2.3 - Protected IPs)
+				// System whitelist (v2.3 - Protected IPs, v3.57.117 - CRUD for custom entries)
 				r.Get("/system-whitelist", configHandler.GetSystemWhitelist)
+				r.Post("/system-whitelist", configHandler.CreateSystemWhitelistEntry)
+				r.Put("/system-whitelist/{id}", configHandler.UpdateSystemWhitelistEntry)
+				r.Delete("/system-whitelist/{id}", configHandler.DeleteSystemWhitelistEntry)
 				r.Get("/system-whitelist/check/*", configHandler.CheckSystemWhitelist)
 			})
 

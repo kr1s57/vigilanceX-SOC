@@ -177,6 +177,8 @@ func (r *EventsRepository) GetTimeline(ctx context.Context, period string, inter
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -239,6 +241,8 @@ func (r *EventsRepository) GetStats(ctx context.Context, period string) (*entity
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -318,6 +322,8 @@ func (r *EventsRepository) GetTopAttackers(ctx context.Context, period string, l
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -383,6 +389,8 @@ func (r *EventsRepository) GetTopTargets(ctx context.Context, period string, lim
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -432,6 +440,8 @@ func (r *EventsRepository) GetStatsByLogType(ctx context.Context, period string)
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -478,6 +488,8 @@ func (r *EventsRepository) GetGeoHeatmap(ctx context.Context, period string) ([]
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -532,6 +544,8 @@ func (r *EventsRepository) GetGeoHeatmapFiltered(ctx context.Context, period str
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -763,6 +777,8 @@ func (r *EventsRepository) GetCriticalAlerts(ctx context.Context, limit int, per
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -875,6 +891,8 @@ func (r *EventsRepository) GetZoneTraffic(ctx context.Context, period string, li
 	switch period {
 	case "1h":
 		startTime = now.Add(-1 * time.Hour)
+	case "8h": // v3.57.117: Added 8h period
+		startTime = now.Add(-8 * time.Hour)
 	case "24h":
 		startTime = now.Add(-24 * time.Hour)
 	case "7d":
@@ -1110,4 +1128,99 @@ func (r *EventsRepository) GetRecentWAFBlockEvents(ctx context.Context, since ti
 	}
 
 	return int(count), nil
+}
+
+// FalsePositivePattern represents a potential false positive detection pattern
+// v3.57.118: Used for detecting repeated identical attacks (same rule_id + same URI)
+type FalsePositivePattern struct {
+	IP         string
+	RuleID     string
+	URI        string
+	Hostname   string
+	MatchCount uint64
+	FirstEvent time.Time
+	LastEvent  time.Time
+}
+
+// DetectFalsePositivePattern checks if an IP has potential false positive patterns
+// v3.57.118: An FP is detected when same IP triggers 10+ identical attacks (same rule_id + same URI)
+// This typically indicates a misconfigured application or overly strict ModSec rules
+func (r *EventsRepository) DetectFalsePositivePattern(ctx context.Context, ip string, threshold int) (*FalsePositivePattern, error) {
+	if threshold <= 0 {
+		threshold = 10 // Default threshold
+	}
+
+	// Query to find repeated patterns (same rule_id + same URL) for this IP
+	// Look at both events table and modsec_logs table
+	query := `
+		SELECT
+			rule_id,
+			url,
+			anyLast(hostname) as hostname,
+			count() as match_count,
+			min(timestamp) as first_event,
+			max(timestamp) as last_event
+		FROM events
+		WHERE src_ip = toIPv4(?)
+		  AND log_type = 'WAF'
+		  AND rule_id != ''
+		  AND url != ''
+		  AND timestamp >= now() - INTERVAL 24 HOUR
+		GROUP BY rule_id, url
+		HAVING match_count >= ?
+		ORDER BY match_count DESC
+		LIMIT 1
+	`
+
+	var pattern FalsePositivePattern
+	pattern.IP = ip
+
+	row := r.conn.QueryRow(ctx, query, ip, threshold)
+	err := row.Scan(
+		&pattern.RuleID,
+		&pattern.URI,
+		&pattern.Hostname,
+		&pattern.MatchCount,
+		&pattern.FirstEvent,
+		&pattern.LastEvent,
+	)
+
+	if err != nil {
+		// Also check modsec_logs table for more detailed WAF data
+		modsecQuery := `
+			SELECT
+				rule_id,
+				uri,
+				anyLast(hostname) as hostname,
+				count() as match_count,
+				min(timestamp) as first_event,
+				max(timestamp) as last_event
+			FROM modsec_logs
+			WHERE src_ip = toIPv4(?)
+			  AND rule_id != ''
+			  AND uri != ''
+			  AND timestamp >= now() - INTERVAL 24 HOUR
+			GROUP BY rule_id, uri
+			HAVING match_count >= ?
+			ORDER BY match_count DESC
+			LIMIT 1
+		`
+
+		row := r.conn.QueryRow(ctx, modsecQuery, ip, threshold)
+		err = row.Scan(
+			&pattern.RuleID,
+			&pattern.URI,
+			&pattern.Hostname,
+			&pattern.MatchCount,
+			&pattern.FirstEvent,
+			&pattern.LastEvent,
+		)
+
+		if err != nil {
+			// No FP pattern found
+			return nil, nil
+		}
+	}
+
+	return &pattern, nil
 }

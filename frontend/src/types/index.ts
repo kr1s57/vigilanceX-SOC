@@ -132,6 +132,7 @@ export interface GeoZoneConfig {
 }
 
 // D2B v2 - Pending Ban
+// v3.57.118: Added FP detection fields
 export interface PendingBan {
   id: string
   ip: string
@@ -149,14 +150,23 @@ export interface PendingBan {
   reviewed_at?: string | null
   reviewed_by?: string
   review_note?: string
+  // v3.57.118: FP detection fields
+  pending_type: 'country_policy' | 'false_positive' | ''
+  fp_rule_id?: string
+  fp_uri?: string
+  fp_hostname?: string
+  fp_match_count?: number
 }
 
+// v3.57.118: Added FP and country policy counts
 export interface PendingBanStats {
   total_pending: number
   high_threat: number    // Score >= 70
   medium_threat: number  // Score 30-69
   low_threat: number     // Score < 30
   oldest_pending?: string | null
+  false_positive_count: number  // v3.57.118: FP detections
+  country_policy_count: number  // v3.57.118: Country policy detections
 }
 
 // Threat types

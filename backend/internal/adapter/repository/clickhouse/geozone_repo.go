@@ -156,16 +156,23 @@ func NewPendingBansRepository(conn *Connection) *PendingBansRepository {
 }
 
 // CreatePendingBan creates a new pending ban
+// v3.57.118: Added FP detection fields
 func (r *PendingBansRepository) CreatePendingBan(ctx context.Context, ban *entity.PendingBan) error {
+	// Set default pending type if not specified
+	pendingType := ban.PendingType
+	if pendingType == "" {
+		pendingType = entity.PendingTypeCountryPolicy
+	}
+
 	query := `
 		INSERT INTO vigilance_x.pending_bans (
 			id, ip, country, geo_zone, threat_score, threat_sources,
 			event_count, first_event, last_event, trigger_rule, reason,
-			status, created_at
+			status, created_at, pending_type, fp_rule_id, fp_uri, fp_hostname, fp_match_count
 		) VALUES (
 			generateUUIDv4(), ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			'pending', now()
+			'pending', now(), ?, ?, ?, ?, ?
 		)
 	`
 
@@ -180,16 +187,23 @@ func (r *PendingBansRepository) CreatePendingBan(ctx context.Context, ban *entit
 		ban.LastEvent,
 		ban.TriggerRule,
 		ban.Reason,
+		pendingType,
+		ban.FPRuleID,
+		ban.FPURI,
+		ban.FPHostname,
+		ban.FPMatchCount,
 	)
 }
 
 // GetPendingBans retrieves all pending bans
+// v3.57.118: Added FP detection fields
 func (r *PendingBansRepository) GetPendingBans(ctx context.Context) ([]entity.PendingBan, error) {
 	query := `
 		SELECT
 			id, ip, country, geo_zone, threat_score, threat_sources,
 			event_count, first_event, last_event, trigger_rule, reason,
-			status, created_at, reviewed_at, reviewed_by, review_note
+			status, created_at, reviewed_at, reviewed_by, review_note,
+			pending_type, fp_rule_id, fp_uri, fp_hostname, fp_match_count
 		FROM vigilance_x.pending_bans
 		WHERE status = 'pending'
 		ORDER BY created_at DESC
@@ -222,6 +236,11 @@ func (r *PendingBansRepository) GetPendingBans(ctx context.Context) ([]entity.Pe
 			&ban.ReviewedAt,
 			&ban.ReviewedBy,
 			&ban.ReviewNote,
+			&ban.PendingType,
+			&ban.FPRuleID,
+			&ban.FPURI,
+			&ban.FPHostname,
+			&ban.FPMatchCount,
 		)
 		if err != nil {
 			continue
@@ -232,15 +251,65 @@ func (r *PendingBansRepository) GetPendingBans(ctx context.Context) ([]entity.Pe
 	return bans, nil
 }
 
+// GetPendingBanByID retrieves a pending ban by ID
+// v3.57.118: Added for approve/reject operations
+func (r *PendingBansRepository) GetPendingBanByID(ctx context.Context, id string) (*entity.PendingBan, error) {
+	query := `
+		SELECT
+			id, ip, country, geo_zone, threat_score, threat_sources,
+			event_count, first_event, last_event, trigger_rule, reason,
+			status, created_at, reviewed_at, reviewed_by, review_note,
+			pending_type, fp_rule_id, fp_uri, fp_hostname, fp_match_count
+		FROM vigilance_x.pending_bans
+		WHERE id = ? AND status = 'pending'
+		LIMIT 1
+	`
+
+	var ban entity.PendingBan
+	row := r.conn.QueryRow(ctx, query, id)
+	err := row.Scan(
+		&ban.ID,
+		&ban.IP,
+		&ban.Country,
+		&ban.GeoZone,
+		&ban.ThreatScore,
+		&ban.ThreatSources,
+		&ban.EventCount,
+		&ban.FirstEvent,
+		&ban.LastEvent,
+		&ban.TriggerRule,
+		&ban.Reason,
+		&ban.Status,
+		&ban.CreatedAt,
+		&ban.ReviewedAt,
+		&ban.ReviewedBy,
+		&ban.ReviewNote,
+		&ban.PendingType,
+		&ban.FPRuleID,
+		&ban.FPURI,
+		&ban.FPHostname,
+		&ban.FPMatchCount,
+	)
+
+	if err != nil {
+		return nil, nil // Not found
+	}
+
+	return &ban, nil
+}
+
 // GetPendingBanByIP retrieves a pending ban by IP
+// v3.57.116: Fixed IPv4 comparison - use toString(ip) for string matching
+// v3.57.118: Added FP detection fields
 func (r *PendingBansRepository) GetPendingBanByIP(ctx context.Context, ip string) (*entity.PendingBan, error) {
 	query := `
 		SELECT
 			id, ip, country, geo_zone, threat_score, threat_sources,
 			event_count, first_event, last_event, trigger_rule, reason,
-			status, created_at, reviewed_at, reviewed_by, review_note
+			status, created_at, reviewed_at, reviewed_by, review_note,
+			pending_type, fp_rule_id, fp_uri, fp_hostname, fp_match_count
 		FROM vigilance_x.pending_bans
-		WHERE ip = ? AND status = 'pending'
+		WHERE toString(ip) = ? AND status = 'pending'
 		ORDER BY created_at DESC
 		LIMIT 1
 	`
@@ -264,6 +333,11 @@ func (r *PendingBansRepository) GetPendingBanByIP(ctx context.Context, ip string
 		&ban.ReviewedAt,
 		&ban.ReviewedBy,
 		&ban.ReviewNote,
+		&ban.PendingType,
+		&ban.FPRuleID,
+		&ban.FPURI,
+		&ban.FPHostname,
+		&ban.FPMatchCount,
 	)
 
 	if err != nil {
@@ -305,19 +379,21 @@ func (r *PendingBansRepository) RejectPendingBan(ctx context.Context, id string,
 
 // UpdatePendingBanEventCount updates event count for an existing pending ban
 // v3.57.115: Used to update stats instead of creating duplicates
+// v3.57.116: Fixed IPv4 comparison - use toString(ip) for string matching
 func (r *PendingBansRepository) UpdatePendingBanEventCount(ctx context.Context, ip string, newEventCount int) error {
 	query := `
 		ALTER TABLE vigilance_x.pending_bans
 		UPDATE
 			event_count = ?,
 			last_event = now()
-		WHERE ip = ? AND status = 'pending'
+		WHERE toString(ip) = ? AND status = 'pending'
 	`
 
 	return r.conn.Exec(ctx, query, newEventCount, ip)
 }
 
 // GetPendingBanStats retrieves pending ban statistics
+// v3.57.118: Added FP and country policy counts
 func (r *PendingBansRepository) GetPendingBanStats(ctx context.Context) (*entity.PendingBanStats, error) {
 	query := `
 		SELECT
@@ -325,7 +401,9 @@ func (r *PendingBansRepository) GetPendingBanStats(ctx context.Context) (*entity
 			countIf(threat_score >= 70) as high,
 			countIf(threat_score >= 30 AND threat_score < 70) as medium,
 			countIf(threat_score < 30) as low,
-			min(created_at) as oldest
+			min(created_at) as oldest,
+			countIf(pending_type = 'false_positive') as fp_count,
+			countIf(pending_type = 'country_policy' OR pending_type = '') as cp_count
 		FROM vigilance_x.pending_bans
 		WHERE status = 'pending'
 	`
@@ -338,6 +416,8 @@ func (r *PendingBansRepository) GetPendingBanStats(ctx context.Context) (*entity
 		&stats.MediumThreat,
 		&stats.LowThreat,
 		&stats.OldestPending,
+		&stats.FalsePositiveCount,
+		&stats.CountryPolicyCount,
 	)
 
 	if err != nil {
