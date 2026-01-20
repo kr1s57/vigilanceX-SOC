@@ -1,19 +1,21 @@
-version: '3.8'
+# VIGILANCE X - Production Docker Compose
+# Uses pre-built GHCR images (no local build required)
+# Version: 3.58.102
 
 services:
   # ============================================
-  # ClickHouse - Base analytique
+  # ClickHouse - Analytics Database
   # ============================================
   clickhouse:
     image: clickhouse/clickhouse-server:24.1
     container_name: vigilance_clickhouse
     ports:
-      - "8123:8123"   # HTTP
-      - "9000:9000"   # Native
+      - "8123:8123"
+      - "9000:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
-      - ./clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     environment:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vigilance}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
@@ -24,46 +26,43 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "clickhouse-client -u ${CLICKHOUSE_USER:-vigilance} --password ${CLICKHOUSE_PASSWORD} --query 'SELECT count() FROM system.databases WHERE name = '\"'\"'vigilance_x'\"'\"'' | grep -q 1"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 30
       start_period: 30s
     networks:
       - vigilance_net
     restart: unless-stopped
 
   # ============================================
-  # Redis - Cache et sessions
+  # Redis - Cache & Sessions
   # ============================================
   redis:
     image: redis:7-alpine
     container_name: vigilance_redis
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - vigilance_net
     restart: unless-stopped
 
   # ============================================
-  # Vector - Ingestion logs
+  # Vector - Log Ingestion
   # ============================================
   vector:
     image: timberio/vector:0.34.1-debian
     container_name: vigilance_vector
     command: ["--config", "/etc/vector/vector.toml"]
     ports:
-      - "514:514/udp"    # Syslog UDP
-      - "1514:1514/tcp"  # Syslog TCP
-      - "8686:8686"      # Vector API
+      - "514:514/udp"
+      - "1514:1514/tcp"
     volumes:
       - ./vector/vector.toml:/etc/vector/vector.toml:ro
       - vector_data:/var/lib/vector
@@ -78,95 +77,57 @@ services:
     restart: unless-stopped
 
   # ============================================
-  # Backend Go - API REST
+  # Backend API (GHCR Image)
   # ============================================
   backend:
-    # image: ghcr.io/kr1s57/vigilancex-api:${VGX_VERSION:-latest}  # v3.57.116: Disabled for local build debug
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    image: ghcr.io/kr1s57/vigilancex-api:${VGX_VERSION:-3.58.102}
     container_name: vigilance_backend
     ports:
       - "8080:8080"
     volumes:
-      - ./ssh/id_rsa_xgs:/app/.ssh/id_rsa_xgs:ro
       - backend_data:/app/data
       - backend_config:/app/config
       - /etc/machine-id:/etc/machine-id:ro
-      - /var/run/docker.sock:/var/run/docker.sock  # v3.57.108: Admin console docker access (rw for updates)
-      - /opt/vigilanceX:/opt/vigilanceX  # v3.58.100: Full repo access for system updates (git pull + build)
-    user: root  # v3.57.123: Required for docker socket access during updates
     environment:
       APP_ENV: ${APP_ENV:-production}
       APP_PORT: 8080
-
-      # ClickHouse
+      VGX_VERSION: ${VGX_VERSION:-3.58.102}
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 9000
       CLICKHOUSE_HTTP_PORT: 8123
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vigilance}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DATABASE: vigilance_x
-
-      # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-
-      # Sophos XGS API
       SOPHOS_HOST: ${SOPHOS_HOST}
       SOPHOS_PORT: ${SOPHOS_PORT:-4444}
       SOPHOS_USER: ${SOPHOS_USER}
       SOPHOS_PASSWORD: ${SOPHOS_PASSWORD}
       SOPHOS_BAN_GROUP: ${SOPHOS_BAN_GROUP:-grp_SOC-BannedIP}
-
-      # Sophos XGS SSH (ModSec log sync)
-      SOPHOS_SSH_HOST: ${SOPHOS_SSH_HOST:-${SOPHOS_HOST}}
-      SOPHOS_SSH_PORT: ${SOPHOS_SSH_PORT:-22}
-      SOPHOS_SSH_USER: ${SOPHOS_SSH_USER:-admin}
-      SOPHOS_SSH_KEY_PATH: /app/.ssh/id_rsa_xgs
-      SOPHOS_SSH_LOG_PATH: /log/reverseproxy.log
-      SOPHOS_SSH_SYNC_INTERVAL: ${SOPHOS_SSH_SYNC_INTERVAL:-5m}
-
-      # Threat Intel APIs - Tier 1
-      ALIENVAULT_API_KEY: ${ALIENVAULT_API_KEY}
-      ABUSECH_API_KEY: ${ABUSECH_API_KEY:-}  # v3.53: ThreatFox + URLhaus
-      # Threat Intel APIs - Tier 2
-      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY}
+      ALIENVAULT_API_KEY: ${ALIENVAULT_API_KEY:-}
+      ABUSECH_API_KEY: ${ABUSECH_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
       GREYNOISE_API_KEY: ${GREYNOISE_API_KEY:-}
       CROWDSEC_API_KEY: ${CROWDSEC_API_KEY:-}
-      # Threat Intel APIs - Tier 3
-      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY}
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
       CRIMINALIP_API_KEY: ${CRIMINALIP_API_KEY:-}
       PULSEDIVE_API_KEY: ${PULSEDIVE_API_KEY:-}
-
-      # JWT
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: 24h
-
-      # v2.9: License System
       LICENSE_ENABLED: ${LICENSE_ENABLED:-true}
-      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL}
+      LICENSE_SERVER_URL: ${LICENSE_SERVER_URL:-https://vigilancekey.music-all.org}
       LICENSE_KEY: ${LICENSE_KEY:-}
       LICENSE_HEARTBEAT_INTERVAL: ${LICENSE_HEARTBEAT_INTERVAL:-12h}
-      LICENSE_GRACE_PERIOD: ${LICENSE_GRACE_PERIOD:-72h}
+      LICENSE_GRACE_PERIOD: ${LICENSE_GRACE_PERIOD:-168h}
       LICENSE_STORE_PATH: /app/data/license.json
-
-      # v2.9: OSINT Proxy
-      OSINT_PROXY_ENABLED: ${OSINT_PROXY_ENABLED:-false}
-      OSINT_PROXY_URL: ${OSINT_PROXY_URL:-}
-      OSINT_PROXY_TIMEOUT: ${OSINT_PROXY_TIMEOUT:-30s}
-      OSINT_PROXY_RATE_LIMIT: ${OSINT_PROXY_RATE_LIMIT:-60}
-
-      # v3.3: SMTP Email Notifications
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURITY: ${SMTP_SECURITY:-tls}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_RECIPIENTS: ${SMTP_RECIPIENTS:-}
-      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-30s}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -177,85 +138,29 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     networks:
       - vigilance_net
     restart: unless-stopped
 
   # ============================================
-  # Detect2Ban Engine - Detection daemon
-  # v3.57.116: DISABLED FOR DEBUG - separate D2B service was causing XGS block
-  # ============================================
-  detect2ban:
-    profiles: ["disabled"]  # v3.57.116: Disabled - D2B now runs inside backend only
-    image: ghcr.io/kr1s57/vigilancex-detect2ban:${VGX_VERSION:-latest}
-    container_name: vigilance_detect2ban
-    environment:
-      APP_ENV: ${APP_ENV:-production}
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PORT: 9000
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vigilance}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
-      CLICKHOUSE_DATABASE: vigilance_x
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SOPHOS_HOST: ${SOPHOS_HOST}
-      SOPHOS_PORT: ${SOPHOS_PORT:-4444}
-      SOPHOS_USER: ${SOPHOS_USER}
-      SOPHOS_PASSWORD: ${SOPHOS_PASSWORD}
-    depends_on:
-      - backend
-    networks:
-      - vigilance_net
-    restart: unless-stopped
-
-  # ============================================
-  # Frontend React
+  # Frontend (GHCR Image)
   # ============================================
   frontend:
-    # image: ghcr.io/kr1s57/vigilancex-frontend:${VGX_VERSION:-latest}  # v3.57.116: Disabled for local build
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/kr1s57/vigilancex-frontend:${VGX_VERSION:-3.58.102}
     container_name: vigilance_frontend
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - vigilance_net
     restart: unless-stopped
 
-  # ============================================
-  # Nginx - Reverse Proxy (Production)
-  # ============================================
-  nginx:
-    image: nginx:alpine
-    container_name: vigilance_nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - vigilance_net
-    restart: unless-stopped
-    profiles:
-      - production
-
-# ============================================
-# Networks & Volumes
-# ============================================
 networks:
   vigilance_net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
 
 volumes:
   clickhouse_data:
