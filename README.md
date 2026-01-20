@@ -34,7 +34,7 @@ VIGILANCE X centralise la supervision et la réponse active pour toute votre inf
 | **Soft Whitelist** | Gestion graduée des IPs de confiance (Hard/Soft/Monitor) |
 | **Detect2Ban** | Détection automatique et bannissement sur le firewall XGS |
 | **Vigimail Checker** | Surveillance fuites email + vérification DNS (SPF/DKIM/DMARC) |
-| **Neural-Sync** | Synchronisation des blocklists CrowdSec premium vers XGS |
+| **CrowdSec BL** | Synchronisation des blocklists CrowdSec premium vers XGS |
 | **Reports** | Génération de rapports PDF/XML programmables |
 
 ---
@@ -52,7 +52,7 @@ VIGILANCE X centralise la supervision et la réponse active pour toute votre inf
 - [Soft Whitelist](#soft-whitelist)
 - [Detect2Ban](#detect2ban)
 - [Vigimail Checker](#vigimail-checker)
-- [Neural-Sync](#neural-sync)
+- [CrowdSec BL](#crowdsec-bl)
 - [Reports](#reports)
 - [Settings](#settings)
 
@@ -290,7 +290,7 @@ Surveillance de la sécurité email pour la détection de fuites et la vérifica
 
 ---
 
-## Neural-Sync
+## CrowdSec BL
 
 Intégration premium des blocklists CrowdSec pour une protection renforcée.
 

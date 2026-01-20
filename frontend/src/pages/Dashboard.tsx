@@ -26,7 +26,7 @@ import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert, PendingBanStats } from '@/types'
 
 // v3.57.118: Current installed version
-const INSTALLED_VERSION = '3.57.119'
+const INSTALLED_VERSION = '3.57.120'
 
 // v3.57.117: Added 8h filter option
 type Period = '1h' | '8h' | '24h' | '7d' | '30d'
@@ -50,6 +50,27 @@ export function Dashboard() {
   const [showAlertsModal, setShowAlertsModal] = useState(false)
   // v3.57.108: IP Threat Modal state
   const [threatModalIP, setThreatModalIP] = useState<string | null>(null)
+  // v3.57.120: Latest version from GitHub
+  const [latestGitVersion, setLatestGitVersion] = useState<string | null>(null)
+
+  // v3.57.120: Fetch latest version from GitHub releases
+  useEffect(() => {
+    async function fetchLatestVersion() {
+      try {
+        const response = await fetch('https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest')
+        if (response.ok) {
+          const data = await response.json()
+          // tag_name format: "v3.57.120" -> extract "3.57.120"
+          const version = data.tag_name?.replace(/^v/, '') || null
+          setLatestGitVersion(version)
+        }
+      } catch {
+        // Silent fail - version check is optional
+        setLatestGitVersion(null)
+      }
+    }
+    fetchLatestVersion()
+  }, [])
 
   // Save period to sessionStorage when it changes
   useEffect(() => {
@@ -139,21 +160,36 @@ export function Dashboard() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Security Dashboard</h1>
-            {/* v3.55.116: Version badge with update check */}
+            {/* v3.57.120: Version badge with GitHub release check */}
             {(() => {
-              const latestVersion = licenseStatus?.latest_vgx_version
-              const isUpToDate = !latestVersion || latestVersion === INSTALLED_VERSION
+              // Use GitHub release version, fallback to license server version
+              const latestVersion = latestGitVersion || licenseStatus?.latest_vgx_version
+              // Only show green if we actually know the latest version AND it matches
+              const isUpToDate = latestVersion ? latestVersion === INSTALLED_VERSION : null
               return (
                 <span
                   className={cn(
                     "px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1",
-                    isUpToDate
+                    isUpToDate === null
+                      ? "bg-zinc-500/10 text-zinc-500" // Unknown state
+                      : isUpToDate
                       ? "bg-green-500/10 text-green-500"
                       : "bg-orange-500/10 text-orange-500"
                   )}
-                  title={isUpToDate ? "Up to date" : `Update available: ${latestVersion}`}
+                  title={
+                    isUpToDate === null
+                      ? "Checking for updates..."
+                      : isUpToDate
+                      ? "Up to date"
+                      : `Update available: ${latestVersion}`
+                  }
                 >
-                  {isUpToDate ? (
+                  {isUpToDate === null ? (
+                    <>
+                      <Activity className="w-3 h-3 animate-pulse" />
+                      v{INSTALLED_VERSION}
+                    </>
+                  ) : isUpToDate ? (
                     <>
                       <CheckCircle2 className="w-3 h-3" />
                       v{INSTALLED_VERSION}
