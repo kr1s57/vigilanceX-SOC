@@ -7,6 +7,48 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.122] - 2026-01-20
+
+### Fixed
+- **License Activation Loop**: Fixed license.json corruption after hardware ID migration (VX2→VX3)
+  - VX3 binding now includes firewall serial for stronger hardware binding
+  - Corrupt license files are now properly detected and require re-activation
+
+### Changed
+- **README Parser Stats**: Updated to accurate numbers (104 fields, 74 rules, 23 MITRE techniques)
+
+---
+
+## [3.57.121] - 2026-01-20
+
+### Fixed
+- **Theme Contrast**: Fixed unreadable text in WAF Explorer for Dark+ and Anthracite themes
+  - Attack type badges now use brighter colors for visibility
+  - CSS attribute selectors to avoid Tailwind circular dependency
+
+---
+
+## [3.57.120] - 2026-01-20
+
+### Fixed
+- **Version Badge Detection**: Dashboard now fetches latest version from GitHub API
+  - Shows green badge when up-to-date
+  - Shows orange "Update: vX.Y.Z" when update available
+  - Gray badge while checking
+
+### Changed
+- **README**: Renamed "Neural-Sync" to "CrowdSec BL" for clarity
+
+---
+
+## [3.57.119] - 2026-01-20
+
+### Fixed
+- **gitgo Skill**: Added complete file exclusions for public repos
+  - Now properly excludes: docs/, BUGFIXSESSION/, FEATURESPROMPT/, .github/, .claude/, backups/
+
+---
+
 ## [3.57.118] - 2026-01-20
 
 ### Fixed
