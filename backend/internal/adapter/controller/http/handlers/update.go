@@ -102,7 +102,7 @@ type GoStats struct {
 // Constants
 const (
 	GitHubAPIURL     = "https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest"
-	InstalledVersion = "3.57.124" // Fallback if env not set
+	InstalledVersion = "3.57.125" // Fallback if env not set
 	StatusIdle       = "idle"
 	StatusPulling    = "pulling"
 	StatusRestarting = "restarting"

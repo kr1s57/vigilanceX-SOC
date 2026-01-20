@@ -26,9 +26,9 @@ import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert, PendingBanStats } from '@/types'
 
 // v3.57.118: Current installed version
-const INSTALLED_VERSION = '3.57.124'
+const INSTALLED_VERSION = '3.57.125'
 
-// v3.57.124: Semantic version comparison (returns -1, 0, or 1)
+// v3.57.125: Semantic version comparison (returns -1, 0, or 1)
 function compareVersions(v1: string, v2: string): number {
   const parts1 = v1.split('.').map(Number)
   const parts2 = v2.split('.').map(Number)
@@ -173,11 +173,11 @@ export function Dashboard() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Security Dashboard</h1>
-            {/* v3.57.121: Version badge with GitHub release check - v3.57.124: Semver comparison */}
+            {/* v3.57.121: Version badge with GitHub release check - v3.57.125: Semver comparison */}
             {(() => {
               // Use GitHub release version, fallback to license server version
               const latestVersion = latestGitVersion || licenseStatus?.latest_vgx_version
-              // v3.57.124: Use semver comparison - up to date if installed >= latest
+              // v3.57.125: Use semver comparison - up to date if installed >= latest
               const isUpToDate = latestVersion ? compareVersions(INSTALLED_VERSION, latestVersion) >= 0 : null
               const hasUpdate = isUpToDate === false
 

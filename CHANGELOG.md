@@ -7,6 +7,13 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.125] - 2026-01-20
+
+### Changed
+- **Version Bump**: Test release for firmware update validation
+
+---
+
 ## [3.57.124] - 2026-01-20
 
 ### Fixed
