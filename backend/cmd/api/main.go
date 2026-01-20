@@ -574,6 +574,13 @@ func main() {
 	)
 	logger.Info("Admin Console handler initialized")
 
+	// v3.57.123: System Update handler for in-app updates
+	updateHandler := handlers.NewUpdateHandler(
+		"/opt/vigilanceX/docker/docker-compose.prod.yml",
+		"/opt/vigilanceX/docker",
+	)
+	logger.Info("System Update handler initialized")
+
 	// Initialize WebSocket hub
 	wsHub := ws.NewHub()
 	go wsHub.Run()
@@ -976,6 +983,18 @@ func main() {
 
 			// System
 			r.Route("/system", func(r chi.Router) {
+				// v3.57.123: Version check and system stats (all authenticated users)
+				r.Get("/version", updateHandler.GetVersion)
+				r.Get("/stats", updateHandler.GetSystemStats)
+
+				// Admin-only update operations
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireAdmin())
+					r.Post("/update", updateHandler.TriggerUpdate)
+					r.Get("/update/status", updateHandler.GetUpdateStatus)
+				})
+
+				// Legacy stubs
 				r.Get("/config", handlers.NotImplemented)
 				r.Get("/sophos/status", handlers.NotImplemented)
 				r.Post("/sophos/test", handlers.NotImplemented)

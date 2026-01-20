@@ -44,13 +44,18 @@ import {
   Brain,
   Sparkles,
   Copy,
+  Cpu,
+  Package,
+  Rocket,
+  ArrowUp,
+  Activity,
 } from 'lucide-react'
 
 // v3.57.117: Lazy load UserManagement for tab integration
 const UserManagementContent = lazy(() => import('@/pages/UserManagement'))
 
-// v3.57.117: Settings tabs
-type SettingsTab = 'general' | 'notifications' | 'security' | 'data' | 'integrations' | 'license' | 'users'
+// v3.57.117: Settings tabs - v3.57.123: License renamed to System
+type SettingsTab = 'general' | 'notifications' | 'security' | 'data' | 'integrations' | 'system' | 'users'
 
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: 'general', label: 'General', icon: <Monitor className="w-4 h-4" /> },
@@ -58,12 +63,12 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode; ad
   { id: 'security', label: 'Security', icon: <Shield className="w-4 h-4" /> },
   { id: 'data', label: 'Data', icon: <Database className="w-4 h-4" /> },
   { id: 'integrations', label: 'Integrations', icon: <Plug className="w-4 h-4" /> },
-  { id: 'license', label: 'License', icon: <Key className="w-4 h-4" /> },
+  { id: 'system', label: 'System', icon: <Server className="w-4 h-4" /> },
   { id: 'users', label: 'Users', icon: <Users className="w-4 h-4" />, adminOnly: true },
 ]
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, retentionApi, integrationsApi, crowdsecBlocklistApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig, type RetentionSettings, type StorageStats, type APIProviderStatus, type CrowdSecBlocklistConfig } from '@/lib/api'
+import { api, threatsApi, bansApi, modsecApi, statusApi, configApi, licenseApi, notificationsApi, geozoneApi, retentionApi, integrationsApi, crowdsecBlocklistApi, type LicenseStatus, type NotificationSettings, type GeoZoneConfig, type RetentionSettings, type StorageStats, type APIProviderStatus, type CrowdSecBlocklistConfig } from '@/lib/api'
 import { cn, copyToClipboard } from '@/lib/utils'
 
 interface ThreatProvider {
@@ -84,6 +89,26 @@ interface PluginConfig {
   name: string
   type: 'sophos' | 'threat_intel' | 'syslog'
   fields: { key: string; label: string; type: 'text' | 'password' | 'number'; value: string; placeholder?: string }[]
+}
+
+// v3.57.123: System Stats types
+interface SystemStats {
+  hostname: string
+  platform: string
+  uptime: string
+  cpu: { cores: number; usage_percent: number; load_avg_1: number; load_avg_5: number; load_avg_15: number }
+  memory: { total_gb: number; used_gb: number; free_gb: number; usage_percent: number }
+  disk: { total_gb: number; used_gb: number; free_gb: number; usage_percent: number; mount_point: string }
+  go_runtime: { version: string; goroutines: number; heap_alloc_mb: number }
+}
+
+interface VersionInfo {
+  installed: string
+  latest: string
+  update_available: boolean
+  release_url?: string
+  release_notes?: string
+  published_at?: string
 }
 
 // Plugin configurations (would come from backend in production)
@@ -240,6 +265,15 @@ export function Settings() {
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [loadingLicense, setLoadingLicense] = useState(true)
   const [copiedHardwareId, setCopiedHardwareId] = useState(false)
+
+  // v3.57.123: System stats and version state
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null)
+  const [loadingSystemStats, setLoadingSystemStats] = useState(true)
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
+  const [loadingVersion, setLoadingVersion] = useState(true)
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'updating' | 'reconnecting' | 'success' | 'error'>('idle')
+  const [updateMessage, setUpdateMessage] = useState('')
+  const [licenseCollapsed, setLicenseCollapsed] = useState(true)
 
   // Email notification settings state
   const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null)
@@ -398,6 +432,43 @@ export function Settings() {
     }
 
     fetchLicenseStatus()
+  }, [])
+
+  // v3.57.123: Fetch system stats
+  useEffect(() => {
+    async function fetchSystemStats() {
+      setLoadingSystemStats(true)
+      try {
+        const response = await api.get<SystemStats>('/system/stats')
+        setSystemStats(response.data)
+      } catch (err) {
+        console.error('Failed to fetch system stats:', err)
+      } finally {
+        setLoadingSystemStats(false)
+      }
+    }
+
+    fetchSystemStats()
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchSystemStats, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // v3.57.123: Fetch version info
+  useEffect(() => {
+    async function fetchVersionInfo() {
+      setLoadingVersion(true)
+      try {
+        const response = await api.get<VersionInfo>('/system/version')
+        setVersionInfo(response.data)
+      } catch (err) {
+        console.error('Failed to fetch version info:', err)
+      } finally {
+        setLoadingVersion(false)
+      }
+    }
+
+    fetchVersionInfo()
   }, [])
 
   // Fetch notification settings
@@ -1986,173 +2057,429 @@ export function Settings() {
           </div>
         )}
 
-        {/* LICENSE TAB - v3.57.117: Simplified, no collapsible wrapper */}
-        {activeTab === 'license' && (
-          <div className="bg-card rounded-xl border">
-            {loadingLicense ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : licenseStatus ? (
-          <>
-            {/* License Status */}
-            <div className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="text-muted-foreground">
-                  <Shield className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="font-medium">Status</p>
-                  <p className="text-sm text-muted-foreground">Current license status</p>
+        {/* SYSTEM TAB - v3.57.123: System Info, Firmware, License */}
+        {activeTab === 'system' && (
+          <div className="space-y-6">
+            {/* System Information Section */}
+            <div className="bg-card rounded-xl border">
+              <div className="px-6 py-4 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <Server className="w-5 h-5 text-blue-500" />
+                  <div>
+                    <h3 className="font-semibold">System Information</h3>
+                    <p className="text-sm text-muted-foreground">Server resources and performance</p>
+                  </div>
                 </div>
               </div>
-              <div
-                className={cn(
-                  'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
-                  licenseStatus.licensed
-                    ? licenseStatus.grace_mode
-                      ? 'bg-yellow-500/10 text-yellow-500'
-                      : 'bg-green-500/10 text-green-500'
-                    : 'bg-red-500/10 text-red-500'
-                )}
-              >
-                {licenseStatus.licensed ? (
-                  licenseStatus.grace_mode ? (
-                    <>
-                      <AlertTriangle className="w-4 h-4" />
-                      Grace Mode
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Active
-                    </>
-                  )
-                ) : (
-                  <>
-                    <XCircle className="w-4 h-4" />
-                    {licenseStatus.status === 'not_activated' ? 'Not Activated' : 'Invalid'}
-                  </>
-                )}
-              </div>
+              {loadingSystemStats ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : systemStats ? (
+                <div className="p-6">
+                  {/* Host info */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground mb-1">Hostname</p>
+                      <p className="font-medium text-sm">{systemStats.hostname}</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground mb-1">Platform</p>
+                      <p className="font-medium text-sm">{systemStats.platform}</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground mb-1">Uptime</p>
+                      <p className="font-medium text-sm">{systemStats.uptime}</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground mb-1">Go Runtime</p>
+                      <p className="font-medium text-sm">{systemStats.go_runtime.version}</p>
+                    </div>
+                  </div>
+
+                  {/* Resource gauges */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* CPU */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Cpu className="w-4 h-4 text-blue-500" />
+                          <span className="text-sm font-medium">CPU</span>
+                        </div>
+                        <span className="text-sm text-muted-foreground">{systemStats.cpu.cores} cores</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full transition-all",
+                            systemStats.cpu.usage_percent > 80 ? "bg-red-500" :
+                            systemStats.cpu.usage_percent > 60 ? "bg-yellow-500" : "bg-blue-500"
+                          )}
+                          style={{ width: `${Math.min(systemStats.cpu.usage_percent, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Load: {systemStats.cpu.load_avg_1.toFixed(2)}</span>
+                        <span>{systemStats.cpu.usage_percent.toFixed(1)}%</span>
+                      </div>
+                    </div>
+
+                    {/* Memory */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-green-500" />
+                          <span className="text-sm font-medium">Memory</span>
+                        </div>
+                        <span className="text-sm text-muted-foreground">{systemStats.memory.total_gb.toFixed(1)} GB</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full transition-all",
+                            systemStats.memory.usage_percent > 85 ? "bg-red-500" :
+                            systemStats.memory.usage_percent > 70 ? "bg-yellow-500" : "bg-green-500"
+                          )}
+                          style={{ width: `${Math.min(systemStats.memory.usage_percent, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{systemStats.memory.used_gb.toFixed(1)} GB used</span>
+                        <span>{systemStats.memory.usage_percent.toFixed(1)}%</span>
+                      </div>
+                    </div>
+
+                    {/* Disk */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <HardDrive className="w-4 h-4 text-purple-500" />
+                          <span className="text-sm font-medium">Disk</span>
+                        </div>
+                        <span className="text-sm text-muted-foreground">{systemStats.disk.total_gb.toFixed(0)} GB</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full transition-all",
+                            systemStats.disk.usage_percent > 90 ? "bg-red-500" :
+                            systemStats.disk.usage_percent > 75 ? "bg-yellow-500" : "bg-purple-500"
+                          )}
+                          style={{ width: `${Math.min(systemStats.disk.usage_percent, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{systemStats.disk.used_gb.toFixed(1)} GB used</span>
+                        <span>{systemStats.disk.usage_percent.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="px-6 py-8 text-center text-muted-foreground">
+                  <p>Unable to retrieve system information</p>
+                </div>
+              )}
             </div>
 
-            {/* Customer Name */}
-            {licenseStatus.customer_name && (
-              <div className="flex items-center justify-between px-6 py-4">
+            {/* Firmware Section */}
+            <div className="bg-card rounded-xl border">
+              <div className="px-6 py-4 border-b border-border">
                 <div className="flex items-center gap-3">
-                  <div className="text-muted-foreground">
-                    <Users className="w-4 h-4" />
-                  </div>
+                  <Package className="w-5 h-5 text-orange-500" />
                   <div>
-                    <p className="font-medium">Customer</p>
-                    <p className="text-sm text-muted-foreground">Licensed organization</p>
+                    <h3 className="font-semibold">Firmware</h3>
+                    <p className="text-sm text-muted-foreground">Software version and updates</p>
                   </div>
                 </div>
-                <p className="font-medium">{licenseStatus.customer_name}</p>
               </div>
-            )}
-
-            {/* Expiration Date */}
-            {licenseStatus.expires_at && (
-              <div className="flex items-center justify-between px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="text-muted-foreground">
-                    <Calendar className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Expiration</p>
-                    <p className="text-sm text-muted-foreground">License valid until</p>
-                  </div>
+              {loadingVersion ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
-                <div className="text-right">
-                  <p className="font-medium">
-                    {new Date(licenseStatus.expires_at).toLocaleDateString()}
-                  </p>
-                  {licenseStatus.days_remaining !== undefined && licenseStatus.days_remaining > 0 && (
-                    <p className={cn(
-                      "text-sm",
-                      licenseStatus.days_remaining > 30
-                        ? "text-muted-foreground"
-                        : licenseStatus.days_remaining > 7
-                          ? "text-yellow-500"
-                          : "text-red-500"
+              ) : versionInfo ? (
+                <div className="p-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    {/* Version info */}
+                    <div className="flex items-center gap-6">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Installed Version</p>
+                        <p className="text-xl font-bold">v{versionInfo.installed}</p>
+                      </div>
+                      {versionInfo.update_available && (
+                        <>
+                          <ArrowUp className="w-5 h-5 text-orange-500" />
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Latest Version</p>
+                            <p className="text-xl font-bold text-orange-500">v{versionInfo.latest}</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Status badge and update button */}
+                    <div className="flex items-center gap-3">
+                      {versionInfo.update_available ? (
+                        <>
+                          <span className="px-3 py-1 rounded-full bg-orange-500/10 text-orange-500 text-sm font-medium flex items-center gap-1">
+                            <ArrowUp className="w-3 h-3" />
+                            Update Available
+                          </span>
+                          {isAdmin && (
+                            <button
+                              onClick={async () => {
+                                if (updateStatus === 'updating' || updateStatus === 'reconnecting') return
+                                setUpdateStatus('updating')
+                                setUpdateMessage('Starting update...')
+                                try {
+                                  await api.post('/system/update')
+                                  setUpdateMessage('Services restarting...')
+                                  setUpdateStatus('reconnecting')
+                                  // Wait and try to reconnect
+                                  await new Promise(resolve => setTimeout(resolve, 5000))
+                                  for (let i = 0; i < 30; i++) {
+                                    try {
+                                      await api.get('/health')
+                                      setUpdateStatus('success')
+                                      setUpdateMessage('Update completed!')
+                                      // Refresh version info
+                                      const response = await api.get<VersionInfo>('/system/version')
+                                      setVersionInfo(response.data)
+                                      return
+                                    } catch {
+                                      await new Promise(resolve => setTimeout(resolve, 2000))
+                                    }
+                                  }
+                                  setUpdateStatus('error')
+                                  setUpdateMessage('Failed to reconnect. Please refresh.')
+                                } catch {
+                                  setUpdateStatus('error')
+                                  setUpdateMessage('Update failed')
+                                }
+                              }}
+                              disabled={updateStatus === 'updating' || updateStatus === 'reconnecting'}
+                              className={cn(
+                                "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
+                                updateStatus === 'updating' || updateStatus === 'reconnecting'
+                                  ? "bg-muted text-muted-foreground cursor-wait"
+                                  : "bg-orange-500 hover:bg-orange-600 text-white"
+                              )}
+                            >
+                              {updateStatus === 'updating' || updateStatus === 'reconnecting' ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  {updateStatus === 'reconnecting' ? 'Reconnecting...' : 'Updating...'}
+                                </>
+                              ) : (
+                                <>
+                                  <Rocket className="w-4 h-4" />
+                                  Update Now
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-sm font-medium flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          Up to Date
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Update status message */}
+                  {updateMessage && (
+                    <div className={cn(
+                      "mt-4 p-3 rounded-lg text-sm",
+                      updateStatus === 'success' ? "bg-green-500/10 text-green-500" :
+                      updateStatus === 'error' ? "bg-red-500/10 text-red-500" :
+                      "bg-blue-500/10 text-blue-500"
                     )}>
-                      {licenseStatus.days_remaining} days remaining
-                    </p>
+                      {updateMessage}
+                    </div>
+                  )}
+
+                  {/* Warning for update */}
+                  {versionInfo.update_available && isAdmin && updateStatus === 'idle' && (
+                    <div className="mt-4 p-3 rounded-lg bg-orange-500/10 text-orange-400 text-sm flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span>During the update, services will restart. You may be temporarily disconnected for 30-60 seconds.</span>
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="px-6 py-8 text-center text-muted-foreground">
+                  <p>Unable to retrieve version information</p>
+                </div>
+              )}
+            </div>
 
-            {/* Features */}
-            {licenseStatus.features && licenseStatus.features.length > 0 && (
-              <div className="flex items-center justify-between px-6 py-4">
+            {/* License Section (Collapsible) */}
+            <div className="bg-card rounded-xl border">
+              <button
+                onClick={() => setLicenseCollapsed(!licenseCollapsed)}
+                className="w-full px-6 py-4 flex items-center justify-between hover:bg-muted/50 transition-colors"
+              >
                 <div className="flex items-center gap-3">
-                  <div className="text-muted-foreground">
-                    <Zap className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Features</p>
-                    <p className="text-sm text-muted-foreground">Enabled capabilities</p>
+                  <Key className="w-5 h-5 text-yellow-500" />
+                  <div className="text-left">
+                    <h3 className="font-semibold">License</h3>
+                    <p className="text-sm text-muted-foreground">Activation and subscription details</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 justify-end">
-                  {licenseStatus.features.map((feature) => (
-                    <span
-                      key={feature}
-                      className="px-2 py-1 bg-primary/10 text-primary rounded text-xs font-medium"
-                    >
-                      {feature}
+                <div className="flex items-center gap-3">
+                  {licenseStatus && (
+                    <span className={cn(
+                      "px-2 py-1 rounded-full text-xs font-medium",
+                      licenseStatus.licensed
+                        ? licenseStatus.grace_mode
+                          ? "bg-yellow-500/10 text-yellow-500"
+                          : "bg-green-500/10 text-green-500"
+                        : "bg-red-500/10 text-red-500"
+                    )}>
+                      {licenseStatus.licensed
+                        ? licenseStatus.grace_mode ? "Grace Mode" : "Active"
+                        : "Inactive"}
                     </span>
-                  ))}
+                  )}
+                  {licenseCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
                 </div>
-              </div>
-            )}
+              </button>
 
-            {/* Hardware ID (for support) */}
-            {licenseStatus.hardware_id && (
-              <div className="flex items-center justify-between px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="text-muted-foreground">
-                    <Server className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Hardware ID</p>
-                    <p className="text-sm text-muted-foreground">Machine identifier (for support)</p>
-                  </div>
+              {!licenseCollapsed && (
+                <div className="border-t border-border">
+                  {loadingLicense ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : licenseStatus ? (
+                    <>
+                      {/* License Status */}
+                      <div className="flex items-center justify-between px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Shield className="w-4 h-4 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Status</p>
+                            <p className="text-sm text-muted-foreground">Current license status</p>
+                          </div>
+                        </div>
+                        <div className={cn(
+                          'flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
+                          licenseStatus.licensed
+                            ? licenseStatus.grace_mode
+                              ? 'bg-yellow-500/10 text-yellow-500'
+                              : 'bg-green-500/10 text-green-500'
+                            : 'bg-red-500/10 text-red-500'
+                        )}>
+                          {licenseStatus.licensed ? (
+                            licenseStatus.grace_mode ? (
+                              <><AlertTriangle className="w-4 h-4" /> Grace Mode</>
+                            ) : (
+                              <><CheckCircle className="w-4 h-4" /> Active</>
+                            )
+                          ) : (
+                            <><XCircle className="w-4 h-4" /> {licenseStatus.status === 'not_activated' ? 'Not Activated' : 'Invalid'}</>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Customer Name */}
+                      {licenseStatus.customer_name && (
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-border">
+                          <div className="flex items-center gap-3">
+                            <Users className="w-4 h-4 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">Customer</p>
+                              <p className="text-sm text-muted-foreground">Licensed organization</p>
+                            </div>
+                          </div>
+                          <p className="font-medium">{licenseStatus.customer_name}</p>
+                        </div>
+                      )}
+
+                      {/* Expiration */}
+                      {licenseStatus.expires_at && (
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-border">
+                          <div className="flex items-center gap-3">
+                            <Calendar className="w-4 h-4 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">Expiration</p>
+                              <p className="text-sm text-muted-foreground">License valid until</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium">{new Date(licenseStatus.expires_at).toLocaleDateString()}</p>
+                            {licenseStatus.days_remaining !== undefined && licenseStatus.days_remaining > 0 && (
+                              <p className={cn("text-sm",
+                                licenseStatus.days_remaining > 30 ? "text-muted-foreground" :
+                                licenseStatus.days_remaining > 7 ? "text-yellow-500" : "text-red-500"
+                              )}>
+                                {licenseStatus.days_remaining} days remaining
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Features */}
+                      {licenseStatus.features && licenseStatus.features.length > 0 && (
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-border">
+                          <div className="flex items-center gap-3">
+                            <Zap className="w-4 h-4 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">Features</p>
+                              <p className="text-sm text-muted-foreground">Enabled capabilities</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            {licenseStatus.features.map((feature) => (
+                              <span key={feature} className="px-2 py-1 bg-primary/10 text-primary rounded text-xs font-medium">
+                                {feature}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Hardware ID */}
+                      {licenseStatus.hardware_id && (
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-border">
+                          <div className="flex items-center gap-3">
+                            <Server className="w-4 h-4 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">Hardware ID</p>
+                              <p className="text-sm text-muted-foreground">Machine identifier</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-mono text-xs text-muted-foreground">{licenseStatus.hardware_id.substring(0, 16)}...</p>
+                            <button
+                              onClick={async () => {
+                                const success = await copyToClipboard(licenseStatus.hardware_id || '')
+                                if (success) {
+                                  setCopiedHardwareId(true)
+                                  setTimeout(() => setCopiedHardwareId(false), 2000)
+                                }
+                              }}
+                              className={cn("p-1.5 rounded-md transition-colors",
+                                copiedHardwareId ? "bg-green-500/10 text-green-500" : "hover:bg-muted text-muted-foreground"
+                              )}
+                            >
+                              {copiedHardwareId ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="px-6 py-8 text-center text-muted-foreground">
+                      <p>Unable to retrieve license information</p>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <p className="font-mono text-xs text-muted-foreground">
-                    {licenseStatus.hardware_id.substring(0, 16)}...
-                  </p>
-                  <button
-                    onClick={async () => {
-                      const success = await copyToClipboard(licenseStatus.hardware_id || '')
-                      if (success) {
-                        setCopiedHardwareId(true)
-                        setTimeout(() => setCopiedHardwareId(false), 2000)
-                      }
-                    }}
-                    className={cn(
-                      "p-1.5 rounded-md transition-colors",
-                      copiedHardwareId
-                        ? "bg-green-500/10 text-green-500"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    )}
-                    title={copiedHardwareId ? "Copied!" : "Copy Hardware ID"}
-                  >
-                    {copiedHardwareId ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="px-6 py-8 text-center text-muted-foreground">
-            <p>Unable to retrieve license information</p>
-          </div>
-        )}
+              )}
+            </div>
           </div>
         )}
 
@@ -2454,7 +2781,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.57.122</p>
+        <p>VIGILANCE X v3.57.123</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

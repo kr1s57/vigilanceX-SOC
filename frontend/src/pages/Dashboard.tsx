@@ -26,7 +26,7 @@ import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert, PendingBanStats } from '@/types'
 
 // v3.57.118: Current installed version
-const INSTALLED_VERSION = '3.57.122'
+const INSTALLED_VERSION = '3.57.123'
 
 // v3.57.117: Added 8h filter option
 type Period = '1h' | '8h' | '24h' | '7d' | '30d'
@@ -160,30 +160,16 @@ export function Dashboard() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Security Dashboard</h1>
-            {/* v3.57.121: Version badge with GitHub release check */}
+            {/* v3.57.121: Version badge with GitHub release check - v3.57.123: Clickable when update available */}
             {(() => {
               // Use GitHub release version, fallback to license server version
               const latestVersion = latestGitVersion || licenseStatus?.latest_vgx_version
               // Only show green if we actually know the latest version AND it matches
               const isUpToDate = latestVersion ? latestVersion === INSTALLED_VERSION : null
-              return (
-                <span
-                  className={cn(
-                    "px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1",
-                    isUpToDate === null
-                      ? "bg-zinc-500/10 text-zinc-500" // Unknown state
-                      : isUpToDate
-                      ? "bg-green-500/10 text-green-500"
-                      : "bg-orange-500/10 text-orange-500"
-                  )}
-                  title={
-                    isUpToDate === null
-                      ? "Checking for updates..."
-                      : isUpToDate
-                      ? "Up to date"
-                      : `Update available: ${latestVersion}`
-                  }
-                >
+              const hasUpdate = isUpToDate === false
+
+              const badgeContent = (
+                <>
                   {isUpToDate === null ? (
                     <>
                       <Activity className="w-3 h-3 animate-pulse" />
@@ -200,6 +186,36 @@ export function Dashboard() {
                       Update: v{latestVersion}
                     </>
                   )}
+                </>
+              )
+
+              const badgeClasses = cn(
+                "px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1",
+                isUpToDate === null
+                  ? "bg-zinc-500/10 text-zinc-500" // Unknown state
+                  : isUpToDate
+                  ? "bg-green-500/10 text-green-500"
+                  : "bg-orange-500/10 text-orange-500 cursor-pointer hover:bg-orange-500/20 transition-colors"
+              )
+
+              const badgeTitle = isUpToDate === null
+                ? "Checking for updates..."
+                : isUpToDate
+                ? "Up to date"
+                : `Update available: ${latestVersion} - Click to update`
+
+              // Make clickable only when update is available - v3.57.123: Navigate to Settings System tab
+              return hasUpdate ? (
+                <button
+                  onClick={() => navigate('/settings?tab=system')}
+                  className={badgeClasses}
+                  title={badgeTitle}
+                >
+                  {badgeContent}
+                </button>
+              ) : (
+                <span className={badgeClasses} title={badgeTitle}>
+                  {badgeContent}
                 </span>
               )
             })()}
