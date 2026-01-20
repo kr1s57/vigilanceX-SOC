@@ -102,7 +102,7 @@ type GoStats struct {
 // Constants
 const (
 	GitHubAPIURL     = "https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest"
-	InstalledVersion = "3.58.101" // Fallback if env not set
+	InstalledVersion = "3.58.102" // Fallback if env not set
 	StatusIdle       = "idle"
 	StatusPulling    = "pulling"
 	StatusRestarting = "restarting"
@@ -243,7 +243,7 @@ func (h *UpdateHandler) TriggerUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 // performUpdate executes the actual update process
-// v3.58.101: Fixed to work on VPS - git pull + docker compose build
+// v3.58.102: Fixed to work on VPS - git pull + docker compose build
 func (h *UpdateHandler) performUpdate(targetVersion string) {
 	// Small delay to ensure response is sent
 	time.Sleep(500 * time.Millisecond)

@@ -26,7 +26,7 @@ import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert, PendingBanStats } from '@/types'
 
 // v3.57.118: Current installed version
-const INSTALLED_VERSION = '3.58.101'
+const INSTALLED_VERSION = '3.58.102'
 
 // v3.57.125: Semantic version comparison (returns -1, 0, or 1)
 function compareVersions(v1: string, v2: string): number {
