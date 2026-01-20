@@ -102,13 +102,42 @@ type GoStats struct {
 // Constants
 const (
 	GitHubAPIURL     = "https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest"
-	InstalledVersion = "3.57.123" // Fallback if env not set
+	InstalledVersion = "3.57.124" // Fallback if env not set
 	StatusIdle       = "idle"
 	StatusPulling    = "pulling"
 	StatusRestarting = "restarting"
 	StatusCompleted  = "completed"
 	StatusFailed     = "failed"
 )
+
+// compareVersions compares two semantic versions (X.YY.Z format)
+// Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
+func compareVersions(v1, v2 string) int {
+	parts1 := strings.Split(v1, ".")
+	parts2 := strings.Split(v2, ".")
+
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var p1, p2 int
+		if i < len(parts1) {
+			p1, _ = strconv.Atoi(parts1[i])
+		}
+		if i < len(parts2) {
+			p2, _ = strconv.Atoi(parts2[i])
+		}
+		if p1 < p2 {
+			return -1
+		}
+		if p1 > p2 {
+			return 1
+		}
+	}
+	return 0
+}
 
 // NewUpdateHandler creates a new update handler
 func NewUpdateHandler(composeFile, workDir string) *UpdateHandler {
@@ -136,10 +165,11 @@ func (h *UpdateHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
 	// Fetch latest version from GitHub
 	latest, releaseInfo := h.fetchLatestVersion()
 
+	// v3.57.124: Use semver comparison - update only if installed < latest
 	versionInfo := VersionInfo{
 		Installed:       installed,
 		Latest:          latest,
-		UpdateAvailable: latest != "" && latest != installed,
+		UpdateAvailable: latest != "" && compareVersions(installed, latest) < 0,
 	}
 
 	if releaseInfo != nil {

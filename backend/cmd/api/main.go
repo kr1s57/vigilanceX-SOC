@@ -576,7 +576,7 @@ func main() {
 
 	// v3.57.123: System Update handler for in-app updates
 	updateHandler := handlers.NewUpdateHandler(
-		"/opt/vigilanceX/docker/docker-compose.prod.yml",
+		"/opt/vigilanceX/docker/docker-compose.yml",
 		"/opt/vigilanceX/docker",
 	)
 	logger.Info("System Update handler initialized")
@@ -622,8 +622,9 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Rate limiting
-	r.Use(httprate.LimitByIP(100, time.Minute))
+	// Rate limiting - v3.57.124: Increased from 100 to 500 req/min for SPA compatibility
+	// React SPAs make many parallel requests on page load
+	r.Use(httprate.LimitByIP(500, time.Minute))
 
 	// Health check (no auth required)
 	r.Get("/health", handlers.HealthCheck(cfg))

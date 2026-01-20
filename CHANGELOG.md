@@ -7,6 +7,31 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.124] - 2026-01-20
+
+### Fixed
+- **429 Rate Limit Handling**: LicenseContext now preserves license state on temporary errors (429, 502, 503)
+  - Previously, rate limit errors caused redirect to "License Required" page
+  - Now keeps previous valid license state and logs warning silently
+- **Rate Limiter Too Aggressive**: Increased global rate limit from 100 to 500 req/min
+  - React SPAs make many parallel requests on page load
+  - 100/min was causing auth failures and redirect loops
+- **Version Comparison Logic**: Fixed semver comparison in Dashboard and backend
+  - Dashboard badge now correctly shows green "Up to Date" when installed >= latest
+  - Backend `/system/version` uses proper semver comparison instead of string equality
+  - Previously showed "Update Available" even when installed version was newer
+
+---
+
+## [3.57.123] - 2026-01-20
+
+### Added
+- **In-App Updates**: Settings System tab now shows firmware/software update section
+  - Displays installed version vs latest GitHub release
+  - Visual comparison with update indicator
+
+---
+
 ## [3.57.122] - 2026-01-20
 
 ### Fixed

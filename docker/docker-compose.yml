@@ -93,7 +93,9 @@ services:
       - backend_data:/app/data
       - backend_config:/app/config
       - /etc/machine-id:/etc/machine-id:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # v3.57.108: Admin console docker access
+      - /var/run/docker.sock:/var/run/docker.sock  # v3.57.108: Admin console docker access (rw for updates)
+      - /opt/vigilanceX/docker:/opt/vigilanceX/docker:ro  # v3.57.123: For system updates
+    user: root  # v3.57.123: Required for docker socket access during updates
     environment:
       APP_ENV: ${APP_ENV:-production}
       APP_PORT: 8080

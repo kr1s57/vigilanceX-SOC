@@ -29,11 +29,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -o /build/reset-password \
     ./cmd/reset-password
 
-# Final stage
-FROM alpine:3.19
+# Final stage - v3.57.123: Use Alpine 3.21 for newer Docker client
+FROM alpine:3.21
 
 # Install runtime dependencies (v3.57.108: add docker-cli for admin console)
-RUN apk add --no-cache ca-certificates tzdata wget docker-cli
+# v3.57.123: Add docker-compose for system updates
+RUN apk add --no-cache ca-certificates tzdata wget docker-cli docker-cli-compose
 
 # Create non-root user and add to docker group
 RUN adduser -D -g '' vigilance && \

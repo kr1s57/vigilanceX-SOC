@@ -32,18 +32,30 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       const data = await licenseApi.getStatus()
       setStatus(data)
     } catch (err) {
-      // If we can't reach the server, assume unlicensed
-      setStatus({
-        licensed: false,
-        status: 'error',
-        grace_mode: false,
-        features: []
-      })
-      setError(err instanceof Error ? err.message : 'Failed to check license status')
+      // v3.57.124: Handle temporary errors (429, 503, network) gracefully
+      // Don't reset license status on temporary errors - keep previous state
+      const isAxiosError = err && typeof err === 'object' && 'response' in err
+      const statusCode = isAxiosError ? (err as { response?: { status?: number } }).response?.status : undefined
+      const isTemporaryError = statusCode === 429 || statusCode === 503 || statusCode === 502 || !statusCode
+
+      if (isTemporaryError && status !== null) {
+        // Keep previous license state, just log the error
+        console.warn('License check temporarily unavailable:', statusCode || 'network error')
+        setError(null) // Don't show error for temporary issues
+      } else {
+        // Permanent error or no previous state - assume unlicensed
+        setStatus({
+          licensed: false,
+          status: 'error',
+          grace_mode: false,
+          features: []
+        })
+        setError(err instanceof Error ? err.message : 'Failed to check license status')
+      }
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [status])
 
   const activate = useCallback(async (licenseKey: string) => {
     setIsLoading(true)
