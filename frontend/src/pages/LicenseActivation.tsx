@@ -447,7 +447,7 @@ export default function LicenseActivation() {
             <div className="flex flex-col items-center gap-3">
               <div className="flex items-center gap-2 text-zinc-500 text-xs">
                 <Shield className="w-4 h-4" />
-                <span>VIGILANCE X v3.57.120</span>
+                <span>VIGILANCE X v3.57.121</span>
               </div>
               <a
                 href="mailto:support@vigilancex.io"

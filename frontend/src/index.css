@@ -1676,6 +1676,19 @@
   box-shadow: 0 0 12px rgba(59, 130, 246, 0.12);
 }
 
+/* Attack type badge color overrides for better contrast
+   Using attribute selectors to avoid Tailwind processing conflicts */
+.dark-plus span[class*="text-orange-"],
+.dark-plus code[class*="text-orange-"],
+.dark-plus p[class*="text-orange-"] {
+  color: #fdba74 !important; /* Brighter orange-300 for visibility */
+}
+
+.dark-plus span[class*="text-yellow-"],
+.dark-plus code[class*="text-yellow-"] {
+  color: #fef08a !important; /* Brighter yellow-200 */
+}
+
 /* =============================================================================
    DARK+ SCROLLBAR
    ============================================================================= */
@@ -2000,6 +2013,20 @@
 .anthracite .severity-low {
   @apply bg-emerald-500/10 text-emerald-400 border border-emerald-500/25;
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.08);
+}
+
+/* Attack type colors - Use cyan for orange elements (contrast with theme accent)
+   Using attribute selectors to avoid Tailwind processing conflicts */
+.anthracite span[class*="text-orange-"],
+.anthracite code[class*="text-orange-"],
+.anthracite p[class*="text-orange-"] {
+  color: #22d3ee !important; /* Cyan instead of orange for contrast */
+}
+
+/* Keep yellow bright for visibility */
+.anthracite span[class*="text-yellow-"],
+.anthracite code[class*="text-yellow-"] {
+  color: #fef08a !important; /* Brighter yellow-200 */
 }
 
 /* =============================================================================

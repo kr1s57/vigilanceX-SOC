@@ -26,7 +26,7 @@ import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert, PendingBanStats } from '@/types'
 
 // v3.57.118: Current installed version
-const INSTALLED_VERSION = '3.57.120'
+const INSTALLED_VERSION = '3.57.121'
 
 // v3.57.117: Added 8h filter option
 type Period = '1h' | '8h' | '24h' | '7d' | '30d'
@@ -50,17 +50,17 @@ export function Dashboard() {
   const [showAlertsModal, setShowAlertsModal] = useState(false)
   // v3.57.108: IP Threat Modal state
   const [threatModalIP, setThreatModalIP] = useState<string | null>(null)
-  // v3.57.120: Latest version from GitHub
+  // v3.57.121: Latest version from GitHub
   const [latestGitVersion, setLatestGitVersion] = useState<string | null>(null)
 
-  // v3.57.120: Fetch latest version from GitHub releases
+  // v3.57.121: Fetch latest version from GitHub releases
   useEffect(() => {
     async function fetchLatestVersion() {
       try {
         const response = await fetch('https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest')
         if (response.ok) {
           const data = await response.json()
-          // tag_name format: "v3.57.120" -> extract "3.57.120"
+          // tag_name format: "v3.57.121" -> extract "3.57.121"
           const version = data.tag_name?.replace(/^v/, '') || null
           setLatestGitVersion(version)
         }
@@ -160,7 +160,7 @@ export function Dashboard() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">Security Dashboard</h1>
-            {/* v3.57.120: Version badge with GitHub release check */}
+            {/* v3.57.121: Version badge with GitHub release check */}
             {(() => {
               // Use GitHub release version, fallback to license server version
               const latestVersion = latestGitVersion || licenseStatus?.latest_vgx_version
