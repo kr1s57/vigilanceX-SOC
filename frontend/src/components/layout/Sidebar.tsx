@@ -31,6 +31,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { Logo } from '@/components/Logo'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLicense } from '@/contexts/LicenseContext'
+import { useAlertsStore } from '@/stores' // v3.58.100
 
 interface NavItem {
   name: string
@@ -38,6 +39,7 @@ interface NavItem {
   icon: LucideIcon
   colorClass: string
   adminOnly?: boolean
+  badge?: number // v3.58.100: Optional badge count
 }
 
 interface NavCategory {
@@ -222,7 +224,13 @@ function CategoryItem({
                       getIconClass(iconStyle, item.colorClass, isActive)
                     )}
                   />
-                  {item.name}
+                  <span className="flex-1">{item.name}</span>
+                  {/* v3.58.100: Badge for alerts */}
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white min-w-[18px] text-center">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
                 </>
               )}
             </NavLink>
@@ -239,6 +247,7 @@ export function Sidebar() {
   const { settings } = useSettings()
   const { user, isAdmin, logout } = useAuth()
   const { status: licenseStatus, isLicensed } = useLicense()
+  const vigimailNewLeaks = useAlertsStore((state) => state.vigimailNewLeaks) // v3.58.100
 
   // State pour tracker les catégories ouvertes
   const [openCategories, setOpenCategories] = useState<Set<string>>(() => {
@@ -296,16 +305,27 @@ export function Sidebar() {
         <div className="my-2 border-t border-border/50" />
 
         {/* Catégories avec sous-menus */}
-        {categories.map((category) => (
-          <CategoryItem
-            key={category.name}
-            category={category}
-            isOpen={openCategories.has(category.name)}
-            onToggle={() => toggleCategory(category.name)}
-            iconStyle={settings.iconStyle}
-            isAdmin={isAdmin}
-          />
-        ))}
+        {categories.map((category) => {
+          // v3.58.100: Inject badge count for Vigimail
+          const categoryWithBadges = {
+            ...category,
+            items: category.items.map(item =>
+              item.href === '/vigimail'
+                ? { ...item, badge: vigimailNewLeaks }
+                : item
+            )
+          }
+          return (
+            <CategoryItem
+              key={category.name}
+              category={categoryWithBadges}
+              isOpen={openCategories.has(category.name)}
+              onToggle={() => toggleCategory(category.name)}
+              iconStyle={settings.iconStyle}
+              isAdmin={isAdmin}
+            />
+          )
+        })}
       </nav>
 
       {/* License Status & Settings */}

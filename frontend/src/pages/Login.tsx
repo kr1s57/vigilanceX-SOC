@@ -193,7 +193,7 @@ export default function Login() {
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-zinc-800 text-center">
             <p className="text-zinc-600 text-xs">
-              VIGILANCE X v3.57.126
+              VIGILANCE X v3.58.100
             </p>
           </div>
         </div>

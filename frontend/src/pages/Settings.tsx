@@ -57,13 +57,14 @@ const UserManagementContent = lazy(() => import('@/pages/UserManagement'))
 // v3.57.117: Settings tabs - v3.57.123: License renamed to System
 type SettingsTab = 'general' | 'notifications' | 'security' | 'data' | 'integrations' | 'system' | 'users'
 
+// v3.58.100: System tab moved to first position
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
+  { id: 'system', label: 'System', icon: <Server className="w-4 h-4" /> },
   { id: 'general', label: 'General', icon: <Monitor className="w-4 h-4" /> },
   { id: 'notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" /> },
   { id: 'security', label: 'Security', icon: <Shield className="w-4 h-4" /> },
   { id: 'data', label: 'Data', icon: <Database className="w-4 h-4" /> },
   { id: 'integrations', label: 'Integrations', icon: <Plug className="w-4 h-4" /> },
-  { id: 'system', label: 'System', icon: <Server className="w-4 h-4" /> },
   { id: 'users', label: 'Users', icon: <Users className="w-4 h-4" />, adminOnly: true },
 ]
 import { useSettings, type AppSettings } from '@/contexts/SettingsContext'
@@ -275,6 +276,11 @@ export function Settings() {
   const [updateMessage, setUpdateMessage] = useState('')
   const [checkingFirmware, setCheckingFirmware] = useState(false) // v3.57.126: Manual firmware check
   const [licenseCollapsed, setLicenseCollapsed] = useState(true)
+
+  // v3.58.100: System Admin notification settings
+  const [adminNotifEmailInput, setAdminNotifEmailInput] = useState('')
+  const [savingAdminNotif, setSavingAdminNotif] = useState(false)
+  const [adminNotifSaved, setAdminNotifSaved] = useState(false)
 
   // Email notification settings state
   const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null)
@@ -2223,6 +2229,73 @@ export function Settings() {
               )}
             </div>
 
+            {/* v3.58.100: System Admin Notifications Section */}
+            <div className="bg-card rounded-xl border">
+              <div className="px-6 py-4 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <Mail className="w-5 h-5 text-cyan-500" />
+                  <div>
+                    <h3 className="font-semibold">System Notifications</h3>
+                    <p className="text-sm text-muted-foreground">Admin email for critical system alerts</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Admin Email</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={adminNotifEmailInput}
+                      onChange={(e) => setAdminNotifEmailInput(e.target.value)}
+                      placeholder="admin@yourcompany.com"
+                      className="flex-1 px-3 py-2 bg-background border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                    />
+                    <button
+                      onClick={async () => {
+                        setSavingAdminNotif(true)
+                        try {
+                          await configApi.save('system', { admin_email: adminNotifEmailInput })
+                          setAdminNotifSaved(true)
+                          setTimeout(() => setAdminNotifSaved(false), 3000)
+                        } catch (err) {
+                          console.error('Failed to save admin email:', err)
+                        } finally {
+                          setSavingAdminNotif(false)
+                        }
+                      }}
+                      disabled={savingAdminNotif || !adminNotifEmailInput}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                        adminNotifSaved
+                          ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                          : "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/30",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
+                    >
+                      {savingAdminNotif ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : adminNotifSaved ? (
+                        <CheckCircle className="w-4 h-4" />
+                      ) : (
+                        'Save'
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    This email will receive critical notifications:
+                  </p>
+                  <ul className="text-xs text-muted-foreground mt-1 ml-4 list-disc space-y-0.5">
+                    <li>Firmware updates available</li>
+                    <li>New data leaks detected (Vigimail)</li>
+                    <li>High CPU or RAM usage alerts</li>
+                    <li>Disk space running low</li>
+                    <li>License expiration warnings</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
             {/* Firmware Section */}
             <div className="bg-card rounded-xl border">
               <div className="px-6 py-4 border-b border-border">
@@ -2845,7 +2918,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.57.126</p>
+        <p>VIGILANCE X v3.58.100</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
