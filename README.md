@@ -9,7 +9,7 @@
 VIGILANCE X centralise la supervision et la réponse active pour toute votre infrastructure Sophos XGS :
 
 - **Visibilité totale** — Tous vos logs WAF, IPS, VPN, ATP et Antivirus dans une interface unifiée
-- **Parser Sophos natif** — Support de 100+ champs XGS, 70+ règles de détection, mapping MITRE ATT&CK
+- **Parser Sophos natif** — Support de 104 champs XGS, 74 règles de détection, 23 techniques MITRE ATT&CK
 - **Analyse en temps réel** — Visualisez instantanément chaque blocage, chaque attaque, chaque menace
 - **Threat Intelligence** — Enrichissement automatique des IPs via 11 sources (AbuseIPDB, VirusTotal, CrowdSec...)
 - **Réponse automatisée** — Détection et bannissement des menaces directement sur votre firewall XGS

@@ -26,7 +26,7 @@ import { useLicense } from '@/contexts/LicenseContext'
 import type { OverviewResponse, TimelinePoint, TopAttacker, CriticalAlert, PendingBanStats } from '@/types'
 
 // v3.57.118: Current installed version
-const INSTALLED_VERSION = '3.57.121'
+const INSTALLED_VERSION = '3.57.122'
 
 // v3.57.117: Added 8h filter option
 type Period = '1h' | '8h' | '24h' | '7d' | '30d'
