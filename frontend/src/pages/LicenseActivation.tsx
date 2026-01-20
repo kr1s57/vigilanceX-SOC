@@ -33,9 +33,19 @@ export default function LicenseActivation() {
     setLocalError(null)
     setSyncSuccess(false)
     try {
-      await syncWithServer()
+      // v3.57.127: syncWithServer now returns the license status
+      const syncedStatus = await syncWithServer()
       setSyncSuccess(true)
-      setTimeout(() => setSyncSuccess(false), 3000)
+
+      // If license is now valid, redirect to dashboard
+      if (syncedStatus?.licensed) {
+        setTimeout(() => {
+          navigate('/', { replace: true })
+        }, 1000)
+      } else {
+        // Show success briefly then clear
+        setTimeout(() => setSyncSuccess(false), 3000)
+      }
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : 'Failed to sync license')
     } finally {
@@ -71,15 +81,16 @@ export default function LicenseActivation() {
     setLocalError(null)
     setSuccess(false)
 
-    // Validate license key format (VX3-XXXX-XXXX-XXXX-XXXX or XXXX-XXXX-XXXX-XXXX)
-    const keyPattern = /^(VX3-)?[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}(-[A-Z0-9]{4})?$/i
-    if (!keyPattern.test(licenseKey.trim())) {
-      setLocalError('Invalid license key format')
+    // v3.57.127: Relaxed validation - accept any key with at least 10 chars
+    // Backend will validate the actual format (supports VX3-, TRIAL-, and other formats)
+    const trimmedKey = licenseKey.trim()
+    if (trimmedKey.length < 10) {
+      setLocalError('License key is too short')
       return
     }
 
     try {
-      await activate(licenseKey.trim().toUpperCase())
+      await activate(trimmedKey.toUpperCase())
       setSuccess(true)
       setTimeout(() => {
         navigate('/', { replace: true })

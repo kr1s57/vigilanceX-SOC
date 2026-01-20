@@ -9,7 +9,7 @@ interface LicenseContextType {
   error: string | null
   activate: (licenseKey: string) => Promise<void>
   refresh: () => Promise<void>
-  syncWithServer: () => Promise<void>
+  syncWithServer: () => Promise<LicenseStatus | null> // v3.57.127: Returns status for redirect check
   // v3.2: Fresh Deploy methods
   needsFreshDeploy: boolean
   freshDeploy: (email: string, hostname?: string) => Promise<void>
@@ -81,26 +81,32 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Force sync with license server - validates license and updates status
-  const syncWithServer = useCallback(async () => {
+  // v3.57.127: Now returns the license status so callers can check if licensed
+  const syncWithServer = useCallback(async (): Promise<LicenseStatus | null> => {
     setIsLoading(true)
     setError(null)
     try {
       const result = await licenseApi.forceValidate()
       if (result.license) {
         setStatus(result.license)
+        return result.license
       } else if (!result.success) {
         // License validation failed (revoked, expired, etc.)
-        setStatus({
+        const invalidStatus: LicenseStatus = {
           licensed: false,
           status: result.message || 'invalid',
           grace_mode: false,
           features: []
-        })
+        }
+        setStatus(invalidStatus)
+        return invalidStatus
       }
+      return null
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sync with license server')
       // Refresh local status
       await refresh()
+      return null
     } finally {
       setIsLoading(false)
     }
