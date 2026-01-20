@@ -882,8 +882,52 @@ function ConfigForm({
   const [hibpKey, setHibpKey] = useState('')
   const [leakcheckKey, setLeakcheckKey] = useState('')
   const [saving, setSaving] = useState(false)
+  // v3.57.119: HIBP API key test state
+  const [testingHibp, setTestingHibp] = useState(false)
+  const [hibpTestResult, setHibpTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // v3.57.119: Test HIBP API key before saving
+  const handleTestHibpKey = async () => {
+    const keyToTest = hibpKey || config.hibp_api_key
+    if (!keyToTest || keyToTest.includes('****')) {
+      setHibpTestResult({ success: false, message: 'Please enter a valid API key' })
+      return
+    }
+
+    setTestingHibp(true)
+    setHibpTestResult(null)
+
+    try {
+      const response = await fetch('/api/v1/vigimail/test-hibp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ api_key: keyToTest })
+      })
+
+      const data = await response.json()
+      if (response.ok && data.success) {
+        setHibpTestResult({ success: true, message: 'API key is valid!' })
+      } else {
+        setHibpTestResult({ success: false, message: data.error || 'API key test failed' })
+      }
+    } catch {
+      setHibpTestResult({ success: false, message: 'Connection error' })
+    } finally {
+      setTestingHibp(false)
+    }
+  }
 
   const handleSave = async () => {
+    // v3.57.119: If HIBP key was changed, require successful test first
+    const hibpKeyChanged = hibpKey && !hibpKey.includes('****')
+    if (hibpKeyChanged && (!hibpTestResult || !hibpTestResult.success)) {
+      setHibpTestResult({ success: false, message: 'Please test the API key before saving' })
+      return
+    }
+
     setSaving(true)
     const updates: Partial<VigimailConfig> = {
       enabled,
@@ -931,7 +975,7 @@ function ConfigForm({
         </select>
       </div>
 
-      {/* HIBP API Key */}
+      {/* HIBP API Key - v3.57.119: Added Test & Save functionality */}
       <div className="p-3 bg-gray-900 rounded-lg">
         <div className="flex items-center gap-2 mb-2">
           <Key className="w-4 h-4 text-purple-400" />
@@ -940,14 +984,51 @@ function ConfigForm({
             <ExternalLink className="w-4 h-4" />
           </a>
         </div>
-        <input
-          type="password"
-          value={hibpKey || config.hibp_api_key}
-          onChange={e => setHibpKey(e.target.value)}
-          placeholder="Enter HIBP API key (paid, $3.50/month)"
-          className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500"
-        />
-        <p className="text-gray-500 text-xs mt-1">Required for breach detection. Free alternative (LeakCheck) available below.</p>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={hibpKey || config.hibp_api_key}
+            onChange={e => {
+              setHibpKey(e.target.value)
+              setHibpTestResult(null) // Reset test result when key changes
+            }}
+            placeholder="Enter HIBP API key (paid, $3.50/month)"
+            className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500"
+          />
+          <button
+            onClick={handleTestHibpKey}
+            disabled={testingHibp || (!hibpKey && !config.hibp_api_key)}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:opacity-50 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-colors"
+          >
+            {testingHibp ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="w-4 h-4" />
+                Test Key
+              </>
+            )}
+          </button>
+        </div>
+        {/* Test result message */}
+        {hibpTestResult && (
+          <div className={`mt-2 p-2 rounded-lg text-sm flex items-center gap-2 ${
+            hibpTestResult.success
+              ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+              : 'bg-red-500/10 border border-red-500/30 text-red-400'
+          }`}>
+            {hibpTestResult.success ? (
+              <CheckCircle className="w-4 h-4" />
+            ) : (
+              <AlertTriangle className="w-4 h-4" />
+            )}
+            {hibpTestResult.message}
+          </div>
+        )}
+        <p className="text-gray-500 text-xs mt-1">Required for breach detection. Test your key before saving.</p>
       </div>
 
       {/* LeakCheck API Key */}

@@ -886,6 +886,8 @@ func main() {
 				r.Delete("/emails/{email}", vigimailHandler.DeleteEmail)
 				r.Get("/emails/{email}/leaks", vigimailHandler.GetEmailLeaks)
 				r.Post("/emails/{email}/check", vigimailHandler.CheckEmail)
+				// API key testing (v3.57.119)
+				r.Post("/test-hibp", vigimailHandler.TestHIBPKey)
 				// Bulk operations
 				r.Post("/check-all", vigimailHandler.CheckAll)
 			})

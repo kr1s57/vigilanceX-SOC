@@ -1496,3 +1496,709 @@
   color: #a78bfa;
   text-shadow: 0 0 20px rgba(139, 92, 246, 0.25);
 }
+
+/* =============================================================================
+   v3.57.119: DARK+ THEME - Modern Glossy Black Aesthetic
+   Premium dark theme with subtle reflections and depth
+   ============================================================================= */
+
+/* Dark+ theme color variables */
+.dark-plus {
+  /* Base colors - Pure glossy black */
+  --background: 0 0% 4%;
+  --foreground: 0 0% 95%;
+
+  /* Card surfaces - Elevated glass effect */
+  --card: 0 0% 7%;
+  --card-foreground: 0 0% 95%;
+
+  /* Popover/Modal */
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 95%;
+
+  /* Primary - Electric blue accent */
+  --primary: 210 100% 50%;
+  --primary-foreground: 0 0% 100%;
+
+  /* Secondary - Subtle gray */
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 90%;
+
+  /* Muted - Deep charcoal */
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 55%;
+
+  /* Accent - Bright blue */
+  --accent: 210 100% 55%;
+  --accent-foreground: 0 0% 100%;
+
+  /* Destructive - Vibrant red */
+  --destructive: 0 80% 50%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* Borders - Subtle glass edge */
+  --border: 0 0% 16%;
+  --input: 0 0% 12%;
+  --ring: 210 100% 50%;
+
+  /* Extended Dark+ palette */
+  --darkplus-blue: 210 100% 50%;
+  --darkplus-green: 142 70% 45%;
+  --darkplus-red: 0 80% 50%;
+  --darkplus-orange: 25 95% 50%;
+  --darkplus-yellow: 45 95% 50%;
+}
+
+/* Dark+ body enhancements - Subtle gradient for depth */
+.dark-plus body {
+  background-image:
+    radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
+}
+
+/* =============================================================================
+   DARK+ GLASSMORPHISM - Premium glass effects
+   ============================================================================= */
+
+.glass-darkplus {
+  background: linear-gradient(
+    135deg,
+    rgba(10, 10, 10, 0.9) 0%,
+    rgba(18, 18, 18, 0.7) 50%,
+    rgba(10, 10, 10, 0.9) 100%
+  );
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Glossy card with reflection */
+.card-darkplus {
+  @apply rounded-xl p-6;
+  background: linear-gradient(
+    165deg,
+    rgba(25, 25, 25, 0.95) 0%,
+    rgba(15, 15, 15, 0.9) 50%,
+    rgba(18, 18, 18, 0.95) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Top reflection highlight */
+.card-darkplus::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.card-darkplus:hover {
+  border-color: rgba(59, 130, 246, 0.2);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    0 0 30px rgba(59, 130, 246, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+/* =============================================================================
+   DARK+ BUTTONS - Glossy premium buttons
+   ============================================================================= */
+
+.btn-darkplus {
+  @apply relative px-6 py-2.5 font-medium rounded-lg overflow-hidden;
+  background: linear-gradient(165deg, rgba(30, 30, 30, 0.95) 0%, rgba(20, 20, 20, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e5e5e5;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.btn-darkplus:hover {
+  background: linear-gradient(165deg, rgba(40, 40, 40, 0.95) 0%, rgba(30, 30, 30, 0.9) 100%);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.btn-darkplus-primary {
+  @apply relative px-6 py-2.5 font-semibold rounded-lg overflow-hidden;
+  background: linear-gradient(165deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+}
+
+.btn-darkplus-primary:hover {
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.5), 0 0 50px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+/* =============================================================================
+   DARK+ SEVERITY BADGES
+   ============================================================================= */
+
+.dark-plus .severity-critical {
+  @apply bg-red-500/10 text-red-400 border border-red-500/30;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+}
+
+.dark-plus .severity-high {
+  @apply bg-orange-500/10 text-orange-400 border border-orange-500/30;
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.15);
+}
+
+.dark-plus .severity-medium {
+  @apply bg-yellow-500/10 text-yellow-400 border border-yellow-500/30;
+  box-shadow: 0 0 12px rgba(234, 179, 8, 0.12);
+}
+
+.dark-plus .severity-low {
+  @apply bg-blue-500/10 text-blue-400 border border-blue-500/30;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.12);
+}
+
+/* =============================================================================
+   DARK+ SCROLLBAR
+   ============================================================================= */
+
+.dark-plus ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark-plus ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dark-plus ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(60, 60, 60, 0.8), rgba(40, 40, 40, 0.8));
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dark-plus ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(80, 80, 80, 0.9), rgba(60, 60, 60, 0.9));
+}
+
+/* =============================================================================
+   DARK+ THEME - AUTO-APPLIED STYLES
+   ============================================================================= */
+
+/* Header with glossy effect */
+.dark-plus header {
+  background: linear-gradient(180deg, rgba(12, 12, 12, 0.98) 0%, rgba(8, 8, 8, 0.95) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.dark-plus header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(59, 130, 246, 0.3) 50%, transparent 100%);
+}
+
+/* Sidebar with depth */
+.dark-plus aside,
+.dark-plus nav[class*="sidebar"],
+.dark-plus div[class*="sidebar"] {
+  background: linear-gradient(180deg, rgba(10, 10, 10, 0.99) 0%, rgba(5, 5, 5, 0.98) 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
+}
+
+/* Card enhancements */
+.dark-plus [class*="rounded-xl"][class*="border"][class*="bg-card"],
+.dark-plus [class*="rounded-lg"][class*="border"][class*="bg-card"] {
+  background: linear-gradient(165deg, rgba(18, 18, 18, 0.95) 0%, rgba(12, 12, 12, 0.9) 100%);
+  border-color: rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.dark-plus [class*="rounded-xl"][class*="border"][class*="bg-card"]:hover,
+.dark-plus [class*="rounded-lg"][class*="border"][class*="bg-card"]:hover {
+  border-color: rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Enhanced buttons */
+.dark-plus button[class*="bg-primary"],
+.dark-plus button[class*="bg-blue"] {
+  background: linear-gradient(165deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.dark-plus button[class*="bg-primary"]:hover,
+.dark-plus button[class*="bg-blue"]:hover {
+  box-shadow: 0 0 28px rgba(59, 130, 246, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Input fields - glossy */
+.dark-plus input:not([type="checkbox"]):not([type="radio"]),
+.dark-plus textarea,
+.dark-plus select {
+  background: linear-gradient(165deg, rgba(15, 15, 15, 0.9) 0%, rgba(10, 10, 10, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.dark-plus input:not([type="checkbox"]):not([type="radio"]):focus,
+.dark-plus textarea:focus,
+.dark-plus select:focus {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1), 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+/* Modal/Dialog */
+.dark-plus [role="dialog"],
+.dark-plus [class*="modal"],
+.dark-plus [class*="Dialog"] {
+  background: linear-gradient(165deg, rgba(15, 15, 15, 0.99) 0%, rgba(10, 10, 10, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 30px 60px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Dropdown menus */
+.dark-plus [role="menu"],
+.dark-plus [class*="dropdown"],
+.dark-plus [class*="popover"] {
+  background: linear-gradient(180deg, rgba(20, 20, 20, 0.99) 0%, rgba(15, 15, 15, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Table header */
+.dark-plus th,
+.dark-plus thead tr {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dark-plus th {
+  color: rgba(180, 180, 180, 0.9);
+  font-weight: 500;
+}
+
+.dark-plus tbody tr:hover {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+/* Data table */
+.dark-plus .data-table th {
+  @apply px-4 py-3 text-left font-medium text-gray-400 bg-white/5;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dark-plus .data-table td {
+  @apply px-4 py-3;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.dark-plus .data-table tr:hover td {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+/* Charts */
+.dark-plus .recharts-cartesian-grid line {
+  stroke: rgba(255, 255, 255, 0.05);
+}
+
+/* Leaflet map */
+.dark-plus .leaflet-container {
+  background: #080808;
+}
+
+.dark-plus .leaflet-tile-pane {
+  filter: brightness(0.5) contrast(1.1);
+}
+
+.dark-plus .leaflet-popup-content-wrapper {
+  background: linear-gradient(165deg, rgba(18, 18, 18, 0.98) 0%, rgba(12, 12, 12, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* =============================================================================
+   v3.57.119: ANTHRACITE THEME - Modern Charcoal Gray Aesthetic
+   Professional dark gray theme with subtle warmth
+   ============================================================================= */
+
+/* Anthracite theme color variables */
+.anthracite {
+  /* Base colors - Warm charcoal gray */
+  --background: 220 8% 8%;
+  --foreground: 220 5% 92%;
+
+  /* Card surfaces - Elevated charcoal */
+  --card: 220 8% 11%;
+  --card-foreground: 220 5% 92%;
+
+  /* Popover/Modal */
+  --popover: 220 8% 13%;
+  --popover-foreground: 220 5% 92%;
+
+  /* Primary - Warm orange/amber accent */
+  --primary: 25 95% 55%;
+  --primary-foreground: 220 8% 8%;
+
+  /* Secondary - Warm gray */
+  --secondary: 220 6% 18%;
+  --secondary-foreground: 220 5% 88%;
+
+  /* Muted - Subtle charcoal */
+  --muted: 220 6% 15%;
+  --muted-foreground: 220 5% 55%;
+
+  /* Accent - Warm amber */
+  --accent: 35 90% 50%;
+  --accent-foreground: 220 8% 8%;
+
+  /* Destructive - Warm red */
+  --destructive: 0 75% 50%;
+  --destructive-foreground: 220 5% 95%;
+
+  /* Borders - Subtle warm edge */
+  --border: 220 6% 18%;
+  --input: 220 6% 14%;
+  --ring: 25 95% 55%;
+
+  /* Extended Anthracite palette */
+  --anthracite-orange: 25 95% 55%;
+  --anthracite-amber: 35 90% 50%;
+  --anthracite-green: 150 60% 40%;
+  --anthracite-red: 0 75% 50%;
+}
+
+/* Anthracite body enhancements */
+.anthracite body {
+  background-image:
+    radial-gradient(ellipse at top, rgba(249, 115, 22, 0.02) 0%, transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(180, 120, 60, 0.01) 0%, transparent 50%);
+}
+
+/* =============================================================================
+   ANTHRACITE GLASSMORPHISM
+   ============================================================================= */
+
+.glass-anthracite {
+  background: linear-gradient(
+    135deg,
+    rgba(28, 30, 34, 0.9) 0%,
+    rgba(22, 24, 28, 0.7) 100%
+  );
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.card-anthracite {
+  @apply rounded-xl p-6;
+  background: linear-gradient(
+    145deg,
+    rgba(32, 34, 38, 0.95) 0%,
+    rgba(24, 26, 30, 0.9) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: all 0.3s ease;
+}
+
+.card-anthracite:hover {
+  border-color: rgba(249, 115, 22, 0.2);
+  box-shadow:
+    0 10px 32px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(249, 115, 22, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transform: translateY(-2px);
+}
+
+/* =============================================================================
+   ANTHRACITE BUTTONS
+   ============================================================================= */
+
+.btn-anthracite {
+  @apply relative px-6 py-2.5 font-medium rounded-lg overflow-hidden;
+  background: linear-gradient(145deg, rgba(45, 48, 54, 0.95) 0%, rgba(35, 38, 42, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #d4d4d4;
+  transition: all 0.3s ease;
+}
+
+.btn-anthracite:hover {
+  background: linear-gradient(145deg, rgba(55, 58, 64, 0.95) 0%, rgba(45, 48, 52, 0.9) 100%);
+  border-color: rgba(249, 115, 22, 0.3);
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.12);
+  transform: translateY(-1px);
+}
+
+.btn-anthracite-primary {
+  @apply relative px-6 py-2.5 font-semibold rounded-lg overflow-hidden;
+  background: linear-gradient(145deg, #f97316 0%, #ea580c 100%);
+  color: white;
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.25);
+  transition: all 0.3s ease;
+}
+
+.btn-anthracite-primary:hover {
+  box-shadow: 0 0 28px rgba(249, 115, 22, 0.4), 0 0 50px rgba(249, 115, 22, 0.15);
+  transform: translateY(-2px);
+}
+
+/* =============================================================================
+   ANTHRACITE SEVERITY BADGES
+   ============================================================================= */
+
+.anthracite .severity-critical {
+  @apply bg-red-500/10 text-red-400 border border-red-500/25;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
+}
+
+.anthracite .severity-high {
+  @apply bg-orange-500/10 text-orange-400 border border-orange-500/25;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.1);
+}
+
+.anthracite .severity-medium {
+  @apply bg-yellow-500/10 text-yellow-400 border border-yellow-500/25;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.08);
+}
+
+.anthracite .severity-low {
+  @apply bg-emerald-500/10 text-emerald-400 border border-emerald-500/25;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.08);
+}
+
+/* =============================================================================
+   ANTHRACITE SCROLLBAR
+   ============================================================================= */
+
+.anthracite ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.anthracite ::-webkit-scrollbar-track {
+  background: rgba(20, 22, 26, 0.5);
+}
+
+.anthracite ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(70, 72, 78, 0.8), rgba(50, 52, 58, 0.8));
+  border-radius: 4px;
+}
+
+.anthracite ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.4), rgba(234, 88, 12, 0.4));
+}
+
+/* =============================================================================
+   ANTHRACITE THEME - AUTO-APPLIED STYLES
+   ============================================================================= */
+
+/* Header */
+.anthracite header {
+  background: linear-gradient(180deg, rgba(24, 26, 30, 0.98) 0%, rgba(20, 22, 26, 0.95) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px);
+}
+
+.anthracite header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(249, 115, 22, 0.3) 50%, transparent 100%);
+}
+
+/* Sidebar */
+.anthracite aside,
+.anthracite nav[class*="sidebar"],
+.anthracite div[class*="sidebar"] {
+  background: linear-gradient(180deg, rgba(22, 24, 28, 0.99) 0%, rgba(18, 20, 24, 0.98) 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+/* Card enhancements */
+.anthracite [class*="rounded-xl"][class*="border"][class*="bg-card"],
+.anthracite [class*="rounded-lg"][class*="border"][class*="bg-card"] {
+  background: linear-gradient(145deg, rgba(28, 30, 34, 0.95) 0%, rgba(22, 24, 28, 0.9) 100%);
+  border-color: rgba(255, 255, 255, 0.04);
+  transition: all 0.3s ease;
+}
+
+.anthracite [class*="rounded-xl"][class*="border"][class*="bg-card"]:hover,
+.anthracite [class*="rounded-lg"][class*="border"][class*="bg-card"]:hover {
+  border-color: rgba(249, 115, 22, 0.15);
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.05);
+}
+
+/* Enhanced buttons */
+.anthracite button[class*="bg-primary"],
+.anthracite button[class*="bg-orange"] {
+  background: linear-gradient(145deg, #f97316 0%, #ea580c 100%);
+  box-shadow: 0 0 15px rgba(249, 115, 22, 0.25);
+  transition: all 0.3s ease;
+}
+
+.anthracite button[class*="bg-primary"]:hover,
+.anthracite button[class*="bg-orange"]:hover {
+  box-shadow: 0 0 25px rgba(249, 115, 22, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Input fields */
+.anthracite input:not([type="checkbox"]):not([type="radio"]),
+.anthracite textarea,
+.anthracite select {
+  background: rgba(22, 24, 28, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.2s ease;
+}
+
+.anthracite input:not([type="checkbox"]):not([type="radio"]):focus,
+.anthracite textarea:focus,
+.anthracite select:focus {
+  border-color: rgba(249, 115, 22, 0.4);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1), 0 0 15px rgba(249, 115, 22, 0.08);
+}
+
+/* Modal/Dialog */
+.anthracite [role="dialog"],
+.anthracite [class*="modal"],
+.anthracite [class*="Dialog"] {
+  background: linear-gradient(145deg, rgba(26, 28, 32, 0.99) 0%, rgba(22, 24, 28, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02),
+    0 25px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* Dropdown menus */
+.anthracite [role="menu"],
+.anthracite [class*="dropdown"],
+.anthracite [class*="popover"] {
+  background: linear-gradient(180deg, rgba(32, 34, 38, 0.99) 0%, rgba(26, 28, 32, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
+}
+
+/* Table header */
+.anthracite th,
+.anthracite thead tr {
+  background: rgba(249, 115, 22, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.anthracite th {
+  color: rgba(200, 180, 160, 0.85);
+  font-weight: 500;
+}
+
+.anthracite tbody tr:hover {
+  background: rgba(249, 115, 22, 0.04);
+}
+
+/* Data table */
+.anthracite .data-table th {
+  @apply px-4 py-3 text-left font-medium;
+  color: rgba(249, 115, 22, 0.7);
+  background: rgba(249, 115, 22, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.anthracite .data-table td {
+  @apply px-4 py-3;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.anthracite .data-table tr:hover td {
+  background: rgba(249, 115, 22, 0.04);
+}
+
+/* Charts */
+.anthracite .recharts-cartesian-grid line {
+  stroke: rgba(255, 255, 255, 0.04);
+}
+
+/* Progress bars */
+.anthracite [role="progressbar"] > div,
+.anthracite [class*="progress"] > div {
+  background: linear-gradient(90deg, #f97316, #f59e0b);
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
+}
+
+/* Tabs styling */
+.anthracite [role="tablist"] button[data-state="active"] {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.35);
+  color: #fb923c;
+}
+
+/* Active navigation item */
+.anthracite a[class*="bg-primary/10"],
+.anthracite [class*="active"][class*="bg"] {
+  background: linear-gradient(90deg, rgba(249, 115, 22, 0.1) 0%, transparent 100%);
+  border-left: 2px solid #f97316;
+}
+
+/* Navigation links */
+.anthracite a[class*="text-muted"]:hover {
+  color: #fb923c;
+  text-shadow: 0 0 8px rgba(249, 115, 22, 0.25);
+}
+
+/* Leaflet map */
+.anthracite .leaflet-container {
+  background: #141618;
+}
+
+.anthracite .leaflet-tile-pane {
+  filter: brightness(0.55) sepia(0.1) saturate(0.9);
+}
+
+.anthracite .leaflet-popup-content-wrapper {
+  background: linear-gradient(145deg, rgba(28, 30, 34, 0.98) 0%, rgba(22, 24, 28, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Stat numbers enhancement */
+.anthracite [class*="text-3xl"][class*="font-bold"],
+.anthracite [class*="text-4xl"][class*="font-bold"] {
+  color: #fb923c;
+  text-shadow: 0 0 15px rgba(249, 115, 22, 0.2);
+}

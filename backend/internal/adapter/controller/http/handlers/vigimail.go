@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -32,6 +33,9 @@ type VigimailService interface {
 	GetEmailLeaks(ctx context.Context, email string) ([]entity.VigimailLeak, error)
 
 	CheckAll(ctx context.Context) (*entity.VigimailCheckHistory, error)
+
+	// v3.57.119: API key testing
+	TestHIBPKey(ctx context.Context, apiKey string) error
 }
 
 // VigimailHandler handles HTTP requests for Vigimail
@@ -403,4 +407,48 @@ func (h *VigimailHandler) CheckAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSONResponse(w, http.StatusOK, history)
+}
+
+// ============================================
+// API Key Testing (v3.57.119)
+// ============================================
+
+// TestHIBPKey handles POST /api/v1/vigimail/test-hibp
+// Tests an HIBP API key before saving
+func (h *VigimailHandler) TestHIBPKey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		ErrorResponse(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	if req.APIKey == "" {
+		ErrorResponse(w, http.StatusBadRequest, "API key is required", nil)
+		return
+	}
+
+	// Skip test if the key contains mask characters (not changed)
+	if containsMask(req.APIKey) {
+		JSONResponse(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"message": "API key unchanged, skipping test",
+		})
+		return
+	}
+
+	slog.Info("[VIGIMAIL_API] Testing HIBP API key")
+
+	if err := h.service.TestHIBPKey(r.Context(), req.APIKey); err != nil {
+		slog.Warn("[VIGIMAIL_API] HIBP API key test failed", "error", err)
+		ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("API key test failed: %v", err), err)
+		return
+	}
+
+	slog.Info("[VIGIMAIL_API] HIBP API key test successful")
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "API key is valid",
+	})
 }

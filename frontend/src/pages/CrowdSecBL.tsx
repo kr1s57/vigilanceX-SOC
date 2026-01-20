@@ -255,8 +255,22 @@ export function CrowdSecBL() {
       await crowdsecBlocklistApi.syncAll()
       // Refresh all data after sync
       await Promise.all([loadStatus(), loadSummary(), loadIPs()])
-    } catch (err) {
-      setError('Sync failed - check API key and connection')
+    } catch (err: unknown) {
+      // v3.57.119: Better error handling with specific messages
+      let errorMessage = 'Sync failed - check API key and connection'
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosErr = err as { response?: { status?: number; data?: { error?: string } } }
+        if (axiosErr.response?.status === 401) {
+          errorMessage = 'Session expired - please refresh the page or log in again'
+        } else if (axiosErr.response?.status === 403) {
+          errorMessage = 'Access denied - insufficient permissions'
+        } else if (axiosErr.response?.status === 409) {
+          errorMessage = 'Sync already in progress - please wait'
+        } else if (axiosErr.response?.data?.error) {
+          errorMessage = `Sync failed: ${axiosErr.response.data.error}`
+        }
+      }
+      setError(errorMessage)
       console.error(err)
     } finally {
       setSyncing(false)

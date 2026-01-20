@@ -4,7 +4,7 @@ import { configApi, SystemWhitelistEntry } from '@/lib/api'
 // Settings types
 export interface AppSettings {
   // Display
-  theme: 'dark' | 'light' | 'system' | 'futuristic' | 'midnight' // v3.57.116: Added midnight theme
+  theme: 'dark' | 'light' | 'system' | 'futuristic' | 'midnight' | 'dark-plus' | 'anthracite' // v3.57.119: Added dark-plus and anthracite themes
   language: 'fr' | 'en'
   dateFormat: '24h' | '12h'
   numberFormat: 'fr' | 'en'
@@ -132,8 +132,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement
 
-    // v3.57.116: Clear all theme classes first
-    root.classList.remove('dark', 'light', 'futuristic', 'midnight')
+    // v3.57.119: Clear all theme classes first
+    root.classList.remove('dark', 'light', 'futuristic', 'midnight', 'dark-plus', 'anthracite')
 
     if (settings.theme === 'system') {
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -144,6 +144,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     } else if (settings.theme === 'midnight') {
       // v3.57.116: Midnight theme - purple/violet dark theme
       root.classList.add('dark', 'midnight')
+    } else if (settings.theme === 'dark-plus') {
+      // v3.57.119: Dark+ theme - glossy black with blue accents
+      root.classList.add('dark', 'dark-plus')
+    } else if (settings.theme === 'anthracite') {
+      // v3.57.119: Anthracite theme - charcoal gray with warm accents
+      root.classList.add('dark', 'anthracite')
     } else {
       root.classList.add(settings.theme)
     }

@@ -568,6 +568,41 @@ func (w *checkWorker) run() {
 }
 
 // ============================================
+// API Key Testing
+// ============================================
+
+// TestHIBPKey tests an HIBP API key by making a test request
+// v3.57.119: Added for Test & Save functionality
+func (s *Service) TestHIBPKey(ctx context.Context, apiKey string) error {
+	if apiKey == "" {
+		return fmt.Errorf("API key cannot be empty")
+	}
+
+	// Create a temporary client with the provided key
+	testClient := &tempHIBPClient{
+		httpClient: s.hibpClient,
+		apiKey:     apiKey,
+	}
+
+	return testClient.TestConnection(ctx)
+}
+
+// tempHIBPClient wraps the hibpClient to test with a temporary key
+type tempHIBPClient struct {
+	httpClient LeakChecker
+	apiKey     string
+}
+
+func (c *tempHIBPClient) TestConnection(ctx context.Context) error {
+	// Temporarily set the API key for testing
+	originalKey := c.httpClient.GetAPIKey()
+	c.httpClient.SetAPIKey(c.apiKey)
+	defer c.httpClient.SetAPIKey(originalKey)
+
+	return c.httpClient.TestConnection(ctx)
+}
+
+// ============================================
 // Helpers
 // ============================================
 

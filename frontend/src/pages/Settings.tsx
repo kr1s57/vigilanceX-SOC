@@ -979,23 +979,40 @@ export function Settings() {
         isCollapsed={collapsedSections['display']}
         onToggle={() => toggleSection('display')}
       >
-        {/* Theme */}
+        {/* Theme - v3.57.119: Grid layout for multiple themes */}
         <SettingRow
           label="Theme"
           description="Choose the color theme for the interface"
           icon={<Sun className="w-4 h-4" />}
         >
-          <ToggleGroup
-            value={settings.theme}
-            onChange={(v) => handleChange('theme', v as AppSettings['theme'])}
-            options={[
-              { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" /> },
-              { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" /> },
-              { value: 'midnight', label: 'Midnight', icon: <Moon className="w-4 h-4" /> },
-              { value: 'futuristic', label: 'Cyber', icon: <Sparkles className="w-4 h-4" /> },
-              { value: 'system', label: 'System', icon: <Laptop className="w-4 h-4" /> },
-            ]}
-          />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { value: 'light', label: 'Light', icon: <Sun className="w-4 h-4" />, color: 'bg-white border-gray-200' },
+              { value: 'dark', label: 'Dark', icon: <Moon className="w-4 h-4" />, color: 'bg-zinc-800 border-zinc-700' },
+              { value: 'dark-plus', label: 'Dark+', icon: <Moon className="w-4 h-4" />, color: 'bg-black border-blue-500/30' },
+              { value: 'anthracite', label: 'Anthracite', icon: <Moon className="w-4 h-4" />, color: 'bg-zinc-700 border-orange-500/30' },
+              { value: 'midnight', label: 'Midnight', icon: <Moon className="w-4 h-4" />, color: 'bg-violet-950 border-violet-500/30' },
+              { value: 'futuristic', label: 'Cyber', icon: <Sparkles className="w-4 h-4" />, color: 'bg-cyan-950 border-cyan-500/30' },
+              { value: 'system', label: 'System', icon: <Laptop className="w-4 h-4" />, color: 'bg-gradient-to-r from-zinc-800 to-white border-gray-500' },
+            ].map((theme) => (
+              <button
+                key={theme.value}
+                onClick={() => handleChange('theme', theme.value as AppSettings['theme'])}
+                className={`
+                  flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all
+                  ${settings.theme === theme.value
+                    ? 'ring-2 ring-primary ring-offset-2 ring-offset-background border-primary'
+                    : 'border-border hover:border-muted-foreground/30'
+                  }
+                `}
+              >
+                <div className={`w-8 h-8 rounded-lg ${theme.color} border flex items-center justify-center`}>
+                  {theme.icon}
+                </div>
+                <span className="text-xs font-medium text-foreground">{theme.label}</span>
+              </button>
+            ))}
+          </div>
         </SettingRow>
 
         {/* Language */}
@@ -2437,7 +2454,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.57.118</p>
+        <p>VIGILANCE X v3.57.119</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
