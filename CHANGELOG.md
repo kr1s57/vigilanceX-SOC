@@ -7,6 +7,39 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.57.126] - 2026-01-20
+
+### Added
+- **Custom Logo**: New hexagonal logo design with teal/orange accents
+  - SVG component at `/components/Logo.tsx`
+  - Updated favicon with cache-busting version parameter
+  - Applied to Login, Dashboard, and Sidebar
+
+### Fixed
+- **Logout 401 Error**: Moved `/auth/logout` to public routes
+  - Now works even with expired/invalid tokens (common pattern)
+- **Timestamp Offset**: Fixed 1-hour timezone offset in WAF logs
+  - Vector now parses XGS timestamps with timezone offset (`+0100`)
+  - Backend Dockerfile sets `TZ=UTC`
+  - ClickHouse connection uses `session_timezone: UTC`
+- **IPThreatModal Pending Badge**: Now correctly shows "Pending Approval" status
+  - `GetBanByIP` checks both `ip_ban_status` and `pending_bans` tables
+- **Vigimail 400 Error**: Fixed double `@@` bug when adding emails
+  - Removed pre-fill that caused `@domain.domain` prefix
+- **Vigimail Leak Count**: HIBP API now includes unverified breaches
+  - Added `includeUnverified=true` parameter
+- **401 on Dashboard Load**: Moved `modsec/test` and `detect2ban/status` to free routes
+  - These status endpoints no longer require license
+
+### Changed
+- **WAF Explorer Pagination**: Now per-day instead of global
+  - All days visible and expandable when viewing 7d/30d
+  - Pagination controls (25/50/100 items) appear within each expanded day
+  - First/Prev/Page/Next/Last navigation per day
+  - Footer shows total events across all days
+
+---
+
 ## [3.57.125] - 2026-01-20
 
 ### Changed

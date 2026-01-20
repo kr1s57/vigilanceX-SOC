@@ -100,8 +100,9 @@ func (c *HIBPClient) CheckEmail(ctx context.Context, email string) ([]entity.Vig
 	c.rateLimitWait()
 
 	// Build URL
+	// v3.57.126: Added includeUnverified=true to get all breaches (including unverified ones)
 	encodedEmail := url.PathEscape(strings.ToLower(email))
-	reqURL := fmt.Sprintf("%s/breachedaccount/%s?truncateResponse=false", hibpBaseURL, encodedEmail)
+	reqURL := fmt.Sprintf("%s/breachedaccount/%s?truncateResponse=false&includeUnverified=true", hibpBaseURL, encodedEmail)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {

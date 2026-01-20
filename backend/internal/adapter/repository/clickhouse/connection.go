@@ -30,6 +30,16 @@ func NewConnection(cfg *config.ClickHouseConfig, logger *slog.Logger) (*Connecti
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60,
+			// v3.57.126: Ensure timestamps are returned in UTC
+			"session_timezone": "UTC",
+		},
+		ClientInfo: clickhouse.ClientInfo{
+			Products: []struct {
+				Name    string
+				Version string
+			}{
+				{Name: "vigilancex-api", Version: "3.57.126"},
+			},
 		},
 		DialTimeout:     10 * time.Second,
 		MaxOpenConns:    10,

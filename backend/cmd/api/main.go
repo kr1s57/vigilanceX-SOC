@@ -624,7 +624,7 @@ func main() {
 
 	// Rate limiting - v3.57.124: Increased from 100 to 500 req/min for SPA compatibility
 	// React SPAs make many parallel requests on page load
-	r.Use(httprate.LimitByIP(500, time.Minute))
+	r.Use(httprate.LimitByIP(10000, time.Minute))
 
 	// Health check (no auth required)
 	r.Get("/health", handlers.HealthCheck(cfg))
@@ -634,6 +634,8 @@ func main() {
 		// Public routes (no auth required)
 		r.Group(func(r chi.Router) {
 			r.Post("/auth/login", authHandler.Login)
+			// v3.57.125: Health check also at /api/v1/health for frontend compatibility
+			r.Get("/health", handlers.HealthCheck(cfg))
 			// v2.9: License endpoints (public - needed before activation)
 			r.Get("/license/status", licenseHandler.GetStatus)
 			// v3.0: Rate limit license activation to prevent brute-force (5 attempts per hour per IP)
@@ -642,6 +644,8 @@ func main() {
 			// v3.2: Fresh Deploy endpoints (public - rate limited)
 			r.With(httprate.Limit(5, time.Hour, httprate.WithKeyFuncs(httprate.KeyByIP))).
 				Post("/license/fresh-deploy", licenseHandler.FreshDeploy)
+			// v3.57.126: Logout moved to public routes - allows logout even with expired/invalid token
+			r.Post("/auth/logout", authHandler.Logout)
 		})
 
 		// ==============================================
@@ -652,7 +656,7 @@ func main() {
 			r.Use(middleware.JWTAuth(authService))
 
 			// Auth endpoints (authenticated users)
-			r.Post("/auth/logout", authHandler.Logout)
+			// v3.57.126: Logout moved to public routes (above)
 			r.Get("/auth/me", authHandler.Me)
 			r.Post("/auth/change-password", authHandler.ChangePassword)
 
@@ -695,6 +699,10 @@ func main() {
 			r.Route("/alerts", func(r chi.Router) {
 				r.Get("/critical", eventsHandler.GetCriticalAlerts)
 			})
+
+			// v3.57.126: Status endpoints for dashboard components (moved from licensed routes)
+			r.Get("/modsec/test", modsecHandler.TestConnection)
+			r.Get("/detect2ban/status", detect2banHandler.GetStatus)
 
 			// WebSocket endpoint (free - real-time updates)
 			r.Get("/ws", wsHub.ServeWS)

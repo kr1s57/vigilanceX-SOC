@@ -110,6 +110,7 @@ func (r *BansRepository) GetBannedIPsWithoutGeoIP(ctx context.Context, limit int
 }
 
 // GetBanByIP retrieves a specific ban by IP address
+// v3.57.126: Also checks pending_bans table for pending approval status
 func (r *BansRepository) GetBanByIP(ctx context.Context, ip string) (*entity.BanStatus, error) {
 	query := `
 		SELECT
@@ -135,7 +136,7 @@ func (r *BansRepository) GetBanByIP(ctx context.Context, ip string) (*entity.Ban
 	var expiresAt *time.Time
 	var immuneUntil *time.Time
 
-	if err := row.Scan(
+	err := row.Scan(
 		&ban.IP,
 		&ban.Status,
 		&ban.BanCount,
@@ -147,7 +148,41 @@ func (r *BansRepository) GetBanByIP(ctx context.Context, ip string) (*entity.Ban
 		&ban.SyncedXGS,
 		&immuneUntil,
 		&ban.UpdatedAt,
-	); err != nil {
+	)
+
+	// v3.57.126: If not found in ip_ban_status OR status is not active/permanent,
+	// check pending_bans table for pending approval
+	if err != nil || (ban.Status != "active" && ban.Status != "permanent") {
+		pendingQuery := `
+			SELECT ip, status, reason, trigger_rule, created_at
+			FROM pending_bans FINAL
+			WHERE ip = ? AND status = 'pending'
+			LIMIT 1
+		`
+		pendingRow := r.conn.DB().QueryRow(ctx, pendingQuery, ip)
+
+		var pendingIP string
+		var pendingStatus string
+		var pendingReason string
+		var triggerRule string
+		var createdAt time.Time
+
+		if pendingErr := pendingRow.Scan(&pendingIP, &pendingStatus, &pendingReason, &triggerRule, &createdAt); pendingErr == nil {
+			// Found in pending_bans - return as pending_approval status
+			return &entity.BanStatus{
+				IP:        pendingIP,
+				Status:    "pending_approval",
+				Reason:    pendingReason + " - " + triggerRule,
+				Source:    "detect2ban",
+				FirstBan:  createdAt,
+				LastBan:   createdAt,
+				UpdatedAt: createdAt,
+			}, nil
+		}
+	}
+
+	// Return error if original query failed and no pending ban found
+	if err != nil {
 		return nil, fmt.Errorf("scan ban: %w", err)
 	}
 

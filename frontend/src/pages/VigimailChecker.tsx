@@ -478,7 +478,7 @@ export function VigimailChecker() {
                 <button
                   onClick={() => {
                     setShowAddEmail(domain.domain)
-                    setNewEmail(`@${domain.domain}`)
+                    setNewEmail('') // v3.57.126: Don't pre-fill to avoid double @ bug
                   }}
                   className="flex items-center gap-1 px-3 py-1 bg-teal-600 hover:bg-teal-700 rounded text-sm text-white"
                 >

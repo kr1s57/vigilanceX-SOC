@@ -34,7 +34,7 @@ FROM alpine:3.21
 
 # Install runtime dependencies (v3.57.108: add docker-cli for admin console)
 # v3.57.123: Add docker-compose for system updates
-RUN apk add --no-cache ca-certificates tzdata wget docker-cli docker-cli-compose
+RUN apk add --no-cache ca-certificates tzdata wget docker-cli docker-cli-compose openssh-client git
 
 # Create non-root user and add to docker group
 RUN adduser -D -g '' vigilance && \
@@ -55,6 +55,9 @@ RUN mkdir -p /app/data /app/config
 
 # Set ownership
 RUN chown -R vigilance:vigilance /app
+
+# v3.57.126: Force UTC timezone so timestamps from ClickHouse are correctly interpreted as UTC
+ENV TZ=UTC
 
 # Switch to non-root user
 USER vigilance

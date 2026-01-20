@@ -26,11 +26,15 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
   const prevAuthRef = useRef<boolean | null>(null)
 
+  // v3.57.125: Use ref to track status for error handling without causing re-renders
+  const statusRef = useRef<LicenseStatus | null>(null)
+
   const refresh = useCallback(async () => {
     try {
       setError(null)
       const data = await licenseApi.getStatus()
       setStatus(data)
+      statusRef.current = data
     } catch (err) {
       // v3.57.124: Handle temporary errors (429, 503, network) gracefully
       // Don't reset license status on temporary errors - keep previous state
@@ -38,7 +42,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       const statusCode = isAxiosError ? (err as { response?: { status?: number } }).response?.status : undefined
       const isTemporaryError = statusCode === 429 || statusCode === 503 || statusCode === 502 || !statusCode
 
-      if (isTemporaryError && status !== null) {
+      if (isTemporaryError && statusRef.current !== null) {
         // Keep previous license state, just log the error
         console.warn('License check temporarily unavailable:', statusCode || 'network error')
         setError(null) // Don't show error for temporary issues
@@ -55,7 +59,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [status])
+  }, []) // No dependencies - uses ref instead
 
   const activate = useCallback(async (licenseKey: string) => {
     setIsLoading(true)

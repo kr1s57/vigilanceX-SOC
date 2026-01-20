@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
+import { Logo } from '@/components/Logo'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLicense } from '@/contexts/LicenseContext'
 
@@ -273,30 +274,12 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 bg-card border-r border-border flex flex-col">
-      {/* Logo - Clickable to Dashboard */}
+      {/* Logo - Clickable to Dashboard - v3.57.126: New custom logo */}
       <div className="h-16 flex items-center px-6 border-b border-border">
         <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            {/* Geometric Eye - Abstract Iris */}
-            <svg
-              viewBox="0 0 24 24"
-              className="w-5 h-5 text-primary-foreground"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              {/* Outer eye shape */}
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-              {/* Inner iris - geometric hexagon */}
-              <polygon points="12,8 15,10 15,14 12,16 9,14 9,10" />
-              {/* Center pupil */}
-              <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-            </svg>
-          </div>
+          <Logo size={32} />
           <div>
-            <h1 className="font-bold text-lg">VIGILANCE X</h1>
+            <h1 className="font-bold text-lg tracking-wide">VIGILANCE X</h1>
             <p className="text-xs text-muted-foreground">Security Operations</p>
           </div>
         </Link>

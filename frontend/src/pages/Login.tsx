@@ -1,8 +1,9 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Shield, Eye, EyeOff, Loader2, AlertCircle, LogIn } from 'lucide-react'
+import { Eye, EyeOff, Loader2, AlertCircle, LogIn } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
+import { Logo } from '@/components/Logo'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -84,12 +85,15 @@ export default function Login() {
       {/* Login card */}
       <div className="relative w-full max-w-md">
         <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl p-8">
-          {/* Logo and title */}
+          {/* Logo and title - v3.57.126: New custom logo */}
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-red-500/20">
-              <Shield className="w-9 h-9 text-white" />
+            <div className="mb-4 relative">
+              <Logo size={72} />
+              <div className="absolute inset-0 animate-pulse opacity-30 blur-xl">
+                <Logo size={72} />
+              </div>
             </div>
-            <h1 className="text-2xl font-bold text-white">VIGILANCE X</h1>
+            <h1 className="text-2xl font-bold text-white tracking-wide">VIGILANCE X</h1>
             <p className="text-zinc-400 text-sm mt-1">Security Operations Center</p>
           </div>
 
@@ -189,7 +193,7 @@ export default function Login() {
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-zinc-800 text-center">
             <p className="text-zinc-600 text-xs">
-              VIGILANCE X v3.57.125
+              VIGILANCE X v3.57.126
             </p>
           </div>
         </div>

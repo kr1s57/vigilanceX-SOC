@@ -132,8 +132,9 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
           }
         }
 
-        if (banData && (banData.status === 'active' || banData.status === 'permanent')) {
-          setIsBanned(true)
+        // v3.57.125: Also check for 'pending_approval' status (pending approval)
+        if (banData && (banData.status === 'active' || banData.status === 'permanent' || banData.status === 'pending_approval')) {
+          setIsBanned(banData.status === 'active' || banData.status === 'permanent')
           setBanStatus(banData.status)
           setBanData(banData) // v3.57.117: Store full ban data for expiry display
         }
@@ -200,7 +201,15 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isBanned ? (
+            {/* v3.57.125: Show ban status badges including pending approval */}
+            {banStatus === 'pending_approval' ? (
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-yellow-500/20 text-yellow-600 dark:text-yellow-400">
+                  <Clock className="w-4 h-4" />
+                  Pending Approval
+                </span>
+              </div>
+            ) : isBanned ? (
               <div className="flex flex-col items-end gap-0.5">
                 <span className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium',
@@ -480,6 +489,13 @@ export function IPThreatModal({ ip, isOpen, onClose }: IPThreatModalProps) {
               <div className="space-y-3">
                 {/* Badges */}
                 <div className="flex flex-wrap gap-2">
+                  {/* v3.57.125: Show pending approval badge */}
+                  {banStatus === 'pending_approval' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full font-medium bg-yellow-500/20 text-yellow-600 dark:text-yellow-400">
+                      <Clock className="w-3 h-3" />
+                      Pending Approval
+                    </span>
+                  )}
                   {isBanned && (
                     <span className={cn(
                       'inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full font-medium',

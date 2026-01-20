@@ -54,7 +54,27 @@ parsed = parse_key_value(raw_message, key_value_delimiter: "=", field_delimiter:
 # Generer un event_id unique
 .event_id = uuid_v4()
 .ingested_at = now()
-.timestamp = now()
+
+# v3.57.126: Parse timestamp from XGS log (ISO8601 with timezone: 2026-01-20T18:48:02+0100)
+# Falls back to now() if parsing fails
+xgs_timestamp = string(.timestamp) ?? ""
+if xgs_timestamp != "" && xgs_timestamp != "-" {
+    # Parse ISO8601 format with timezone offset (e.g., 2026-01-20T18:48:02+0100)
+    parsed_ts, err = parse_timestamp(xgs_timestamp, format: "%Y-%m-%dT%H:%M:%S%z")
+    if err == null {
+        .timestamp = parsed_ts
+    } else {
+        # Try without timezone if first parse fails
+        parsed_ts2, err2 = parse_timestamp(xgs_timestamp, format: "%Y-%m-%dT%H:%M:%S")
+        if err2 == null {
+            .timestamp = parsed_ts2
+        } else {
+            .timestamp = now()
+        }
+    }
+} else {
+    .timestamp = now()
+}
 
 # Determiner le type de log - check multiple fields for accurate categorization
 log_type_raw = string(.log_type) ?? "unknown"

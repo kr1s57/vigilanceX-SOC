@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye, Ban, Loader2, Settings } from 'lucide-react'
+import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye, Ban, Loader2, Settings } from 'lucide-react'
 import { modsecApi, bansApi, wafServersApi, type WAFMonitoredServer } from '@/lib/api'
 import { formatDateTime, formatDateTimeFull, getCountryFlag, getCountryName } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -97,9 +97,11 @@ export function WafExplorer() {
   const { shouldShowIP } = useSettings()
   const [searchParams] = useSearchParams()
   const [requests, setRequests] = useState<ModSecRequestGroup[]>([])
-  const [pagination, setPagination] = useState({ total: 0, limit: 5000, offset: 0, has_more: false })
+  // v3.57.126: Per-day pagination - fetch all data, paginate within each day
+  const [itemsPerPage, setItemsPerPage] = useState(50)
+  const [dayPages, setDayPages] = useState<Record<string, number>>({}) // Track current page per day
+  const [pagination, setPagination] = useState({ total: 0, limit: 10000, offset: 0, has_more: false })
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState(searchParams.get('src_ip') || '')
   const [hostname, setHostname] = useState('')
   const [attackType, setAttackType] = useState('')
@@ -191,18 +193,20 @@ export function WafExplorer() {
           endTime = undefined
         }
 
+        // v3.57.126: Fetch all data for the period, pagination is per-day
         const filters: ModSecLogFilters = {
           hostname: hostname || undefined,
           attack_type: attackType || undefined,
           search: search || undefined,
           start_time: startTime,
           end_time: endTime,
-          limit: pagination.limit,
-          offset: pagination.offset,
+          limit: 10000, // High limit to get all days
+          offset: 0,
         }
         const response = await modsecApi.getGroupedLogs(filters)
         setRequests(response.data || [])
-        setPagination(response.pagination || { total: 0, limit: 5000, offset: 0, has_more: false })
+        setPagination(response.pagination || { total: 0, limit: 10000, offset: 0, has_more: false })
+        setDayPages({}) // Reset day pages when data changes
       } catch (err) {
         console.error('Failed to fetch ModSec logs:', err)
         setRequests([])
@@ -212,7 +216,7 @@ export function WafExplorer() {
     }
 
     fetchRequests()
-  }, [search, hostname, attackType, pagination.offset, period, selectedDate])
+  }, [search, hostname, attackType, period, selectedDate])
 
   // Group requests by day (filtered by system whitelist)
   const dayGroups = useMemo((): DayGroup[] => {
@@ -291,6 +295,7 @@ export function WafExplorer() {
     setExpandedRows(newExpanded)
   }
 
+  // v3.57.126: Updated sync handler to use itemsPerPage
   const handleSync = async () => {
     setSyncing(true)
     try {
@@ -311,51 +316,19 @@ export function WafExplorer() {
         search: search || undefined,
         start_time: startTime,
         end_time: endTime,
-        limit: pagination.limit,
+        limit: 10000, // High limit to get all days
         offset: 0,
       }
       const response = await modsecApi.getGroupedLogs(filters)
       setRequests(response.data || [])
-      setPagination(response.pagination || { total: 0, limit: 5000, offset: 0, has_more: false })
+      setPagination(response.pagination || { total: 0, limit: 10000, offset: 0, has_more: false })
+      setDayPages({}) // Reset day pages after sync
       const status = await modsecApi.getStats()
       setSyncStatus(status)
     } catch (err) {
       console.error('Sync failed:', err)
     } finally {
       setSyncing(false)
-    }
-  }
-
-  const loadMore = async () => {
-    if (!pagination.has_more || loadingMore) return
-    setLoadingMore(true)
-    try {
-      // Determine time filters
-      let startTime: string | undefined
-      let endTime: string | undefined
-      if (selectedDate) {
-        const bounds = getDayBounds(selectedDate)
-        startTime = bounds.start
-        endTime = bounds.end
-      } else {
-        startTime = getStartTimeFromPeriod(period)
-      }
-      const filters: ModSecLogFilters = {
-        hostname: hostname || undefined,
-        attack_type: attackType || undefined,
-        search: search || undefined,
-        start_time: startTime,
-        end_time: endTime,
-        limit: pagination.limit,
-        offset: pagination.offset + pagination.limit,
-      }
-      const response = await modsecApi.getGroupedLogs(filters)
-      setRequests(prev => [...prev, ...(response.data || [])])
-      setPagination(response.pagination || { total: 0, limit: 5000, offset: 0, has_more: false })
-    } catch (err) {
-      console.error('Failed to load more:', err)
-    } finally {
-      setLoadingMore(false)
     }
   }
 
@@ -634,7 +607,7 @@ export function WafExplorer() {
                 setPeriod(p)
                 setSelectedDate('') // Clear specific date when selecting period
                 setExpandedDays(new Set()) // Reset expanded state to trigger auto-expand
-                setPagination(prev => ({ ...prev, offset: 0 })) // Reset offset for new period
+                setDayPages({}) // v3.57.126: Reset per-day pagination
               }}
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                 !selectedDate && period === p
@@ -657,7 +630,7 @@ export function WafExplorer() {
             onChange={(e) => {
               setSelectedDate(e.target.value)
               setExpandedDays(new Set()) // Reset to trigger auto-expand
-              setPagination(prev => ({ ...prev, offset: 0 })) // Reset offset for new date
+              setDayPages({}) // v3.57.126: Reset per-day pagination
             }}
             className={`px-3 py-2 bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm ${
               selectedDate ? 'border-primary' : ''
@@ -848,52 +821,142 @@ export function WafExplorer() {
                   </div>
                 </div>
 
-                {/* Day Content */}
-                {expandedDays.has(group.date) && (
-                  <div className="border-t">
-                    <div className="overflow-x-auto">
-                      <table className="data-table w-full">
-                        <thead>
-                          <tr>
-                            <th className="w-8"></th>
-                            <th>Time</th>
-                            <th>Source IP</th>
-                            <th>Target</th>
-                            <th>Path</th>
-                            <th>Rules Triggered</th>
-                            <th>Score</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.requests.map((request) => renderRequestRow(request))}
-                        </tbody>
-                      </table>
+                {/* Day Content with Per-Day Pagination */}
+                {expandedDays.has(group.date) && (() => {
+                  const currentDayPage = dayPages[group.date] || 1
+                  const totalDayPages = Math.ceil(group.requests.length / itemsPerPage)
+                  const startIndex = (currentDayPage - 1) * itemsPerPage
+                  const endIndex = startIndex + itemsPerPage
+                  const paginatedRequests = group.requests.slice(startIndex, endIndex)
+
+                  return (
+                    <div className="border-t">
+                      {/* Per-Day Pagination Controls (Top) */}
+                      {group.requests.length > itemsPerPage && (
+                        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-2 bg-muted/30 border-b">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Items per page:</span>
+                            <select
+                              value={itemsPerPage}
+                              onChange={(e) => {
+                                setItemsPerPage(parseInt(e.target.value))
+                                setDayPages({}) // Reset all day pages when changing items per page
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-2 py-1 bg-background border rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                              <option value={25}>25</option>
+                              <option value={50}>50</option>
+                              <option value={100}>100</option>
+                            </select>
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            Showing {startIndex + 1} - {Math.min(endIndex, group.requests.length)} of {group.requests.length}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDayPages(prev => ({ ...prev, [group.date]: 1 }))
+                              }}
+                              disabled={currentDayPage === 1}
+                              className="p-1.5 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
+                              title="First page"
+                            >
+                              <ChevronsLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDayPages(prev => ({ ...prev, [group.date]: Math.max(1, currentDayPage - 1) }))
+                              }}
+                              disabled={currentDayPage === 1}
+                              className="p-1.5 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
+                              title="Previous page"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <span className="px-3 py-1 text-sm">
+                              Page {currentDayPage} / {totalDayPages}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDayPages(prev => ({ ...prev, [group.date]: Math.min(totalDayPages, currentDayPage + 1) }))
+                              }}
+                              disabled={currentDayPage >= totalDayPages}
+                              className="p-1.5 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
+                              title="Next page"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDayPages(prev => ({ ...prev, [group.date]: totalDayPages }))
+                              }}
+                              disabled={currentDayPage >= totalDayPages}
+                              className="p-1.5 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
+                              title="Last page"
+                            >
+                              <ChevronsRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <div className="overflow-x-auto">
+                        <table className="data-table w-full">
+                          <thead>
+                            <tr>
+                              <th className="w-8"></th>
+                              <th>Time</th>
+                              <th>Source IP</th>
+                              <th>Target</th>
+                              <th>Path</th>
+                              <th>Rules Triggered</th>
+                              <th>Score</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedRequests.map((request) => renderRequestRow(request))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Per-Day Pagination Controls (Bottom) - only if many items */}
+                      {group.requests.length > itemsPerPage && (
+                        <div className="flex items-center justify-center gap-2 py-2 bg-muted/30 border-t">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDayPages(prev => ({ ...prev, [group.date]: Math.max(1, currentDayPage - 1) }))
+                            }}
+                            disabled={currentDayPage === 1}
+                            className="px-3 py-1 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
+                          >
+                            Previous
+                          </button>
+                          <span className="px-3 py-1 text-sm text-muted-foreground">
+                            Page {currentDayPage} / {totalDayPages}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDayPages(prev => ({ ...prev, [group.date]: Math.min(totalDayPages, currentDayPage + 1) }))
+                            }}
+                            disabled={currentDayPage >= totalDayPages}
+                            className="px-3 py-1 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
               </div>
             ))}
-            {/* Load More button for grouped view */}
-            {pagination.has_more && (
-              <div className="flex justify-center py-4 border-t">
-                <button
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {loadingMore ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                      Loading...
-                    </>
-                  ) : (
-                    <>Load older logs ({pagination.total - requests.length} remaining)</>
-                  )}
-                </button>
-              </div>
-            )}
           </div>
         ) : (
           /* Flat List View */
@@ -919,28 +982,15 @@ export function WafExplorer() {
           </div>
         )}
 
-        {/* Pagination */}
-        {pagination.total > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t">
+        {/* v3.57.126: Summary footer - pagination is now per-day within expanded sections */}
+        {pagination.total > 0 && viewMode === 'grouped' && (
+          <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30">
             <span className="text-sm text-muted-foreground">
-              Showing {pagination.offset + 1} - {Math.min(pagination.offset + requests.length, pagination.total)} of {pagination.total} requests
+              Total: {pagination.total.toLocaleString()} events across {dayGroups.length} day{dayGroups.length !== 1 ? 's' : ''}
             </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPagination(p => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
-                disabled={pagination.offset === 0}
-                className="px-3 py-1 bg-muted rounded text-sm disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPagination(p => ({ ...p, offset: p.offset + p.limit }))}
-                disabled={!pagination.has_more}
-                className="px-3 py-1 bg-muted rounded text-sm disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
+            <span className="text-xs text-muted-foreground">
+              Expand a day to see pagination controls
+            </span>
           </div>
         )}
       </div>
