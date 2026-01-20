@@ -273,6 +273,7 @@ export function Settings() {
   const [loadingVersion, setLoadingVersion] = useState(true)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'updating' | 'reconnecting' | 'success' | 'error'>('idle')
   const [updateMessage, setUpdateMessage] = useState('')
+  const [checkingFirmware, setCheckingFirmware] = useState(false) // v3.57.126: Manual firmware check
   const [licenseCollapsed, setLicenseCollapsed] = useState(true)
 
   // Email notification settings state
@@ -470,6 +471,46 @@ export function Settings() {
 
     fetchVersionInfo()
   }, [])
+
+  // v3.57.126: Manual firmware check from GitHub API
+  const checkFirmwareUpdate = async () => {
+    setCheckingFirmware(true)
+    try {
+      // Fetch latest release from public GitHub repo
+      const response = await fetch('https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest')
+      if (!response.ok) throw new Error('Failed to fetch from GitHub')
+      const release = await response.json()
+      const latestVersion = release.tag_name?.replace(/^v/, '') || ''
+
+      if (latestVersion && versionInfo) {
+        // Compare versions
+        const installed = versionInfo.installed.split('.').map(Number)
+        const latest = latestVersion.split('.').map(Number)
+        let updateAvailable = false
+
+        for (let i = 0; i < Math.max(installed.length, latest.length); i++) {
+          const v1 = installed[i] || 0
+          const v2 = latest[i] || 0
+          if (v2 > v1) {
+            updateAvailable = true
+            break
+          } else if (v1 > v2) {
+            break
+          }
+        }
+
+        setVersionInfo({
+          ...versionInfo,
+          latest: latestVersion,
+          update_available: updateAvailable
+        })
+      }
+    } catch (err) {
+      console.error('Failed to check firmware:', err)
+    } finally {
+      setCheckingFirmware(false)
+    }
+  }
 
   // Fetch notification settings
   useEffect(() => {
@@ -2285,6 +2326,29 @@ export function Settings() {
                           Up to Date
                         </span>
                       )}
+                      {/* v3.57.126: Check Firmware button */}
+                      <button
+                        onClick={checkFirmwareUpdate}
+                        disabled={checkingFirmware}
+                        className={cn(
+                          "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
+                          checkingFirmware
+                            ? "bg-muted text-muted-foreground cursor-wait"
+                            : "bg-blue-500 hover:bg-blue-600 text-white"
+                        )}
+                      >
+                        {checkingFirmware ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Checking...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-4 h-4" />
+                            Check Firmware
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
 
