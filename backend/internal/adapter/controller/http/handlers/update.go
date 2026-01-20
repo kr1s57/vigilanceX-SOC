@@ -102,7 +102,7 @@ type GoStats struct {
 // Constants
 const (
 	GitHubAPIURL     = "https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest"
-	InstalledVersion = "3.58.100" // Fallback if env not set
+	InstalledVersion = "3.58.101" // Fallback if env not set
 	StatusIdle       = "idle"
 	StatusPulling    = "pulling"
 	StatusRestarting = "restarting"
@@ -243,43 +243,92 @@ func (h *UpdateHandler) TriggerUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 // performUpdate executes the actual update process
+// v3.58.101: Fixed to work on VPS - git pull + docker compose build
 func (h *UpdateHandler) performUpdate(targetVersion string) {
 	// Small delay to ensure response is sent
 	time.Sleep(500 * time.Millisecond)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	// Step 1: Pull new images
+	repoDir := "/opt/vigilanceX"
+
+	// Step 1: Git fetch and reset to origin/main
 	h.mu.Lock()
 	h.status = UpdateStatus{
 		Status:   StatusPulling,
-		Message:  "Pulling new Docker images...",
-		Progress: 20,
+		Message:  "Fetching latest code from repository...",
+		Progress: 10,
 	}
 	h.mu.Unlock()
 
-	pullCmd := exec.CommandContext(ctx, "docker", "compose", "-f", h.composeFile, "pull")
-	pullCmd.Dir = h.workDir
-	pullOutput, pullErr := pullCmd.CombinedOutput()
-
-	if pullErr != nil {
+	// Git fetch
+	fetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin")
+	fetchCmd.Dir = repoDir
+	fetchOutput, fetchErr := fetchCmd.CombinedOutput()
+	if fetchErr != nil {
 		h.mu.Lock()
 		h.status = UpdateStatus{
 			Status:  StatusFailed,
-			Message: "Failed to pull images",
-			Error:   fmt.Sprintf("%s: %s", pullErr.Error(), string(pullOutput)),
+			Message: "Failed to fetch from repository",
+			Error:   fmt.Sprintf("%s: %s", fetchErr.Error(), string(fetchOutput)),
 		}
 		h.mu.Unlock()
 		return
 	}
 
-	// Step 2: Restart containers
+	// Git reset to origin/main (handles divergent branches)
+	h.mu.Lock()
+	h.status = UpdateStatus{
+		Status:   StatusPulling,
+		Message:  "Updating to latest version...",
+		Progress: 25,
+	}
+	h.mu.Unlock()
+
+	resetCmd := exec.CommandContext(ctx, "git", "reset", "--hard", "origin/main")
+	resetCmd.Dir = repoDir
+	resetOutput, resetErr := resetCmd.CombinedOutput()
+	if resetErr != nil {
+		h.mu.Lock()
+		h.status = UpdateStatus{
+			Status:  StatusFailed,
+			Message: "Failed to update code",
+			Error:   fmt.Sprintf("%s: %s", resetErr.Error(), string(resetOutput)),
+		}
+		h.mu.Unlock()
+		return
+	}
+
+	// Step 2: Docker compose build (for local builds)
+	h.mu.Lock()
+	h.status = UpdateStatus{
+		Status:   StatusPulling,
+		Message:  "Building new containers...",
+		Progress: 40,
+	}
+	h.mu.Unlock()
+
+	buildCmd := exec.CommandContext(ctx, "docker", "compose", "-f", h.composeFile, "build", "--no-cache")
+	buildCmd.Dir = h.workDir
+	buildOutput, buildErr := buildCmd.CombinedOutput()
+	if buildErr != nil {
+		h.mu.Lock()
+		h.status = UpdateStatus{
+			Status:  StatusFailed,
+			Message: "Failed to build containers",
+			Error:   fmt.Sprintf("%s: %s", buildErr.Error(), string(buildOutput)),
+		}
+		h.mu.Unlock()
+		return
+	}
+
+	// Step 3: Restart containers
 	h.mu.Lock()
 	h.status = UpdateStatus{
 		Status:   StatusRestarting,
 		Message:  "Restarting services...",
-		Progress: 70,
+		Progress: 85,
 	}
 	h.mu.Unlock()
 

@@ -57,7 +57,7 @@ const UserManagementContent = lazy(() => import('@/pages/UserManagement'))
 // v3.57.117: Settings tabs - v3.57.123: License renamed to System
 type SettingsTab = 'general' | 'notifications' | 'security' | 'data' | 'integrations' | 'system' | 'users'
 
-// v3.58.100: System tab moved to first position
+// v3.58.101: System tab moved to first position
 const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: 'system', label: 'System', icon: <Server className="w-4 h-4" /> },
   { id: 'general', label: 'General', icon: <Monitor className="w-4 h-4" /> },
@@ -277,7 +277,7 @@ export function Settings() {
   const [checkingFirmware, setCheckingFirmware] = useState(false) // v3.57.126: Manual firmware check
   const [licenseCollapsed, setLicenseCollapsed] = useState(true)
 
-  // v3.58.100: System Admin notification settings
+  // v3.58.101: System Admin notification settings
   const [adminNotifEmailInput, setAdminNotifEmailInput] = useState('')
   const [savingAdminNotif, setSavingAdminNotif] = useState(false)
   const [adminNotifSaved, setAdminNotifSaved] = useState(false)
@@ -2229,7 +2229,7 @@ export function Settings() {
               )}
             </div>
 
-            {/* v3.58.100: System Admin Notifications Section */}
+            {/* v3.58.101: System Admin Notifications Section */}
             <div className="bg-card rounded-xl border">
               <div className="px-6 py-4 border-b border-border">
                 <div className="flex items-center gap-3">
@@ -2918,7 +2918,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.58.100</p>
+        <p>VIGILANCE X v3.58.101</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>
