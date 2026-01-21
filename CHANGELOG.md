@@ -7,6 +7,42 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.58.103] - 2026-01-21
+
+### Fixed
+- **System Update Process**: Fixed auto-restart after update via WebUI
+  - Backend now uses `nohup setsid` to detach docker compose restart
+  - Previously, the restart command was killed when the container died
+  - Update logs saved to `/tmp/vgx-update.log` for debugging
+- **Settings Admin Email**: Email now persists after page refresh
+  - Added useEffect to load admin_email from savedConfigs on mount
+- **Settings Default Tab**: Now opens on "System" tab instead of "General"
+
+---
+
+## [3.58.102] - 2026-01-20
+
+### Fixed
+- **Production Deployment**: Fixed GHCR images for VPS deployments
+- **System Update**: Git pull + docker compose build workflow for local builds
+
+---
+
+## [3.58.101] - 2026-01-20
+
+### Fixed
+- **Web UI Firmware**: Upgrade mechanism for VPS deployments
+
+---
+
+## [3.58.100] - 2026-01-20
+
+### Added
+- **System Notifications**: Admin email configuration in Settings > System
+- **Vigimail Leak Badges**: Visual indicators for email breach status
+
+---
+
 ## [3.57.126] - 2026-01-20
 
 ### Added

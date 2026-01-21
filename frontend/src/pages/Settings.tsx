@@ -243,7 +243,7 @@ export function Settings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as SettingsTab | null
   const [activeTab, setActiveTab] = useState<SettingsTab>(
-    tabParam && SETTINGS_TABS.some(t => t.id === tabParam) ? tabParam : 'general'
+    tabParam && SETTINGS_TABS.some(t => t.id === tabParam) ? tabParam : 'system'
   )
 
   // Sync tab with URL
@@ -348,6 +348,13 @@ export function Settings() {
     }
     fetchSavedConfigs()
   }, [])
+
+  // v3.58.103: Load admin email from saved configs
+  useEffect(() => {
+    if (savedConfigs.system?.admin_email) {
+      setAdminNotifEmailInput(savedConfigs.system.admin_email)
+    }
+  }, [savedConfigs])
 
   // Fetch integration status
   useEffect(() => {
@@ -2918,7 +2925,7 @@ export function Settings() {
 
       {/* Version Info */}
       <div className="text-center text-sm text-muted-foreground py-4 border-t border-border">
-        <p>VIGILANCE X v3.58.102</p>
+        <p>VIGILANCE X v3.58.103</p>
         <p className="mt-1">Security Operations Center - Licensed Edition</p>
       </div>
     </div>

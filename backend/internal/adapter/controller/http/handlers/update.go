@@ -102,7 +102,7 @@ type GoStats struct {
 // Constants
 const (
 	GitHubAPIURL     = "https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest"
-	InstalledVersion = "3.58.102" // Fallback if env not set
+	InstalledVersion = "3.58.103" // Fallback if env not set
 	StatusIdle       = "idle"
 	StatusPulling    = "pulling"
 	StatusRestarting = "restarting"
@@ -332,23 +332,46 @@ func (h *UpdateHandler) performUpdate(targetVersion string) {
 	}
 	h.mu.Unlock()
 
-	// Use --force-recreate to ensure new images are used
-	restartCmd := exec.CommandContext(ctx, "docker", "compose", "-f", h.composeFile,
-		"up", "-d", "--force-recreate")
+	// v3.58.103: Fix update restart - detach docker compose from parent process
+	// The backend container cannot restart itself directly because when Docker
+	// sends SIGTERM, the child process (docker compose) is killed with it.
+	// Solution: Use nohup + setsid to fully detach the restart command so it
+	// survives the death of this container.
+	//
+	// Note: We use a shell wrapper to ensure proper detachment on Linux.
+	// The log file helps debug if something goes wrong.
+	restartScript := fmt.Sprintf(
+		`cd %s && nohup setsid docker compose -f %s up -d --force-recreate > /tmp/vgx-update.log 2>&1 &`,
+		h.workDir, h.composeFile)
+
+	restartCmd := exec.CommandContext(ctx, "sh", "-c", restartScript)
 	restartCmd.Dir = h.workDir
 
-	// This command will restart the API container, so we won't see the result
-	// The frontend will handle reconnection
-	restartCmd.Run()
+	if err := restartCmd.Start(); err != nil {
+		h.mu.Lock()
+		h.status = UpdateStatus{
+			Status:  StatusFailed,
+			Message: "Failed to start restart command",
+			Error:   err.Error(),
+		}
+		h.mu.Unlock()
+		return
+	}
 
-	// If we get here somehow (shouldn't happen as API restarts), mark as completed
+	// Don't wait for the command - it will restart us
+	// The process is fully detached and will continue after we die
+
+	// Mark status (this may not persist as we're about to be restarted)
 	h.mu.Lock()
 	h.status = UpdateStatus{
 		Status:   StatusCompleted,
-		Message:  fmt.Sprintf("Updated to version %s", targetVersion),
+		Message:  fmt.Sprintf("Restarting to version %s...", targetVersion),
 		Progress: 100,
 	}
 	h.mu.Unlock()
+
+	// Give the detached process time to start before we potentially die
+	time.Sleep(1 * time.Second)
 }
 
 // fetchLatestVersion fetches the latest version from GitHub
