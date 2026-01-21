@@ -21,7 +21,8 @@ import {
   Search,
 } from 'lucide-react'
 import { wafServersApi, modsecApi, type WAFMonitoredServer } from '@/lib/api'
-import { IPThreatModal } from '@/components/IPThreatModal'
+// v3.58.108: Use lazy-loaded modal for better performance
+import { LazyIPThreatModal } from '@/components/ui/LazyModals'
 import type { ModSecRequestGroup } from '@/types'
 import { cn, getCountryFlag, formatNumber } from '@/lib/utils'
 
@@ -605,8 +606,8 @@ function ServerDetailModal({ server, onClose }: { server: ServerWithStats; onClo
           )}
         </div>
 
-        {/* v3.57.108: IP Threat Modal */}
-        <IPThreatModal
+        {/* v3.57.108: IP Threat Modal - v3.58.108: Lazy loaded */}
+        <LazyIPThreatModal
           ip={threatModalIP}
           isOpen={threatModalIP !== null}
           onClose={() => setThreatModalIP(null)}

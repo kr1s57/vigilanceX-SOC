@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useTransition, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Shield, Search, Download, RefreshCw, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, AlertTriangle, CheckCircle, Calendar, X, ChevronsUpDown, Eye, Ban, Loader2, Settings } from 'lucide-react'
 import { modsecApi, bansApi, wafServersApi, type WAFMonitoredServer } from '@/lib/api'
 import { formatDateTime, formatDateTimeFull, getCountryFlag, getCountryName } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
-import { IPThreatModal } from '@/components/IPThreatModal'
-import { WAFServerModal } from '@/components/WAFServerModal'
+// v3.58.108: Use lazy-loaded modals for better performance
+import { LazyIPThreatModal, LazyWAFServerModal } from '@/components/ui/LazyModals'
 import type { ModSecRequestGroup, ModSecLogFilters } from '@/types'
 
 // Period options for WAF logs
@@ -98,8 +98,10 @@ export function WafExplorer() {
   const [searchParams] = useSearchParams()
   const [requests, setRequests] = useState<ModSecRequestGroup[]>([])
   // v3.57.126: Per-day pagination - fetch all data, paginate within each day
+  // v3.58.108: useTransition for smooth pagination without blocking UI
   const [itemsPerPage, setItemsPerPage] = useState(50)
   const [dayPages, setDayPages] = useState<Record<string, number>>({}) // Track current page per day
+  const [isPaginationPending, startPaginationTransition] = useTransition()
   const [pagination, setPagination] = useState({ total: 0, limit: 10000, offset: 0, has_more: false })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState(searchParams.get('src_ip') || '')
@@ -294,6 +296,31 @@ export function WafExplorer() {
     }
     setExpandedRows(newExpanded)
   }
+
+  // v3.58.108: Pagination helpers with useTransition for smooth UI
+  const goToFirstPage = useCallback((day: string) => {
+    startPaginationTransition(() => {
+      setDayPages(prev => ({ ...prev, [day]: 1 }))
+    })
+  }, [])
+
+  const goToPrevPage = useCallback((day: string, currentPage: number) => {
+    startPaginationTransition(() => {
+      setDayPages(prev => ({ ...prev, [day]: Math.max(1, currentPage - 1) }))
+    })
+  }, [])
+
+  const goToNextPage = useCallback((day: string, currentPage: number, totalPages: number) => {
+    startPaginationTransition(() => {
+      setDayPages(prev => ({ ...prev, [day]: Math.min(totalPages, currentPage + 1) }))
+    })
+  }, [])
+
+  const goToLastPage = useCallback((day: string, totalPages: number) => {
+    startPaginationTransition(() => {
+      setDayPages(prev => ({ ...prev, [day]: totalPages }))
+    })
+  }, [])
 
   // v3.57.126: Updated sync handler to use itemsPerPage
   const handleSync = async () => {
@@ -831,16 +858,18 @@ export function WafExplorer() {
 
                   return (
                     <div className="border-t">
-                      {/* Per-Day Pagination Controls (Top) */}
+                      {/* Per-Day Pagination Controls (Top) - v3.58.108: useTransition for smooth updates */}
                       {group.requests.length > itemsPerPage && (
-                        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-2 bg-muted/30 border-b">
+                        <div className={`flex flex-wrap items-center justify-between gap-4 px-4 py-2 bg-muted/30 border-b transition-opacity ${isPaginationPending ? 'opacity-70' : ''}`}>
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Items per page:</span>
                             <select
                               value={itemsPerPage}
                               onChange={(e) => {
-                                setItemsPerPage(parseInt(e.target.value))
-                                setDayPages({}) // Reset all day pages when changing items per page
+                                startPaginationTransition(() => {
+                                  setItemsPerPage(parseInt(e.target.value))
+                                  setDayPages({}) // Reset all day pages when changing items per page
+                                })
                               }}
                               onClick={(e) => e.stopPropagation()}
                               className="px-2 py-1 bg-background border rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -849,6 +878,7 @@ export function WafExplorer() {
                               <option value={50}>50</option>
                               <option value={100}>100</option>
                             </select>
+                            {isPaginationPending && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                           </div>
                           <span className="text-sm text-muted-foreground">
                             Showing {startIndex + 1} - {Math.min(endIndex, group.requests.length)} of {group.requests.length}
@@ -857,9 +887,9 @@ export function WafExplorer() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                setDayPages(prev => ({ ...prev, [group.date]: 1 }))
+                                goToFirstPage(group.date)
                               }}
-                              disabled={currentDayPage === 1}
+                              disabled={currentDayPage === 1 || isPaginationPending}
                               className="p-1.5 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
                               title="First page"
                             >
@@ -868,9 +898,9 @@ export function WafExplorer() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                setDayPages(prev => ({ ...prev, [group.date]: Math.max(1, currentDayPage - 1) }))
+                                goToPrevPage(group.date, currentDayPage)
                               }}
-                              disabled={currentDayPage === 1}
+                              disabled={currentDayPage === 1 || isPaginationPending}
                               className="p-1.5 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
                               title="Previous page"
                             >
@@ -882,9 +912,9 @@ export function WafExplorer() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                setDayPages(prev => ({ ...prev, [group.date]: Math.min(totalDayPages, currentDayPage + 1) }))
+                                goToNextPage(group.date, currentDayPage, totalDayPages)
                               }}
-                              disabled={currentDayPage >= totalDayPages}
+                              disabled={currentDayPage >= totalDayPages || isPaginationPending}
                               className="p-1.5 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
                               title="Next page"
                             >
@@ -893,9 +923,9 @@ export function WafExplorer() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                setDayPages(prev => ({ ...prev, [group.date]: totalDayPages }))
+                                goToLastPage(group.date, totalDayPages)
                               }}
-                              disabled={currentDayPage >= totalDayPages}
+                              disabled={currentDayPage >= totalDayPages || isPaginationPending}
                               className="p-1.5 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
                               title="Last page"
                             >
@@ -904,7 +934,7 @@ export function WafExplorer() {
                           </div>
                         </div>
                       )}
-                      <div className="overflow-x-auto">
+                      <div className={`overflow-x-auto transition-opacity ${isPaginationPending ? 'opacity-60' : ''}`}>
                         <table className="data-table w-full">
                           <thead>
                             <tr>
@@ -926,13 +956,13 @@ export function WafExplorer() {
                       </div>
                       {/* Per-Day Pagination Controls (Bottom) - only if many items */}
                       {group.requests.length > itemsPerPage && (
-                        <div className="flex items-center justify-center gap-2 py-2 bg-muted/30 border-t">
+                        <div className={`flex items-center justify-center gap-2 py-2 bg-muted/30 border-t transition-opacity ${isPaginationPending ? 'opacity-70' : ''}`}>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              setDayPages(prev => ({ ...prev, [group.date]: Math.max(1, currentDayPage - 1) }))
+                              goToPrevPage(group.date, currentDayPage)
                             }}
-                            disabled={currentDayPage === 1}
+                            disabled={currentDayPage === 1 || isPaginationPending}
                             className="px-3 py-1 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
                           >
                             Previous
@@ -943,9 +973,9 @@ export function WafExplorer() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              setDayPages(prev => ({ ...prev, [group.date]: Math.min(totalDayPages, currentDayPage + 1) }))
+                              goToNextPage(group.date, currentDayPage, totalDayPages)
                             }}
-                            disabled={currentDayPage >= totalDayPages}
+                            disabled={currentDayPage >= totalDayPages || isPaginationPending}
                             className="px-3 py-1 bg-muted rounded text-sm disabled:opacity-50 hover:bg-muted/80"
                           >
                             Next
@@ -995,17 +1025,15 @@ export function WafExplorer() {
         )}
       </div>
 
-      {/* IP Threat Modal */}
-      {selectedIP && (
-        <IPThreatModal
-          ip={selectedIP}
-          isOpen={!!selectedIP}
-          onClose={() => setSelectedIP(null)}
-        />
-      )}
+      {/* IP Threat Modal - v3.58.108: Lazy loaded */}
+      <LazyIPThreatModal
+        ip={selectedIP}
+        isOpen={!!selectedIP}
+        onClose={() => setSelectedIP(null)}
+      />
 
-      {/* v3.57: WAF Servers Modal */}
-      <WAFServerModal
+      {/* v3.57: WAF Servers Modal - v3.58.108: Lazy loaded */}
+      <LazyWAFServerModal
         isOpen={showServerModal}
         onClose={() => setShowServerModal(false)}
         onServersUpdated={fetchHostnames}

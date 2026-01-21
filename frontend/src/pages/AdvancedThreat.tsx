@@ -23,7 +23,8 @@ import {
 } from 'lucide-react'
 import { threatsApi } from '@/lib/api'
 import { StatCard } from '@/components/dashboard/StatCard'
-import { IPThreatModal } from '@/components/IPThreatModal'
+// v3.58.108: Use lazy-loaded modal for better performance
+import { LazyIPThreatModal } from '@/components/ui/LazyModals'
 import { formatNumber, getCountryFlag, formatDateTime, cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
 import type { ThreatScore, ThreatStats, ThreatProvider } from '@/types'
@@ -422,8 +423,8 @@ export function AdvancedThreat() {
         </div>
       </div>
 
-      {/* IP Details Modal */}
-      <IPThreatModal
+      {/* IP Details Modal - v3.58.108: Lazy loaded */}
+      <LazyIPThreatModal
         ip={selectedIP}
         isOpen={showModal}
         onClose={() => {

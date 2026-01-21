@@ -2228,3 +2228,53 @@
   color: #fb923c;
   text-shadow: 0 0 15px rgba(249, 115, 22, 0.2);
 }
+
+/* =============================================================================
+   ACCESSIBILITY - MOTION REDUCE
+   For users who prefer reduced motion (vestibular disorders, etc.)
+   ============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Disable specific animations */
+  .animate-spin,
+  .animate-pulse,
+  .animate-bounce,
+  .animate-ping,
+  [class*="animate-"] {
+    animation: none !important;
+  }
+
+  /* Keep essential visual feedback but make it instant */
+  .transition-all,
+  .transition-colors,
+  .transition-opacity,
+  .transition-transform {
+    transition: none !important;
+  }
+
+  /* Disable parallax and scroll effects */
+  .parallax,
+  [data-parallax] {
+    transform: none !important;
+  }
+
+  /* Disable hover scale effects */
+  *:hover {
+    transform: none !important;
+  }
+
+  /* Keep focus indicators visible but without animation */
+  *:focus {
+    outline: 2px solid hsl(var(--ring)) !important;
+    outline-offset: 2px !important;
+  }
+}

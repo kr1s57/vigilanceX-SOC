@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { X, Search, Check, ChevronDown } from 'lucide-react'
 import { getCountryFlag, cn } from '@/lib/utils'
+import { useDeferredSearch } from '@/hooks/useReact19'
 
 // Comprehensive list of countries with ISO 3166-1 alpha-2 codes
 const COUNTRIES: Array<{ code: string; name: string }> = [
@@ -116,17 +117,18 @@ export function CountrySelector({
   className = '',
 }: CountrySelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [search, setSearch] = useState('')
+  // v3.58.108: Use deferred search for smoother filtering
+  const { searchValue: search, setSearchValue: setSearch, deferredSearch, isStale } = useDeferredSearch('')
 
   const filteredCountries = useMemo(() => {
-    if (!search) return COUNTRIES
-    const searchLower = search.toLowerCase()
+    if (!deferredSearch) return COUNTRIES
+    const searchLower = deferredSearch.toLowerCase()
     return COUNTRIES.filter(
       (c) =>
         c.name.toLowerCase().includes(searchLower) ||
         c.code.toLowerCase().includes(searchLower)
     )
-  }, [search])
+  }, [deferredSearch])
 
   const toggleCountry = (code: string) => {
     if (selectedCountries.includes(code)) {
@@ -213,8 +215,8 @@ export function CountrySelector({
               </div>
             </div>
 
-            {/* Country list */}
-            <div className={cn('overflow-y-auto', maxHeight)}>
+            {/* Country list - v3.58.108: opacity when filtering */}
+            <div className={cn('overflow-y-auto transition-opacity', maxHeight, isStale && 'opacity-60')}>
               {filteredCountries.length === 0 ? (
                 <div className="p-3 text-center text-gray-500 text-sm">
                   No countries found

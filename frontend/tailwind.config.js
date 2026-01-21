@@ -157,6 +157,21 @@ export default {
           "0%, 100%": { transform: "scale(1)" },
           "50%": { transform: "scale(1.05)" },
         },
+        // v3.58.108: Subtle pulse for critical cards
+        "pulse-subtle": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.85" },
+        },
+        // v3.58.108: Fade in up animation
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        // v3.58.108: Slide in from right
+        "slide-in-right": {
+          "0%": { opacity: "0", transform: "translateX(20px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -173,6 +188,10 @@ export default {
         "data-stream": "data-stream 20s linear infinite",
         "rotate-slow": "rotate-slow 20s linear infinite",
         "scale-pulse": "scale-pulse 2s ease-in-out infinite",
+        // v3.58.108: New animations
+        "pulse-subtle": "pulse-subtle 3s ease-in-out infinite",
+        "fade-in-up": "fade-in-up 0.3s ease-out",
+        "slide-in-right": "slide-in-right 0.3s ease-out",
       },
     },
   },

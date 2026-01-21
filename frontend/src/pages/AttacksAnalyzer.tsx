@@ -32,7 +32,8 @@ import {
 import { modsecApi, statsApi, bansApi } from '@/lib/api'
 import type { ModSecRequestGroup } from '@/types'
 import { StatCard } from '@/components/dashboard/StatCard'
-import { IPThreatModal } from '@/components/IPThreatModal'
+// v3.58.108: Use lazy-loaded modal for better performance
+import { LazyIPThreatModal } from '@/components/ui/LazyModals'
 import { formatNumber, getCountryFlag, cn, formatDateTime } from '@/lib/utils'
 import type { TopAttacker, BanStatus } from '@/types'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -1238,8 +1239,8 @@ export function AttacksAnalyzer() {
         initialSearchTerm={initialIPFilter}
       />
 
-      {/* IP Threat Modal */}
-      <IPThreatModal
+      {/* IP Threat Modal - v3.58.108: Lazy loaded */}
+      <LazyIPThreatModal
         ip={selectedIP}
         isOpen={showThreatModal}
         onClose={() => {

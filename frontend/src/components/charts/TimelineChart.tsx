@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import {
   AreaChart,
   Area,
@@ -16,7 +17,7 @@ interface TimelineChartProps {
   height?: number
 }
 
-export function TimelineChart({ data, height = 300 }: TimelineChartProps) {
+export const TimelineChart = memo(function TimelineChart({ data, height = 300 }: TimelineChartProps) {
   const chartData = data.map((point) => ({
     ...point,
     time: new Date(point.time).getTime(),
@@ -87,4 +88,4 @@ export function TimelineChart({ data, height = 300 }: TimelineChartProps) {
       </ResponsiveContainer>
     </div>
   )
-}
+})

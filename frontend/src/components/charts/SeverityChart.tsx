@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import {
   PieChart,
   Pie,
@@ -20,7 +21,7 @@ const COLORS = {
   low: '#2563eb',
 }
 
-export function SeverityChart({ stats, height = 250 }: SeverityChartProps) {
+export const SeverityChart = memo(function SeverityChart({ stats, height = 250 }: SeverityChartProps) {
   const data = [
     { name: 'Critical', value: stats.critical_events, color: COLORS.critical },
     { name: 'High', value: stats.high_events, color: COLORS.high },
@@ -64,4 +65,4 @@ export function SeverityChart({ stats, height = 250 }: SeverityChartProps) {
       </ResponsiveContainer>
     </div>
   )
-}
+})

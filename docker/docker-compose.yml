@@ -26,9 +26,9 @@ services:
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      timeout: 10s
+      retries: 18
+      start_period: 60s
     networks:
       - vigilance_net
     restart: unless-stopped

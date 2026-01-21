@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Ban, Plus, RefreshCw, Clock, AlertCircle, X, ShieldAlert, Power, Users, Calendar, Repeat, Search, XCircle, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react'
 import { bansApi, detect2banApi, pendingBansApi, type Detect2BanStatus } from '@/lib/api'
-import { IPThreatModal } from '@/components/IPThreatModal'
+// v3.58.108: Use lazy-loaded modal for better performance
+import { LazyIPThreatModal } from '@/components/ui/LazyModals'
 import { PendingApprovalDetailModal } from '@/components/PendingApprovalDetailModal'
 import { formatDateTime, getCountryFlag, cn } from '@/lib/utils'
 import type { BanStatus, BanStats, PendingBan, PendingBanStats } from '@/types'
@@ -1083,8 +1084,8 @@ export function ActiveBans() {
         </div>
       )}
 
-      {/* IP Threat Modal */}
-      <IPThreatModal
+      {/* IP Threat Modal - v3.58.108: Lazy loaded */}
+      <LazyIPThreatModal
         key={selectedIP || 'closed'}
         ip={selectedIP}
         isOpen={showThreatModal}

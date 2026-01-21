@@ -1,14 +1,16 @@
-import { ReactNode, useEffect, useRef, useState } from 'react'
+import { ReactNode, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
  * GlassModal - Modern glassmorphism modal component
  * v3.57.106: UI Modernization
+ * v3.58.108: Enhanced with Framer Motion animations
  *
  * Features:
  * - Frosted glass effect with backdrop blur
- * - Smooth CSS transitions (no extra dependencies)
+ * - Smooth Framer Motion animations
  * - ESC key to close
  * - Click outside to close
  * - Responsive sizing
@@ -36,6 +38,38 @@ const sizeClasses = {
   full: 'max-w-[95vw] w-full',
 }
 
+// Animation variants
+const overlayVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+}
+
+const modalVariants = {
+  hidden: {
+    opacity: 0,
+    scale: 0.95,
+    y: 10,
+  },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      damping: 25,
+      stiffness: 300,
+    },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.95,
+    y: 10,
+    transition: {
+      duration: 0.15,
+    },
+  },
+}
+
 export function GlassModal({
   isOpen,
   onClose,
@@ -49,25 +83,6 @@ export function GlassModal({
   closeOnOverlayClick = true,
   closeOnEsc = true,
 }: GlassModalProps) {
-  const modalRef = useRef<HTMLDivElement>(null)
-  const [visible, setVisible] = useState(false)
-  const [animating, setAnimating] = useState(false)
-
-  // Handle open/close animations
-  useEffect(() => {
-    if (isOpen) {
-      setAnimating(true)
-      // Small delay to trigger CSS transition
-      requestAnimationFrame(() => {
-        setVisible(true)
-      })
-    } else {
-      setVisible(false)
-      const timer = setTimeout(() => setAnimating(false), 200)
-      return () => clearTimeout(timer)
-    }
-  }, [isOpen])
-
   // Handle ESC key
   useEffect(() => {
     if (!closeOnEsc) return
@@ -94,81 +109,107 @@ export function GlassModal({
     }
   }, [isOpen])
 
-  if (!isOpen && !animating) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop with blur */}
-      <div
-        className={cn(
-          'absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-200',
-          visible ? 'opacity-100' : 'opacity-0'
-        )}
-        onClick={closeOnOverlayClick ? onClose : undefined}
-      />
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop with blur */}
+          <motion.div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            variants={overlayVariants}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            transition={{ duration: 0.2 }}
+            onClick={closeOnOverlayClick ? onClose : undefined}
+          />
 
-      {/* Modal content with glassmorphism */}
-      <div
-        ref={modalRef}
-        className={cn(
-          'relative w-full rounded-2xl overflow-hidden transition-all duration-200',
-          visible
-            ? 'opacity-100 scale-100 translate-y-0'
-            : 'opacity-0 scale-95 translate-y-4',
-          // Glassmorphism effect
-          'bg-gradient-to-br from-white/10 via-white/5 to-transparent',
-          'dark:from-white/10 dark:via-white/5 dark:to-transparent',
-          'backdrop-blur-xl',
-          // Border with subtle glow
-          'border border-white/20 dark:border-white/10',
-          'shadow-[0_8px_32px_rgba(0,0,0,0.3)]',
-          sizeClasses[size],
-          className
-        )}
-      >
-        {/* Header */}
-        {(title || showCloseButton) && (
-          <div className="relative flex items-center justify-between p-5 border-b border-white/10">
-            <div className="flex items-center gap-3">
-              {icon && (
-                <div className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm">
-                  {icon}
+          {/* Modal content with glassmorphism */}
+          <motion.div
+            className={cn(
+              'relative w-full rounded-2xl overflow-hidden',
+              // Glassmorphism effect
+              'bg-gradient-to-br from-white/10 via-white/5 to-transparent',
+              'dark:from-white/10 dark:via-white/5 dark:to-transparent',
+              'backdrop-blur-xl',
+              // Border with subtle glow
+              'border border-white/20 dark:border-white/10',
+              'shadow-[0_8px_32px_rgba(0,0,0,0.3)]',
+              sizeClasses[size],
+              className
+            )}
+            variants={modalVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            {/* Header */}
+            {(title || showCloseButton) && (
+              <div className="relative flex items-center justify-between p-5 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  {icon && (
+                    <motion.div
+                      className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm"
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      {icon}
+                    </motion.div>
+                  )}
+                  <div>
+                    {title && (
+                      <motion.h2
+                        className="text-lg font-semibold text-foreground"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 }}
+                      >
+                        {title}
+                      </motion.h2>
+                    )}
+                    {subtitle && (
+                      <motion.p
+                        className="text-sm text-muted-foreground mt-0.5"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.15 }}
+                      >
+                        {subtitle}
+                      </motion.p>
+                    )}
+                  </div>
                 </div>
-              )}
-              <div>
-                {title && (
-                  <h2 className="text-lg font-semibold text-foreground">
-                    {title}
-                  </h2>
-                )}
-                {subtitle && (
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    {subtitle}
-                  </p>
+                {showCloseButton && (
+                  <motion.button
+                    onClick={onClose}
+                    className={cn(
+                      'p-2 rounded-xl transition-all duration-200',
+                      'hover:bg-white/10 active:bg-white/20',
+                      'text-muted-foreground hover:text-foreground'
+                    )}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <X className="w-5 h-5" />
+                  </motion.button>
                 )}
               </div>
-            </div>
-            {showCloseButton && (
-              <button
-                onClick={onClose}
-                className={cn(
-                  'p-2 rounded-xl transition-all duration-200',
-                  'hover:bg-white/10 active:bg-white/20',
-                  'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <X className="w-5 h-5" />
-              </button>
             )}
-          </div>
-        )}
 
-        {/* Content */}
-        <div className="relative max-h-[calc(85vh-100px)] overflow-y-auto">
-          {children}
+            {/* Content */}
+            <motion.div
+              className="relative max-h-[calc(85vh-100px)] overflow-y-auto"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.1 }}
+            >
+              {children}
+            </motion.div>
+          </motion.div>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -194,6 +235,25 @@ export function GlassCard({
   variant = 'default',
   hover = false,
 }: GlassCardProps) {
+  if (hover) {
+    return (
+      <motion.div
+        className={cn(
+          'rounded-xl overflow-hidden cursor-pointer',
+          'bg-gradient-to-br backdrop-blur-lg',
+          'border',
+          'shadow-lg',
+          variantClasses[variant],
+          className
+        )}
+        whileHover={{ scale: 1.02, y: -2 }}
+        transition={{ type: 'spring' as const, stiffness: 300 }}
+      >
+        {children}
+      </motion.div>
+    )
+  }
+
   return (
     <div
       className={cn(
@@ -202,7 +262,6 @@ export function GlassCard({
         'border',
         'shadow-lg',
         variantClasses[variant],
-        hover && 'transition-all duration-200 hover:scale-[1.02] hover:shadow-xl',
         className
       )}
     >
@@ -243,21 +302,46 @@ export function GlassButton({
   className,
 }: GlassButtonProps) {
   return (
-    <button
+    <motion.button
       onClick={onClick}
       disabled={disabled}
       className={cn(
         'rounded-xl font-medium',
         'backdrop-blur-sm border border-white/10',
-        'transition-all duration-200',
-        'active:scale-[0.98]',
-        'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
         buttonVariants[variant],
         buttonSizes[size],
         className
       )}
+      whileHover={disabled ? {} : { scale: 1.02 }}
+      whileTap={disabled ? {} : { scale: 0.98 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 17 }}
     >
       {children}
-    </button>
+    </motion.button>
+  )
+}
+
+// Animated list item for stagger effects
+interface AnimatedListItemProps {
+  children: ReactNode
+  index?: number
+  className?: string
+}
+
+export function AnimatedListItem({ children, index = 0, className }: AnimatedListItemProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{
+        delay: index * 0.05,
+        duration: 0.2,
+      }}
+      className={className}
+    >
+      {children}
+    </motion.div>
   )
 }

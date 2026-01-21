@@ -1,8 +1,10 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import { Layout } from '@/components/layout/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import AdminRoute from '@/components/AdminRoute'
+import { PageTransition } from '@/components/ui/PageTransition'
 import { Loader2 } from 'lucide-react'
 
 // v3.57.106: Lazy loading for improved initial bundle size and load times
@@ -29,17 +31,26 @@ const Reports = lazy(() => import('@/pages/Reports').then(m => ({ default: m.Rep
 const Settings = lazy(() => import('@/pages/Settings').then(m => ({ default: m.Settings })))
 // v3.57.117: UserManagement moved to Settings tab - import kept for lazy loading there
 
-// Loading fallback component
+// Loading fallback component with animation
 const PageLoader = () => (
-  <div className="flex items-center justify-center h-full min-h-[400px]">
-    <div className="flex flex-col items-center gap-3">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      <span className="text-sm text-muted-foreground">Loading...</span>
+  <PageTransition>
+    <div className="flex items-center justify-center h-full min-h-[400px]">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <span className="text-sm text-muted-foreground">Loading...</span>
+      </div>
     </div>
-  </div>
+  </PageTransition>
 )
 
+// Animated page wrapper
+function AnimatedPage({ children }: { children: React.ReactNode }) {
+  return <PageTransition>{children}</PageTransition>
+}
+
 function App() {
+  const location = useLocation()
+
   return (
     <Routes>
       {/* Public routes */}
@@ -54,27 +65,29 @@ function App() {
             element={
               <Layout>
                 <Suspense fallback={<PageLoader />}>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/attack-map" element={<AttackMap />} />
-                    <Route path="/waf" element={<WafExplorer />} />
-                    <Route path="/attacks" element={<AttacksAnalyzer />} />
-                    <Route path="/threats" element={<AdvancedThreat />} />
-                    <Route path="/vpn" element={<VpnNetwork />} />
-                    <Route path="/bans" element={<ActiveBans />} />
-                    <Route path="/geoblocking" element={<Geoblocking />} />
-                    <Route path="/whitelist" element={<SoftWhitelist />} />
-                    <Route path="/scoring" element={<RiskScoring />} />
-                    <Route path="/crowdsec-bl" element={<CrowdSecBL />} />
-                    <Route path="/neural-sync" element={<NeuralSync />} />
-                    <Route path="/vigimail" element={<VigimailChecker />} />
-                    <Route path="/track-ip" element={<TrackIP />} />
-                    {/* Admin-only routes */}
-                    <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
-                    <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
-                    {/* v3.57.117: Redirect /users to Settings Users tab */}
-                    <Route path="/users" element={<Navigate to="/settings?tab=users" replace />} />
-                  </Routes>
+                  <AnimatePresence mode="wait">
+                    <Routes location={location} key={location.pathname}>
+                      <Route path="/" element={<AnimatedPage><Dashboard /></AnimatedPage>} />
+                      <Route path="/attack-map" element={<AnimatedPage><AttackMap /></AnimatedPage>} />
+                      <Route path="/waf" element={<AnimatedPage><WafExplorer /></AnimatedPage>} />
+                      <Route path="/attacks" element={<AnimatedPage><AttacksAnalyzer /></AnimatedPage>} />
+                      <Route path="/threats" element={<AnimatedPage><AdvancedThreat /></AnimatedPage>} />
+                      <Route path="/vpn" element={<AnimatedPage><VpnNetwork /></AnimatedPage>} />
+                      <Route path="/bans" element={<AnimatedPage><ActiveBans /></AnimatedPage>} />
+                      <Route path="/geoblocking" element={<AnimatedPage><Geoblocking /></AnimatedPage>} />
+                      <Route path="/whitelist" element={<AnimatedPage><SoftWhitelist /></AnimatedPage>} />
+                      <Route path="/scoring" element={<AnimatedPage><RiskScoring /></AnimatedPage>} />
+                      <Route path="/crowdsec-bl" element={<AnimatedPage><CrowdSecBL /></AnimatedPage>} />
+                      <Route path="/neural-sync" element={<AnimatedPage><NeuralSync /></AnimatedPage>} />
+                      <Route path="/vigimail" element={<AnimatedPage><VigimailChecker /></AnimatedPage>} />
+                      <Route path="/track-ip" element={<AnimatedPage><TrackIP /></AnimatedPage>} />
+                      {/* Admin-only routes */}
+                      <Route path="/reports" element={<AdminRoute><AnimatedPage><Reports /></AnimatedPage></AdminRoute>} />
+                      <Route path="/settings" element={<AdminRoute><AnimatedPage><Settings /></AnimatedPage></AdminRoute>} />
+                      {/* v3.57.117: Redirect /users to Settings Users tab */}
+                      <Route path="/users" element={<Navigate to="/settings?tab=users" replace />} />
+                    </Routes>
+                  </AnimatePresence>
                 </Suspense>
               </Layout>
             }

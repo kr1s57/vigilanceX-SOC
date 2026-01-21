@@ -18,7 +18,8 @@ import { TimelineChart } from '@/components/charts/TimelineChart'
 import { SeverityChart } from '@/components/charts/SeverityChart'
 import { WAFServersCard } from '@/components/dashboard/WAFServersCard'
 import { XGSLoginCard } from '@/components/dashboard/XGSLoginCard'
-import { IPThreatModal } from '@/components/IPThreatModal'
+// v3.58.108: Use lazy-loaded modal for better performance
+import { LazyIPThreatModal } from '@/components/ui/LazyModals'
 import { statsApi, eventsApi, alertsApi, pendingBansApi } from '@/lib/api'
 import { formatNumber, formatPercent, getCountryFlag, cn } from '@/lib/utils'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -420,8 +421,8 @@ export function Dashboard() {
         />
       )}
 
-      {/* v3.57.108: IP Threat Modal - key forces remount on IP change */}
-      <IPThreatModal
+      {/* v3.57.108: IP Threat Modal - v3.58.108: Lazy loaded for better performance */}
+      <LazyIPThreatModal
         key={threatModalIP || 'closed'}
         ip={threatModalIP}
         isOpen={threatModalIP !== null}
