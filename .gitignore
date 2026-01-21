@@ -76,6 +76,13 @@ debug/
 credentials.json
 secrets.yaml
 
-# Claude Code
+# Claude Code & Internal docs (NEVER push to public repo)
 .claude/
 backups/
+CLAUDE.md
+TECHNICAL_REFERENCE.md
+CHANGELOG.md
+docs/
+BUGFIXSESSION/
+FEATURESPROMPT/
+.github/

@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/kr1s57/vigilancex/internal/config"
 	"github.com/kr1s57/vigilancex/internal/entity"
 	"golang.org/x/crypto/bcrypt"

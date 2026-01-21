@@ -5,7 +5,7 @@ services:
   # ClickHouse - Base analytique
   # ============================================
   clickhouse:
-    image: clickhouse/clickhouse-server:24.1
+    image: clickhouse/clickhouse-server:25.12
     container_name: vigilance_clickhouse
     ports:
       - "8123:8123"   # HTTP
@@ -37,7 +37,7 @@ services:
   # Redis - Cache et sessions
   # ============================================
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: vigilance_redis
     ports:
       - "6379:6379"
@@ -57,7 +57,7 @@ services:
   # Vector - Ingestion logs
   # ============================================
   vector:
-    image: timberio/vector:0.34.1-debian
+    image: timberio/vector:0.52.0-debian
     container_name: vigilance_vector
     command: ["--config", "/etc/vector/vector.toml"]
     ports:
