@@ -499,8 +499,15 @@ nano docker/.env
 ### 3. Démarrer les services
 ```bash
 cd docker
-docker compose up -d
+docker compose up -d --build
 ```
+
+> **Note** : Toutes les commandes `docker compose` doivent être exécutées depuis le dossier `docker/`.
+>
+> Alternative one-liner depuis la racine du projet :
+> ```bash
+> cd ~/vigilanceX-SOC/docker && docker compose up -d --build
+> ```
 
 ### 4. Accéder à l'interface
 ```
@@ -634,15 +641,25 @@ docker compose exec clickhouse clickhouse-client -q "OPTIMIZE TABLE vigilance_x.
 ### Mises à Jour
 
 ```bash
-# Récupérer les dernières images
-docker compose pull
+# Depuis le dossier docker/
+cd ~/vigilanceX-SOC
 
-# Recréer les containers
-docker compose up -d --force-recreate
+# Récupérer les dernières modifications
+git fetch origin && git reset --hard origin/main
+
+# Reconstruire et redémarrer
+cd docker
+docker compose down
+docker compose up -d --build
 
 # Nettoyer les anciennes images
 docker image prune -f
 ```
+
+> **One-liner complet** :
+> ```bash
+> cd ~/vigilanceX-SOC && git fetch origin && git reset --hard origin/main && cd docker && docker compose down && docker compose up -d --build
+> ```
 
 ---
 
