@@ -102,7 +102,7 @@ type GoStats struct {
 // Constants
 const (
 	GitHubAPIURL     = "https://api.github.com/repos/kr1s57/vigilanceX-SOC/releases/latest"
-	InstalledVersion = "3.58.104" // Fallback if env not set
+	InstalledVersion = "3.58.105" // Fallback if env not set
 	StatusIdle       = "idle"
 	StatusPulling    = "pulling"
 	StatusRestarting = "restarting"
@@ -332,34 +332,40 @@ func (h *UpdateHandler) performUpdate(targetVersion string) {
 	}
 	h.mu.Unlock()
 
-	// v3.58.103: Fix update restart - detach docker compose from parent process
-	// The backend container cannot restart itself directly because when Docker
-	// sends SIGTERM, the child process (docker compose) is killed with it.
-	// Solution: Use nohup + setsid to fully detach the restart command so it
-	// survives the death of this container.
+	// v3.58.105: Fix update restart - use separate Docker container
+	// Problem: When this container restarts, ALL its processes die (cgroup behavior).
+	// Even nohup/setsid processes are killed when Docker destroys the container.
 	//
-	// Note: We use a shell wrapper to ensure proper detachment on Linux.
-	// The log file helps debug if something goes wrong.
-	restartScript := fmt.Sprintf(
-		`cd %s && nohup setsid docker compose -f %s up -d --force-recreate > /tmp/vgx-update.log 2>&1 &`,
-		h.workDir, h.composeFile)
+	// Solution: Launch a SEPARATE Docker container that:
+	// 1. Has access to Docker socket
+	// 2. Runs the docker compose restart command
+	// 3. Survives the death of the backend container
+	//
+	// We use docker:cli image which has docker compose built-in.
+	restartCmd := exec.CommandContext(ctx, "docker", "run",
+		"-d",                    // Detached mode
+		"--rm",                  // Remove container when done
+		"--name", "vgx-updater", // Named container for debugging
+		"-v", "/var/run/docker.sock:/var/run/docker.sock", // Docker socket
+		"-v", "/opt/vigilanceX:/opt/vigilanceX", // Repo access
+		"-w", h.workDir, // Working directory
+		"docker:cli", // Docker CLI image with compose
+		"sh", "-c",
+		// Sleep to let this container finish responding, then restart
+		fmt.Sprintf("sleep 3 && docker compose -f %s up -d --force-recreate 2>&1 | tee /opt/vigilanceX/update.log", h.composeFile),
+	)
 
-	restartCmd := exec.CommandContext(ctx, "sh", "-c", restartScript)
-	restartCmd.Dir = h.workDir
-
-	if err := restartCmd.Start(); err != nil {
+	output, err := restartCmd.CombinedOutput()
+	if err != nil {
 		h.mu.Lock()
 		h.status = UpdateStatus{
 			Status:  StatusFailed,
-			Message: "Failed to start restart command",
-			Error:   err.Error(),
+			Message: "Failed to start updater container",
+			Error:   fmt.Sprintf("%s: %s", err.Error(), string(output)),
 		}
 		h.mu.Unlock()
 		return
 	}
-
-	// Don't wait for the command - it will restart us
-	// The process is fully detached and will continue after we die
 
 	// Mark status (this may not persist as we're about to be restarted)
 	h.mu.Lock()
@@ -370,8 +376,8 @@ func (h *UpdateHandler) performUpdate(targetVersion string) {
 	}
 	h.mu.Unlock()
 
-	// Give the detached process time to start before we potentially die
-	time.Sleep(1 * time.Second)
+	// Give the updater container time to start
+	time.Sleep(2 * time.Second)
 }
 
 // fetchLatestVersion fetches the latest version from GitHub

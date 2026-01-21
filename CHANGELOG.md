@@ -7,6 +7,16 @@ et ce projet adhere au [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [3.58.105] - 2026-01-21
+
+### Fixed
+- **System Update Process**: New approach using separate Docker container
+  - Previous fix (nohup/setsid) didn't work because Docker kills entire cgroup
+  - Now launches `docker:cli` container that survives backend death
+  - Update logs saved to `/opt/vigilanceX/update.log` for debugging
+
+---
+
 ## [3.58.104] - 2026-01-21
 
 ### Changed
