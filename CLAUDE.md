@@ -179,17 +179,20 @@ src/
 - `CLAUDE.md` header - Version + date de mise a jour
 - Tags git sur les 4 repos
 
-**FICHIERS VERSION FRONTEND (CRITIQUE - tous a mettre a jour):**
+**FICHIERS VERSION (CRITIQUE - tous a mettre a jour):**
 
 | Fichier | Ligne | Variable/Texte |
 |---------|-------|----------------|
-| `frontend/src/pages/Dashboard.tsx` | ~24 | `INSTALLED_VERSION = 'X.YY.Z'` |
-| `frontend/src/pages/Settings.tsx` | ~2381 | `VIGILANCE X vX.YY.Z` |
-| `frontend/src/pages/Login.tsx` | ~192 | `VIGILANCE X vX.YY.Z` |
-| `frontend/src/pages/LicenseActivation.tsx` | ~450 | `VIGILANCE X vX.YY.Z` |
+| `frontend/src/pages/Dashboard.tsx` | ~29 | `INSTALLED_VERSION = 'X.YY.Z'` |
+| `frontend/src/pages/Settings.tsx` | ~2928 | `VIGILANCE X vX.YY.Z` |
+| `frontend/src/pages/Login.tsx` | ~196 | `VIGILANCE X vX.YY.Z` |
+| `frontend/src/pages/LicenseActivation.tsx` | ~461 | `VIGILANCE X vX.YY.Z` |
+| `backend/.../handlers/update.go` | ~105 | `InstalledVersion = "X.YY.Z"` |
 
-> **IMPORTANT**: Le badge version du Dashboard utilise `INSTALLED_VERSION` dans Dashboard.tsx.
-> Ne pas oublier de mettre a jour TOUS ces fichiers sinon le badge affichera une mauvaise version!
+> **IMPORTANT**:
+> - Le badge version du Dashboard utilise `INSTALLED_VERSION` dans Dashboard.tsx
+> - L'API `/system/version` utilise `InstalledVersion` dans update.go pour Settings > Firmware
+> - Ne pas oublier de mettre a jour TOUS ces fichiers sinon les versions seront incoherentes!
 
 ---
 
