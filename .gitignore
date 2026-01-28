@@ -77,12 +77,9 @@ credentials.json
 secrets.yaml
 
 # Claude Code & Internal docs (NEVER push to public repo)
+# Note: These files are tracked in private repos but excluded via gitgo workflow for public repos
 .claude/
 backups/
-CLAUDE.md
-TECHNICAL_REFERENCE.md
-CHANGELOG.md
-docs/
 BUGFIXSESSION/
 FEATURESPROMPT/
-.github/
+_bmad/
